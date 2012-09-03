@@ -71,9 +71,9 @@
 .phabricator-main-menu-logo {
   display: inline-block;
   height: 44px;
-  width: 170px;
+  width: 300px;
   margin-right: 12px;
-  background: 6px 9px url(/rsrc/image/logo_grey.png) no-repeat;
+  background: 6px 9px url(/rsrc/image/espark/espark_phabricator_logo.png) no-repeat;
 }
 
 .phabricator-main-menu-logo span {
