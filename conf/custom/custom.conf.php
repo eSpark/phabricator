@@ -36,6 +36,7 @@ return array(
 				       '@\.install@' => 'php',
 				       '@\.engine@' => 'php',
 				       '@\.test@' => 'php',
+				       '@\.drush@' => 'php',
 			    ),
 
 	     'auth.email-domains' => array('esparklearning.com'),
