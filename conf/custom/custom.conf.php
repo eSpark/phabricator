@@ -47,7 +47,6 @@ return array(
 	     'google.application-id' => '926878497902.apps.googleusercontent.com',
 	     'google.application-secret' => '5ezViBm05L6l8hEYqpwzlMvj',
 	     'google.registration-enabled' => true,
-	     'google.registration-domains' => array('esparklearning.com'),
 	     'google.auth-permanent' => false,
 
 ) + phabricator_read_config_file('production');
