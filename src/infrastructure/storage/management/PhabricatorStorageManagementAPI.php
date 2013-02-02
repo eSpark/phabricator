@@ -1,27 +1,12 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorStorageManagementAPI {
 
   private $host;
   private $user;
   private $password;
   private $namespace;
+  private $conns = array();
 
   public function setNamespace($namespace) {
     $this->namespace = $namespace;
@@ -78,19 +63,24 @@ final class PhabricatorStorageManagementAPI {
     return $list;
   }
 
-  public function getConn($fragment, $select_database = true) {
-    return PhabricatorEnv::newObjectFromConfig(
+  public function getConn($fragment) {
+    $database = $this->getDatabaseName($fragment);
+    $return = &$this->conns[$this->host][$this->user][$database];
+    if (!$return) {
+      $return = PhabricatorEnv::newObjectFromConfig(
       'mysql.implementation',
       array(
         array(
           'user'      => $this->user,
           'pass'      => $this->password,
           'host'      => $this->host,
-          'database'  => $select_database
-            ? $this->getDatabaseName($fragment)
+          'database'  => $fragment
+            ? $database
             : null,
         ),
       ));
+    }
+    return $return;
   }
 
   public function getAppliedPatches() {
@@ -106,7 +96,7 @@ final class PhabricatorStorageManagementAPI {
 
   public function createDatabase($fragment) {
     queryfx(
-      $this->getConn($fragment, $select_database = false),
+      $this->getConn(null),
       'CREATE DATABASE IF NOT EXISTS %T COLLATE utf8_general_ci',
       $this->getDatabaseName($fragment));
   }
@@ -176,7 +166,7 @@ final class PhabricatorStorageManagementAPI {
     $queries = preg_split('/;\s+/', $sql);
     $queries = array_filter($queries);
 
-    $conn = $this->getConn('meta_data', $select_database = false);
+    $conn = $this->getConn(null);
 
     foreach ($queries as $query) {
       $query = str_replace('{$NAMESPACE}', $this->namespace, $query);
@@ -188,7 +178,7 @@ final class PhabricatorStorageManagementAPI {
   }
 
   public function applyPatchPHP($script) {
-    $schema_conn = $this->getConn('meta_data', $select_database = false);
+    $schema_conn = $this->getConn(null);
     require_once $script;
   }
 

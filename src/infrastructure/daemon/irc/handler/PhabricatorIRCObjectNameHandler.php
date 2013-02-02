@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Looks for Dxxxx, Txxxx and links to them.
  *
@@ -38,8 +22,6 @@ final class PhabricatorIRCObjectNameHandler extends PhabricatorIRCHandler {
           break;
         }
 
-        $this->handleSymbols($message);
-
         $message = $message->getMessageText();
         $matches = null;
 
@@ -49,7 +31,6 @@ final class PhabricatorIRCObjectNameHandler extends PhabricatorIRCHandler {
           '(D|T|P|V|F)(\d+)'.
           '(?:\b|$)'.
           '@';
-        $pattern_override = '/(^[^\s]+)[,:] [DTPVF]\d+/';
 
         $revision_ids = array();
         $task_ids = array();
@@ -57,12 +38,8 @@ final class PhabricatorIRCObjectNameHandler extends PhabricatorIRCHandler {
         $commit_names = array();
         $vote_ids = array();
         $file_ids = array();
-        $matches_override = array();
 
         if (preg_match_all($pattern, $message, $matches, PREG_SET_ORDER)) {
-          if (preg_match($pattern_override, $message, $matches_override)) {
-            $reply_to = $matches_override[1];
-          }
           foreach ($matches as $match) {
             switch ($match[1]) {
               case 'D':
@@ -102,7 +79,6 @@ final class PhabricatorIRCObjectNameHandler extends PhabricatorIRCHandler {
           $revisions = $this->getConduit()->callMethodSynchronous(
             'differential.query',
             array(
-              'query' => 'revision-ids',
               'ids'   => $revision_ids,
             ));
           $revisions = array_select_keys(
@@ -197,66 +173,27 @@ final class PhabricatorIRCObjectNameHandler extends PhabricatorIRCHandler {
 
           // Don't mention the same object more than once every 10 minutes
           // in public channels, so we avoid spamming the chat over and over
-          // again for discsussions of a specific revision, for example. In
-          // direct-to-bot chat, respond to every object reference.
+          // again for discsussions of a specific revision, for example.
 
-          if ($this->isChannelName($reply_to)) {
-            if (empty($this->recentlyMentioned[$reply_to])) {
-              $this->recentlyMentioned[$reply_to] = array();
-            }
-
-            $quiet_until = idx(
-              $this->recentlyMentioned[$reply_to],
-              $phid,
-              0) + (60 * 10);
-
-            if (time() < $quiet_until) {
-              // Remain quiet on this channel.
-              continue;
-            }
-
-            $this->recentlyMentioned[$reply_to][$phid] = time();
+          if (empty($this->recentlyMentioned[$reply_to])) {
+            $this->recentlyMentioned[$reply_to] = array();
           }
 
+          $quiet_until = idx(
+            $this->recentlyMentioned[$reply_to],
+            $phid,
+            0) + (60 * 10);
+
+          if (time() < $quiet_until) {
+            // Remain quiet on this channel.
+            continue;
+          }
+
+          $this->recentlyMentioned[$reply_to][$phid] = time();
           $this->write('PRIVMSG', "{$reply_to} :{$description}");
         }
         break;
     }
-  }
-
-  private function handleSymbols(PhabricatorIRCMessage $message) {
-    $reply_to = $message->getReplyTo();
-    $text = $message->getMessageText();
-
-    $matches = null;
-    if (!preg_match('/where(?: in the world)? is (\S+?)\?/i',
-        $text, $matches)) {
-      return;
-    }
-
-    $symbol = $matches[1];
-    $results = $this->getConduit()->callMethodSynchronous(
-      'diffusion.findsymbols',
-      array(
-        'name' => $symbol,
-      ));
-
-    $default_uri = $this->getURI('/diffusion/symbol/'.$symbol.'/');
-
-    if (count($results) > 1) {
-      $response = "Multiple symbols named '{$symbol}': {$default_uri}";
-    } else if (count($results) == 1) {
-      $result = head($results);
-      $response =
-        $result['type'].' '.
-        $result['name'].' '.
-        '('.$result['language'].'): '.
-        nonempty($result['uri'], $default_uri);
-    } else {
-      $response = "No symbol '{$symbol}' found anywhere.";
-    }
-
-    $this->write('PRIVMSG', "{$reply_to} :{$response}");
   }
 
 }

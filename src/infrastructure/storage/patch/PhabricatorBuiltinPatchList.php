@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
 
   public function getNamespace() {
@@ -166,6 +150,18 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       'db.ponder' => array(
         'type'    => 'db',
         'name'    => 'ponder',
+      ),
+      'db.xhprof' => array(
+        'type'    => 'db',
+        'name'    => 'xhprof',
+      ),
+      'db.pholio' => array(
+        'type'    => 'db',
+        'name'    => 'pholio',
+      ),
+      'db.conpherence' => array(
+        'type'    => 'db',
+        'name'    => 'conpherence',
       ),
       '0000.legacy.sql' => array(
         'type'    => 'sql',
@@ -971,6 +967,135 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       'edgetype.sql' => array(
         'type'    => 'sql',
         'name'    => $this->getPatchPath('edgetype.sql'),
+      ),
+      'ponder-comments.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('ponder-comments.sql'),
+      ),
+      'pastepolicy.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('pastepolicy.sql'),
+      ),
+      'xhprof.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('xhprof.sql'),
+      ),
+      'draft-metadata.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('draft-metadata.sql'),
+      ),
+      'phamedomain.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('phamedomain.sql'),
+      ),
+      'ponder-mailkey.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('ponder-mailkey.sql'),
+      ),
+      'ponder-mailkey-populate.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('ponder-mailkey-populate.php'),
+      ),
+      'phamepolicy.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('phamepolicy.sql'),
+      ),
+      'phameoneblog.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('phameoneblog.sql'),
+      ),
+      'statustxt.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('statustxt.sql'),
+      ),
+      'daemontaskarchive.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('daemontaskarchive.sql'),
+      ),
+      'drydocktaskid.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('drydocktaskid.sql'),
+      ),
+      'drydockresoucetype.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('drydockresourcetype.sql'),
+      ),
+      'liskcounters.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('liskcounters.sql'),
+      ),
+      'liskcounters.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('liskcounters.php'),
+      ),
+      'dropfileproxyimage.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('dropfileproxyimage.sql'),
+      ),
+      'repository-lint.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('repository-lint.sql'),
+      ),
+      'liskcounters-task.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('liskcounters-task.sql'),
+      ),
+      'pholio.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('pholio.sql'),
+      ),
+      'owners-exclude.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('owners-exclude.sql'),
+      ),
+      '20121209.pholioxactions.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.pholioxactions.sql'),
+      ),
+      '20121209.xmacroadd.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.xmacroadd.sql'),
+      ),
+      '20121209.xmacromigrate.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('20121209.xmacromigrate.php'),
+      ),
+      '20121209.xmacromigratekey.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.xmacromigratekey.sql'),
+      ),
+      '20121220.generalcache.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121220.generalcache.sql'),
+      ),
+      'db.config' => array(
+        'type'    => 'db',
+        'name'    => 'config',
+      ),
+      '20121226.config.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121226.config.sql'),
+      ),
+      '20130101.confxaction.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130101.confxaction.sql'),
+      ),
+      '20130102.metamtareceivedmailmessageidhash.sql' => array(
+        'type'    => 'sql',
+        'name'    =>
+          $this->getPatchPath('20130102.metamtareceivedmailmessageidhash.sql'),
+      ),
+      '20130103.filemetadata.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130103.filemetadata.sql'),
+      ),
+      '20130111.conpherence.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130111.conpherence.sql'),
+      ),
+      '20130127.altheraldtranscript.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130127.altheraldtranscript.sql'),
       ),
     );
   }

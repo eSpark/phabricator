@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorMetaMTAReceiveController
   extends PhabricatorMetaMTAController {
 
@@ -28,7 +12,7 @@ final class PhabricatorMetaMTAReceiveController
       $receiver = PhabricatorMetaMTAReceivedMail::loadReceiverObject(
         $request->getStr('obj'));
       if (!$receiver) {
-        throw new Exception("No such task or revision!");
+        throw new Exception(pht("No such task or revision!"));
       }
 
       $hash = PhabricatorMetaMTAReceivedMail::computeMailHash(
@@ -44,13 +28,18 @@ final class PhabricatorMetaMTAReceiveController
         array(
           'text' => $request->getStr('body'),
         ));
+
+      // Make up some unique value, since this column isn't nullable.
+      $received->setMessageIDHash(
+        PhabricatorHash::digestForIndex(
+          Filesystem::readRandomBytes(12)));
+
       $received->save();
 
       $received->processReceivedMail();
 
       $phid = $receiver->getPHID();
-      $handles = id(new PhabricatorObjectHandleData(array($phid)))
-        ->loadHandles();
+      $handles = $this->loadViewerHandles(array($phid));
       $uri = $handles[$phid]->getURI();
 
       return id(new AphrontRedirectResponse())->setURI($uri);
@@ -61,25 +50,26 @@ final class PhabricatorMetaMTAReceiveController
     $form->setAction($this->getApplicationURI('/receive/'));
     $form
       ->appendChild(
-        '<p class="aphront-form-instructions">This form will simulate '.
-        'sending mail to an object.</p>')
+        '<p class="aphront-form-instructions">'.
+          pht('This form will simulate sending mail to an object.').
+        '</p>')
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('To')
+          ->setLabel(pht('To'))
           ->setName('obj')
-          ->setCaption('e.g. <tt>D1234</tt> or <tt>T1234</tt>'))
+          ->setCaption(pht('e.g. <tt>D1234</tt> or <tt>T1234</tt>')))
       ->appendChild(
         id(new AphrontFormTextAreaControl())
-          ->setLabel('Body')
+          ->setLabel(pht('Body'))
           ->setName('body'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Receive Mail'));
+          ->setValue(pht('Receive Mail')));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Receive Email');
+    $panel->setHeader(pht('Receive Email'));
     $panel->appendChild($form);
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+    $panel->setNoBackground();
 
     $nav = $this->buildSideNavView();
     $nav->selectFilter('receive');
@@ -88,7 +78,8 @@ final class PhabricatorMetaMTAReceiveController
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'Receive Test',
+        'title' => pht('Receive Test'),
+        'device' => true,
       ));
   }
 

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class HeraldHomeController extends HeraldController {
 
   private $contentType;
@@ -96,8 +80,7 @@ final class HeraldHomeController extends HeraldController {
     $rules = $query->executeWithOffsetPager($pager);
 
     $need_phids = mpull($rules, 'getAuthorPHID');
-    $handles = id(new PhabricatorObjectHandleData($need_phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($need_phids);
 
     $list_view = id(new HeraldRuleListView())
       ->setRules($rules)
@@ -109,6 +92,7 @@ final class HeraldHomeController extends HeraldController {
     $panel = new AphrontPanelView();
     $panel->appendChild($list_view);
     $panel->appendChild($pager);
+    $panel->setNoBackground();
 
     $panel->setHeader("Herald: {$rule_desc} Rules for {$content_desc}");
 

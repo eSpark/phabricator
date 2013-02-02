@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorMustVerifyEmailController
   extends PhabricatorAuthController {
 
@@ -46,21 +30,25 @@ final class PhabricatorMustVerifyEmailController
       $email->sendVerificationEmail($user);
       $sent = new AphrontErrorView();
       $sent->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
-      $sent->setTitle('Email Sent');
-      $sent->appendChild(
-        '<p>Another verification email was sent to <strong>'.
-        phutil_escape_html($email_address).'</strong>.</p>');
+      $sent->setTitle(pht('Email Sent'));
+      $sent->appendChild('<p>'.
+        pht('Another verification email was sent to <strong>%s</strong>.',
+        phutil_escape_html($email_address)).'</p>');
     }
 
     $error_view = new AphrontRequestFailureView();
-    $error_view->setHeader('Check Your Email');
+    $error_view->setHeader(pht('Check Your Email'));
     $error_view->appendChild(
-      '<p>You must verify your email address to login. You should have a new '.
+      '<p>'.
+      pht('You must verify your email address to login. You should have a new '.
       'email message from Phabricator with verification instructions in your '.
-      'inbox (<strong>'.phutil_escape_html($email_address).'</strong>).</p>');
+      'inbox (<strong>%s</strong>).', phutil_escape_html($email_address)).
+      '</p>');
     $error_view->appendChild(
-      '<p>If you did not receive an email, you can click the button below '.
-      'to try sending another one.</p>');
+      '<p>'.
+      pht('If you did not receive an email, you can click the button below '.
+      'to try sending another one.').
+      '</p>');
     $error_view->appendChild(
       '<div class="aphront-failure-continue">'.
         phabricator_render_form(
@@ -73,17 +61,18 @@ final class PhabricatorMustVerifyEmailController
             'button',
             array(
             ),
-            'Send Another Email')).
+            pht('Send Another Email'))).
       '</div>');
 
 
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       array(
         $sent,
         $error_view,
       ),
       array(
-        'title' => 'Must Verify Email',
+        'title' => pht('Must Verify Email'),
+        'device' => true
       ));
   }
 

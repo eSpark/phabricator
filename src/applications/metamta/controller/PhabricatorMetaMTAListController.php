@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorMetaMTAListController
   extends PhabricatorMetaMTAController {
 
@@ -90,19 +74,19 @@ final class PhabricatorMetaMTAListController
             'class' => 'button small grey',
             'href'  => $this->getApplicationURI('/view/'.$mail->getID().'/'),
           ),
-          'View'),
+          pht('View')),
       );
     }
 
     $table = new AphrontTableView($rows);
     $table->setHeaders(
       array(
-        'Status',
-        'Retry',
-        'Next',
-        'Created',
-        'Updated',
-        'Subject',
+        pht('Status'),
+        pht('Retry'),
+        pht('Next'),
+        pht('Created'),
+        pht('Updated'),
+        pht('Subject'),
         '',
       ));
     $table->setColumnClasses(
@@ -119,8 +103,9 @@ final class PhabricatorMetaMTAListController
     // Render the whole page.
     $panel = new AphrontPanelView();
     $panel->appendChild($table);
-    $panel->setHeader('MetaMTA Messages');
+    $panel->setHeader(pht('MetaMTA Messages'));
     $panel->appendChild($pager);
+    $panel->setNoBackground();
 
     $nav = $this->buildSideNavView();
     $nav->selectFilter('sent');
@@ -129,7 +114,8 @@ final class PhabricatorMetaMTAListController
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'Sent Mail',
+        'title' => pht('Sent Mail'),
+        'device' => true,
       ));
   }
 }

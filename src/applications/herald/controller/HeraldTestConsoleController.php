@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class HeraldTestConsoleController extends HeraldController {
 
   public function processRequest() {
@@ -119,18 +103,19 @@ final class HeraldTestConsoleController extends HeraldController {
         'results of a dry run on the object.</p>')
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Object Name')
+          ->setLabel(pht('Object Name'))
           ->setName('object_name')
           ->setError($e_name)
           ->setValue($object_name))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Test Rules'));
+          ->setValue(pht('Test Rules')));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Test Herald Rules');
+    $panel->setHeader(pht('Test Herald Rules'));
     $panel->setWidth(AphrontPanelView::WIDTH_FULL);
     $panel->appendChild($form);
+    $panel->setNoBackground();
 
     $nav = $this->renderNav();
     $nav->selectFilter('test');
@@ -139,6 +124,16 @@ final class HeraldTestConsoleController extends HeraldController {
         $error_view,
         $panel,
       ));
+
+    $crumbs = id($this->buildApplicationCrumbs())
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName(pht('Transcripts'))
+          ->setHref($this->getApplicationURI('/transcript/')))
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName(pht('Test Console')));
+    $nav->setCrumbs($crumbs);
 
     return $this->buildStandardPageResponse(
       $nav,

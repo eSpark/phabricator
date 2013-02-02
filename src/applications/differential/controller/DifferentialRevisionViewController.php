@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionViewController extends DifferentialController {
 
   private $revisionID;
@@ -76,22 +60,19 @@ final class DifferentialRevisionViewController extends DifferentialController {
         $repository);
 
     if ($request->getExists('download')) {
-      return $this->buildRawDiffResponse($changesets,
-                                         $vs_changesets,
-                                         $vs_map,
-                                         $repository);
+      return $this->buildRawDiffResponse(
+        $changesets,
+        $vs_changesets,
+        $vs_map,
+        $repository);
     }
 
-    list($aux_fields, $props) = $this->loadAuxiliaryFieldsAndProperties(
-      $revision,
-      $target,
-      $target_manual,
-      array(
-        'local:commits',
-        'arc:lint',
-        'arc:unit',
-      ));
+    $props = id(new DifferentialDiffProperty())->loadAllWhere(
+      'diffID = %d',
+      $target_manual->getID());
+    $props = mpull($props, 'getData', 'getName');
 
+    $aux_fields = $this->loadAuxiliaryFields($revision);
 
     $comments = $revision->loadComments();
     $comments = array_merge(
@@ -139,14 +120,15 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $aux_phids = array();
     foreach ($aux_fields as $key => $aux_field) {
+      $aux_field->setDiff($target);
+      $aux_field->setManualDiff($target_manual);
+      $aux_field->setDiffProperties($props);
       $aux_phids[$key] = $aux_field->getRequiredHandlePHIDsForRevisionView();
     }
     $object_phids = array_merge($object_phids, array_mergev($aux_phids));
     $object_phids = array_unique($object_phids);
 
-    $handles = id(new PhabricatorObjectHandleData($object_phids))
-      ->setViewer($this->getRequest()->getUser())
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($object_phids);
 
     foreach ($aux_fields as $key => $aux_field) {
       // Make sure each field only has access to handles it specifically
@@ -156,24 +138,36 @@ final class DifferentialRevisionViewController extends DifferentialController {
     }
 
     $reviewer_warning = null;
-    $has_live_reviewer = false;
-    foreach ($revision->getReviewers() as $reviewer) {
-      if (!$handles[$reviewer]->isDisabled()) {
-        $has_live_reviewer = true;
+    if ($revision->getStatus() ==
+        ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
+      $has_live_reviewer = false;
+      foreach ($revision->getReviewers() as $reviewer) {
+        if (!$handles[$reviewer]->isDisabled()) {
+          $has_live_reviewer = true;
+          break;
+        }
       }
-    }
-    if (!$has_live_reviewer) {
-      $reviewer_warning = new AphrontErrorView();
-      $reviewer_warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $reviewer_warning->setTitle('No Active Reviewers');
-      if ($revision->getReviewers()) {
-        $reviewer_warning->appendChild(
-          '<p>All specified reviewers are disabled. You may want to add '.
-          'some new reviewers.</p>');
-      } else {
-        $reviewer_warning->appendChild(
-          '<p>This revision has no specified reviewers. You may want to '.
-          'add some.</p>');
+      if (!$has_live_reviewer) {
+        $reviewer_warning = new AphrontErrorView();
+        $reviewer_warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
+        $reviewer_warning->setTitle(pht('No Active Reviewers'));
+        if ($revision->getReviewers()) {
+          $reviewer_warning->appendChild(
+            phutil_render_tag(
+              'p',
+              array(),
+              pht('All specified reviewers are disabled and this revision '.
+                  'needs review. You may want to add some new reviewers.')
+            ));
+        } else {
+          $reviewer_warning->appendChild(
+            phutil_render_tag(
+              'p',
+              array(),
+              pht('This revision has no specified reviewers and needs '.
+                  'review. You may want to add some reviewers.')
+            ));
+        }
       }
     }
 
@@ -182,15 +176,16 @@ final class DifferentialRevisionViewController extends DifferentialController {
     $limit = 100;
     $large = $request->getStr('large');
     if (count($changesets) > $limit && !$large) {
-      $count = number_format(count($changesets));
+      $count = count($changesets);
       $warning = new AphrontErrorView();
       $warning->setTitle('Very Large Diff');
       $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $warning->setWidth(AphrontErrorView::WIDTH_WIDE);
       $warning->appendChild(
-        "<p>This diff is very large and affects {$count} files. Load ".
-        "each file individually. ".
-        "<strong>".
+        pht(
+          'This diff is very large and affects %s files. Load each file '.
+            'individually.',
+          new PhutilNumber($count)).
+        " <strong>".
           phutil_render_tag(
             'a',
             array(
@@ -198,7 +193,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
                 ->alter('large', 'true')
                 ->setFragment('toc'),
             ),
-            'Show All Files Inline').
+            pht('Show All Files Inline')).
         "</strong>");
       $warning = $warning->render();
 
@@ -234,6 +229,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $revision_detail = new DifferentialRevisionDetailView();
     $revision_detail->setRevision($revision);
+    $revision_detail->setDiff(reset($diffs));
     $revision_detail->setAuxiliaryFields($aux_fields);
 
     $actions = $this->getRevisionActions($revision);
@@ -311,6 +307,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $changeset_view->setRepository($repository);
     }
     $changeset_view->setSymbolIndexes($symbol_indexes);
+    $changeset_view->setTitle('Diff '.$target->getID());
 
     $diff_history = new DifferentialRevisionUpdateHistoryView();
     $diff_history->setDiffs($diffs);
@@ -356,10 +353,17 @@ final class DifferentialRevisionViewController extends DifferentialController {
         'authorPHID = %s AND draftKey = %s',
         $user->getPHID(),
         'differential-comment-'.$revision->getID());
+
+      $reviewers = array();
+      $ccs = array();
       if ($draft) {
-        $draft = $draft->getDraft();
-      } else {
-        $draft = null;
+        $reviewers = idx($draft->getMetadata(), 'reviewers', array());
+        $ccs = idx($draft->getMetadata(), 'ccs', array());
+        if ($reviewers || $ccs) {
+          $handles = $this->loadViewerHandles(array_merge($reviewers, $ccs));
+          $reviewers = array_select_keys($handles, $reviewers);
+          $ccs = array_select_keys($handles, $ccs);
+        }
       }
 
       $comment_form = new DifferentialAddCommentView();
@@ -369,6 +373,8 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $comment_form->setActionURI('/differential/comment/save/');
       $comment_form->setUser($user);
       $comment_form->setDraft($draft);
+      $comment_form->setReviewers(mpull($reviewers, 'getFullName', 'getPHID'));
+      $comment_form->setCCs(mpull($ccs, 'getFullName', 'getPHID'));
     }
 
     $pane_id = celerity_generate_unique_node_id();
@@ -380,7 +386,6 @@ final class DifferentialRevisionViewController extends DifferentialController {
     Javelin::initBehavior('differential-user-select');
 
     $page_pane = id(new DifferentialPrimaryPaneView())
-      ->setLineWidthFromChangesets($changesets)
       ->setID($pane_id)
       ->appendChild(
         $comment_view->render().
@@ -397,12 +402,17 @@ final class DifferentialRevisionViewController extends DifferentialController {
     PhabricatorFeedStoryNotification::updateObjectNotificationViews(
       $user, $revision->getPHID());
 
+    $object_id = 'D'.$revision->getID();
+
     $top_anchor = id(new PhabricatorAnchorView())
       ->setAnchorName('top')
       ->setNavigationMarker(true);
 
-    $nav = $this->buildSideNavView($revision, $changesets);
-    $nav->selectFilter('');
+    $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
+      ->setAnchorName('top')
+      ->setTitle('D'.$revision->getID())
+      ->setBaseURI(new PhutilURI('/D'.$revision->getID()))
+      ->build($changesets);
     $nav->appendChild(
       array(
         $reviewer_warning,
@@ -411,10 +421,18 @@ final class DifferentialRevisionViewController extends DifferentialController {
         $page_pane,
       ));
 
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($object_id)
+        ->setHref('/'.$object_id));
+    $nav->setCrumbs($crumbs);
+
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'D'.$revision->getID().' '.$revision->getTitle(),
+        'title' => $object_id.' '.$revision->getTitle(),
       ));
   }
 
@@ -465,47 +483,28 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     if ($viewer_is_owner) {
       $links[] = array(
-        'class' => 'revision-edit',
+        'icon'  =>  'edit',
         'href'  => "/differential/revision/edit/{$revision_id}/",
-        'name'  => 'Edit Revision',
+        'name'  => pht('Edit Revision'),
       );
     }
 
     if (!$viewer_is_anonymous) {
 
-      require_celerity_resource('phabricator-flag-css');
-
-      $flag = PhabricatorFlagQuery::loadUserFlag($user, $revision_phid);
-      if ($flag) {
-        $class = PhabricatorFlagColor::getCSSClass($flag->getColor());
-        $color = PhabricatorFlagColor::getColorName($flag->getColor());
-        $links[] = array(
-          'class' => 'flag-clear '.$class,
-          'href'  => '/flag/delete/'.$flag->getID().'/',
-          'name'  => phutil_escape_html('Remove '.$color.' Flag'),
-          'sigil' => 'workflow',
-        );
-      } else {
-        $links[] = array(
-          'class' => 'flag-add phabricator-flag-ghost',
-          'href'  => '/flag/edit/'.$revision_phid.'/',
-          'name'  => 'Flag Revision',
-          'sigil' => 'workflow',
-        );
-      }
-
       if (!$viewer_is_owner && !$viewer_is_reviewer) {
         $action = $viewer_is_cc ? 'rem' : 'add';
         $links[] = array(
-          'class'   => $viewer_is_cc ? 'subscribe-rem' : 'subscribe-add',
+          'icon'    => $viewer_is_cc ? 'subscribe-delete' : 'subscribe-add',
           'href'    => "/differential/subscribe/{$action}/{$revision_id}/",
-          'name'    => $viewer_is_cc ? 'Unsubscribe' : 'Subscribe',
+          'name'    => $viewer_is_cc ? pht('Unsubscribe') : pht('Subscribe'),
           'instant' => true,
+          'sigil' => 'workflow',
         );
       } else {
         $links[] = array(
-          'class' => 'subscribe-rem unavailable',
-          'name'  => 'Automatically Subscribed',
+          'icon'     => 'subscribe-auto',
+          'name'     => pht('Automatically Subscribed'),
+          'disabled' => true,
         );
       }
 
@@ -513,16 +512,16 @@ final class DifferentialRevisionViewController extends DifferentialController {
       require_celerity_resource('javelin-behavior-phabricator-object-selector');
 
       $links[] = array(
-        'class' => 'action-dependencies',
-        'name'  => 'Edit Dependencies',
+        'icon'  => 'link',
+        'name'  => pht('Edit Dependencies'),
         'href'  => "/search/attach/{$revision_phid}/DREV/dependencies/",
         'sigil' => 'workflow',
       );
 
       if (PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
         $links[] = array(
-          'class' => 'attach-maniphest',
-          'name'  => 'Edit Maniphest Tasks',
+          'icon'  => 'attach',
+          'name'  => pht('Edit Maniphest Tasks'),
           'href'  => "/search/attach/{$revision_phid}/TASK/",
           'sigil' => 'workflow',
         );
@@ -530,23 +529,23 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
       if ($user->getIsAdmin()) {
         $links[] = array(
-          'class' => 'transcripts-metamta',
-          'name'  => 'MetaMTA Transcripts',
+          'icon'  => 'file',
+          'name'  => pht('MetaMTA Transcripts'),
           'href'  => "/mail/?phid={$revision_phid}",
         );
       }
 
       $links[] = array(
-        'class' => 'transcripts-herald',
-        'name'  => 'Herald Transcripts',
+        'icon'  => 'file',
+        'name'  => pht('Herald Transcripts'),
         'href'  => "/herald/transcript/?phid={$revision_phid}",
       );
     }
 
     $request_uri = $this->getRequest()->getRequestURI();
     $links[] = array(
-      'class' => 'action-download',
-      'name'  => 'Download Raw Diff',
+      'icon'  => 'download',
+      'name'  => pht('Download Raw Diff'),
       'href'  => $request_uri->alter('download', 'true')
     );
 
@@ -567,9 +566,11 @@ final class DifferentialRevisionViewController extends DifferentialController {
     $status = $revision->getStatus();
 
     $allow_self_accept = PhabricatorEnv::getEnvConfig(
-      'differential.allow-self-accept', false);
+      'differential.allow-self-accept');
     $always_allow_close = PhabricatorEnv::getEnvConfig(
-      'differential.always-allow-close', false);
+      'differential.always-allow-close');
+    $allow_reopen = PhabricatorEnv::getEnvConfig(
+      'differential.allow-reopen');
 
     if ($viewer_is_owner) {
       switch ($status) {
@@ -623,6 +624,8 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $actions[DifferentialAction::ACTION_ADDREVIEWERS] = true;
     $actions[DifferentialAction::ACTION_ADDCCS] = true;
+    $actions[DifferentialAction::ACTION_REOPEN] = $allow_reopen &&
+      ($status == ArcanistDifferentialRevisionStatus::CLOSED);
 
     $actions = array_keys(array_filter($actions));
     $actions_dict = array();
@@ -734,11 +737,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
     return array($changesets, $vs_map, $vs_changesets, $refs);
   }
 
-  private function loadAuxiliaryFieldsAndProperties(
-    DifferentialRevision $revision,
-    DifferentialDiff $diff,
-    DifferentialDiff $manual_diff,
-    array $special_properties) {
+  private function loadAuxiliaryFields(DifferentialRevision $revision) {
 
     $aux_fields = DifferentialFieldSelector::newSelector()
       ->getFieldSpecifications();
@@ -754,46 +753,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $revision,
       $aux_fields);
 
-    $aux_props = array();
-    foreach ($aux_fields as $key => $aux_field) {
-      $aux_field->setDiff($diff);
-      $aux_field->setManualDiff($manual_diff);
-      $aux_props[$key] = $aux_field->getRequiredDiffProperties();
-    }
-
-    $required_properties = array_mergev($aux_props);
-    $required_properties = array_merge(
-      $required_properties,
-      $special_properties);
-
-    $property_map = array();
-    if ($required_properties) {
-      $properties = id(new DifferentialDiffProperty())->loadAllWhere(
-        'diffID = %d AND name IN (%Ls)',
-        $manual_diff->getID(),
-        $required_properties);
-      $property_map = mpull($properties, 'getData', 'getName');
-    }
-
-    foreach ($aux_fields as $key => $aux_field) {
-      // Give each field only the properties it specifically required, and
-      // set 'null' for each requested key which we didn't actually load a
-      // value for (otherwise, getDiffProperty() will throw).
-      if ($aux_props[$key]) {
-        $props = array_select_keys($property_map, $aux_props[$key]) +
-                 array_fill_keys($aux_props[$key], null);
-      } else {
-        $props = array();
-      }
-
-      $aux_field->setDiffProperties($props);
-    }
-
-    return array(
-      $aux_fields,
-      array_select_keys(
-        $property_map,
-        $special_properties));
+    return $aux_fields;
   }
 
   private function buildSymbolIndexes(
@@ -883,14 +843,14 @@ final class DifferentialRevisionViewController extends DifferentialController {
       ->loadAssets();
 
     $phids = $view->getRequiredHandlePHIDs();
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($this->getRequest()->getUser())
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
     $view->setHandles($handles);
 
     return
+      id(new PhabricatorHeaderView())
+        ->setHeader(pht('Open Revisions Affecting These Files'))
+        ->render().
       '<div class="differential-panel">'.
-        '<h1>Open Revisions Affecting These Files</h1>'.
         $view->render().
       '</div>';
   }
@@ -1014,106 +974,5 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     return id(new AphrontRedirectResponse())->setURI($file->getBestURI());
 
-  }
-
-  private function buildSideNavView(
-    DifferentialRevision $revision,
-    array $changesets) {
-
-    $nav = new AphrontSideNavFilterView();
-    $nav->setBaseURI(new PhutilURI('/D'.$revision->getID()));
-    $nav->setFlexible(true);
-
-    $nav->addFilter('top', 'D'.$revision->getID(), '#top',
-      $relative = false,
-      'phabricator-active-nav-focus');
-
-    $tree = new PhutilFileTree();
-    foreach ($changesets as $changeset) {
-      try {
-        $tree->addPath($changeset->getFilename(), $changeset);
-      } catch (Exception $ex) {
-        // TODO: See T1702. When viewing the versus diff of diffs, we may
-        // have files with the same filename. For example, if you have a setup
-        // like this in SVN:
-        //
-        //  a/
-        //    README
-        //  b/
-        //    README
-        //
-        // ...and you run "arc diff" once from a/, and again from b/, you'll
-        // get two diffs with path README. However, in the versus diff view we
-        // will compute their absolute repository paths and detect that they
-        // aren't really the same file. This is correct, but causes us to
-        // throw when inserting them.
-        //
-        // We should probably compute the smallest unique path for each file
-        // and show these as "a/README" and "b/README" when diffed against
-        // one another. However, we get this wrong in a lot of places (the
-        // other TOC shows two "README" files, and we generate the same anchor
-        // hash for both) so I'm just stopping the bleeding until we can get
-        // a proper fix in place.
-      }
-    }
-
-    require_celerity_resource('phabricator-filetree-view-css');
-
-    $filetree = array();
-
-    $path = $tree;
-    while (($path = $path->getNextNode())) {
-      $data = $path->getData();
-
-      $name = $path->getName();
-      $style = 'padding-left: '.(2 + (3 * $path->getDepth())).'px';
-
-      $href = null;
-      if ($data) {
-        $href = '#'.$data->getAnchorName();
-        $title = $name;
-        $icon = 'phabricator-filetree-icon-file';
-      } else {
-        $name .= '/';
-        $title = $path->getFullPath().'/';
-        $icon = 'phabricator-filetree-icon-dir';
-      }
-
-      $icon = phutil_render_tag(
-        'span',
-        array(
-          'class' => 'phabricator-filetree-icon '.$icon,
-        ),
-        '');
-
-      $name_element = phutil_render_tag(
-        'span',
-        array(
-          'class' => 'phabricator-filetree-name',
-        ),
-        phutil_escape_html($name));
-
-      $filetree[] = javelin_render_tag(
-        $href ? 'a' : 'span',
-        array(
-          'href' => $href,
-          'style' => $style,
-          'title' => $title,
-          'class' => 'phabricator-filetree-item',
-        ),
-        $icon.$name_element);
-    }
-    $tree->destroy();
-
-    $filetree =
-      '<div class="phabricator-filetree">'.
-        implode("\n", $filetree).
-      '</div>';
-    $nav->addFilter('toc', 'Table of Contents', '#toc');
-    $nav->addCustomBlock($filetree);
-    $nav->addFilter('comment', 'Add Comment', '#comment');
-    $nav->setActive(true);
-
-    return $nav;
   }
 }

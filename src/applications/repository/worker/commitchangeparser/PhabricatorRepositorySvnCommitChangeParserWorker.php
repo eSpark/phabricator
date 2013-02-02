@@ -1,22 +1,6 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-class PhabricatorRepositorySvnCommitChangeParserWorker
+final class PhabricatorRepositorySvnCommitChangeParserWorker
   extends PhabricatorRepositoryCommitChangeParserWorker {
 
   protected function parseCommit(
@@ -263,7 +247,7 @@ class PhabricatorRepositorySvnCommitChangeParserWorker
                       'rawPath'         => $full_to,
                       'rawTargetPath'   => $full_from,
                       'rawTargetCommit' => $copy_rev,
-                      'rawDirect'       => false,
+                      'rawDirect'       => true,
 
                       'changeType'      => $type,
                       'fileType'        => $from_file_type,
@@ -282,6 +266,9 @@ class PhabricatorRepositorySvnCommitChangeParserWorker
                   if (empty($raw_paths[$full_from]) &&
                       empty($effects[$full_from])) {
                     if ($other_type == DifferentialChangeType::TYPE_COPY_AWAY) {
+                      // Add an indirect effect for the copied file, if we
+                      // don't already have an entry for it (e.g., a separate
+                      // change).
                       $effects[$full_from] = array(
                         'rawPath'         => $full_from,
                         'rawTargetPath'   => null,

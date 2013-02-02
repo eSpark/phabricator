@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPaste extends PhabricatorPasteDAO
   implements PhabricatorPolicyInterface {
 
@@ -25,8 +9,10 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
   protected $filePHID;
   protected $language;
   protected $parentPHID;
+  protected $viewPolicy;
 
   private $content;
+  private $rawContent;
 
   public function getURI() {
     return '/P'.$this->getID();
@@ -52,7 +38,7 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
 
   public function getPolicy($capability) {
     if ($capability == PhabricatorPolicyCapability::CAN_VIEW) {
-      return PhabricatorPolicies::POLICY_USER;
+      return $this->viewPolicy;
     }
     return PhabricatorPolicies::POLICY_NOONE;
   }
@@ -78,6 +64,18 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
 
   public function attachContent($content) {
     $this->content = $content;
+    return $this;
+  }
+
+  public function getRawContent() {
+    if ($this->rawContent === null) {
+      throw new Exception("Call attachRawContent() before getRawContent()!");
+    }
+    return $this->rawContent;
+  }
+
+  public function attachRawContent($raw_content) {
+    $this->rawContent = $raw_content;
     return $this;
   }
 

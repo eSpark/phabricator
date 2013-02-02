@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorActionView extends AphrontView {
 
   private $name;
@@ -23,6 +7,7 @@ final class PhabricatorActionView extends AphrontView {
   private $href;
   private $disabled;
   private $workflow;
+  private $renderAsForm;
 
   public function setHref($href) {
     $this->href = $href;
@@ -49,28 +34,63 @@ final class PhabricatorActionView extends AphrontView {
     return $this;
   }
 
+  public function setRenderAsForm($form) {
+    $this->renderAsForm = $form;
+    return $this;
+  }
+
   public function render() {
 
     $icon = null;
     if ($this->icon) {
+
+      $suffix = '';
+      if ($this->disabled) {
+        $suffix = '-grey';
+      }
+
+      require_celerity_resource('sprite-icon-css');
       $icon = phutil_render_tag(
         'span',
         array(
-          'class' => 'phabricator-action-view-icon autosprite '.
-                       'action-'.$this->icon,
+          'class' => 'phabricator-action-view-icon sprite-icon '.
+                       'action-'.$this->icon.$suffix,
         ),
         '');
     }
 
     if ($this->href) {
-      $item = javelin_render_tag(
-        'a',
-        array(
-          'href' => $this->href,
-          'class' => 'phabricator-action-view-item',
-          'sigil' => $this->workflow ? 'workflow' : null,
-        ),
-        phutil_escape_html($this->name));
+      if ($this->renderAsForm) {
+        if (!$this->user) {
+          throw new Exception(
+            'Call setUser() when rendering an action as a form.');
+        }
+
+        $item = javelin_render_tag(
+          'button',
+          array(
+            'class' => 'phabricator-action-view-item',
+          ),
+          phutil_escape_html($this->name));
+
+        $item = phabricator_render_form(
+          $this->user,
+          array(
+            'action'    => $this->href,
+            'method'    => 'POST',
+            'sigil'     => $this->workflow ? 'workflow' : null,
+          ),
+          $item);
+      } else {
+        $item = javelin_render_tag(
+          'a',
+          array(
+            'href'  => $this->href,
+            'class' => 'phabricator-action-view-item',
+            'sigil' => $this->workflow ? 'workflow' : null,
+          ),
+          phutil_escape_html($this->name));
+      }
     } else {
       $item = phutil_render_tag(
         'span',
@@ -94,5 +114,25 @@ final class PhabricatorActionView extends AphrontView {
       $icon.$item);
   }
 
+  public static function getAvailableIcons() {
+    $root = dirname(phutil_get_library_root('phabricator'));
+    $path = $root.'/resources/sprite/manifest/icon.json';
+    $data = Filesystem::readFile($path);
+    $manifest = json_decode($data, true);
+
+    $results = array();
+    $prefix = 'action-';
+    foreach ($manifest['sprites'] as $sprite) {
+      $name = $sprite['name'];
+      if (preg_match('/-(white|grey)$/', $name)) {
+        continue;
+      }
+      if (!strncmp($name, $prefix, strlen($prefix))) {
+        $results[] = substr($name, strlen($prefix));
+      }
+    }
+
+    return $results;
+  }
 
 }

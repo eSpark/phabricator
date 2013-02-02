@@ -1,28 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionCommentListView extends AphrontView {
 
   private $comments;
   private $handles;
   private $inlines;
   private $changesets;
-  private $user;
   private $target;
   private $versusDiffID;
   private $id;
@@ -51,11 +34,6 @@ final class DifferentialRevisionCommentListView extends AphrontView {
     return $this;
   }
 
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
-
   public function setTargetDiff(DifferentialDiff $target) {
     $this->target = $target;
     return $this;
@@ -77,9 +55,23 @@ final class DifferentialRevisionCommentListView extends AphrontView {
 
     require_celerity_resource('differential-revision-comment-list-css');
 
-    $engine = PhabricatorMarkupEngine::newDifferentialMarkupEngine(array(
-      'differential.diff' => $this->target
-    ));
+    $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer($this->user);
+    foreach ($this->comments as $comment) {
+      $comment->giveFacebookSomeArbitraryDiff($this->target);
+
+      $engine->addObject(
+        $comment,
+        DifferentialComment::MARKUP_FIELD_BODY);
+    }
+
+    foreach ($this->inlines as $inline) {
+      $engine->addObject(
+        $inline,
+        PhabricatorInlineCommentInterface::MARKUP_FIELD_BODY);
+    }
+
+    $engine->process();
 
     $inlines = mgroup($this->inlines, 'getCommentID');
 
@@ -173,7 +165,7 @@ final class DifferentialRevisionCommentListView extends AphrontView {
           'sigil' =>  "differential-all-comments-container",
         ),
         '<div class="differential-older-comments-are-hidden">'.
-          number_format(count($hidden)).' older comments are hidden. '.
+          pht('%d older comments are hidden. ', number_format(count($hidden))).
           javelin_render_tag(
             'a',
             array(
@@ -181,7 +173,7 @@ final class DifferentialRevisionCommentListView extends AphrontView {
               'mustcapture' => true,
               'sigil' => 'differential-show-all-comments',
             ),
-            'Show all comments.').
+            pht('Show all comments.')).
         '</div>');
     } else {
       $hidden = null;

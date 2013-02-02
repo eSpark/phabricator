@@ -1,24 +1,7 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialInlineCommentEditView extends AphrontView {
 
-  private $user;
   private $inputs = array();
   private $uri;
   private $title;
@@ -28,11 +11,6 @@ final class DifferentialInlineCommentEditView extends AphrontView {
 
   public function addHiddenInput($key, $value) {
     $this->inputs[] = array($key, $value);
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -81,9 +59,17 @@ final class DifferentialInlineCommentEditView extends AphrontView {
       $this->renderBody());
 
     if ($this->onRight) {
-      $core = '<th></th><td></td><th></th><td colspan="2">'.$content.'</td>';
+      $core =
+        '<th></th>'.
+        '<td class="left"></td>'.
+        '<th></th>'.
+        '<td colspan="3" class="right3">'.$content.'</td>';
     } else {
-      $core = '<th></th><td>'.$content.'</td><th></th><td colspan="2"></td>';
+      $core =
+        '<th></th>'.
+        '<td class="left">'.$content.'</td>'.
+        '<th></th>'.
+        '<td colspan="3" class="right3"></td>';
     }
 
     return '<table><tr class="inline-comment-splint">'.$core.'</tr></table>';
@@ -115,7 +101,7 @@ final class DifferentialInlineCommentEditView extends AphrontView {
         'sigil' => 'inline-edit-cancel',
         'class' => 'grey',
       ),
-      'Cancel');
+      pht('Cancel'));
 
     $buttons = implode('', $buttons);
 
@@ -127,7 +113,7 @@ final class DifferentialInlineCommentEditView extends AphrontView {
         'tabindex' => '-1',
         'target' => '_blank',
       ),
-      'Formatting Reference');
+      pht('Formatting Reference'));
 
     return javelin_render_tag(
       'div',

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorApplicationDifferential extends PhabricatorApplication {
 
   public function getBaseURI() {
@@ -23,11 +7,15 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Review Code';
+    return pht('Review Code');
   }
 
-  public function getAutospriteName() {
+  public function getIconName() {
     return 'differential';
+  }
+
+  public function getHelpURI() {
+    return PhabricatorEnv::getDoclink('article/Differential_User_Guide.html');
   }
 
   public function getFactObjectsForAnalysis() {
@@ -36,37 +24,46 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
     );
   }
 
+  public function getTitleGlyph() {
+    return "\xE2\x9A\x99";
+  }
+
   public function getRoutes() {
     return array(
-      '/D(?P<id>\d+)' => 'DifferentialRevisionViewController',
+      '/D(?P<id>[1-9]\d*)' => 'DifferentialRevisionViewController',
       '/differential/' => array(
         '' => 'DifferentialRevisionListController',
         'filter/(?P<filter>\w+)/(?:(?P<username>[\w\.-_]+)/)?' =>
           'DifferentialRevisionListController',
         'stats/(?P<filter>\w+)/' => 'DifferentialRevisionStatsController',
         'diff/' => array(
-          '(?P<id>\d+)/' => 'DifferentialDiffViewController',
+          '(?P<id>[1-9]\d*)/' => 'DifferentialDiffViewController',
           'create/' => 'DifferentialDiffCreateController',
         ),
         'changeset/' => 'DifferentialChangesetViewController',
-        'revision/edit/(?:(?P<id>\d+)/)?'
+        'revision/edit/(?:(?P<id>[1-9]\d*)/)?'
           => 'DifferentialRevisionEditController',
         'comment/' => array(
-          'preview/(?P<id>\d+)/' => 'DifferentialCommentPreviewController',
+          'preview/(?P<id>[1-9]\d*)/' => 'DifferentialCommentPreviewController',
           'save/' => 'DifferentialCommentSaveController',
           'inline/' => array(
-            'preview/(?P<id>\d+)/' =>
-              'DifferentialInlineCommentPreviewController',
-            'edit/(?P<id>\d+)/' => 'DifferentialInlineCommentEditController',
+            'preview/(?P<id>[1-9]\d*)/'
+              => 'DifferentialInlineCommentPreviewController',
+            'edit/(?P<id>[1-9]\d*)/'
+              => 'DifferentialInlineCommentEditController',
           ),
         ),
-        'subscribe/(?P<action>add|rem)/(?P<id>\d+)/'
+        'subscribe/(?P<action>add|rem)/(?P<id>[1-9]\d*)/'
           => 'DifferentialSubscribeController',
       ),
     );
   }
 
-  public function getCoreApplicationOrder() {
+  public function getApplicationGroup() {
+    return self::GROUP_CORE;
+  }
+
+  public function getApplicationOrder() {
     return 0.100;
   }
 
@@ -76,13 +73,14 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
       ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
       ->execute();
 
-    list($active, $waiting) = DifferentialRevisionQuery::splitResponsible(
-      $revisions,
-      $user->getPHID());
+    list($blocking, $active, $waiting) =
+      DifferentialRevisionQuery::splitResponsible(
+        $revisions,
+        array($user->getPHID()));
 
     $status = array();
 
-    $active = count($active);
+    $active = count($blocking) + count($active);
     $type = $active
       ? PhabricatorApplicationStatusView::TYPE_NEEDS_ATTENTION
       : PhabricatorApplicationStatusView::TYPE_EMPTY;

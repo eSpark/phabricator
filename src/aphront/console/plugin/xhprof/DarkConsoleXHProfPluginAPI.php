@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group console
  * @phutil-external-symbol function xhprof_enable
@@ -34,11 +18,20 @@ final class DarkConsoleXHProfPluginAPI {
       return $_REQUEST['__profile__'];
     }
 
-    if (PhabricatorEnv::getEnvConfig('debug.profile-every-request')) {
-      return PhabricatorEnv::getEnvConfig('debug.profile-every-request');
+    static $profilerRequested = null;
+
+    if (!isset($profilerRequested)) {
+      if (PhabricatorEnv::getEnvConfig('debug.profile-rate')) {
+        $rate = PhabricatorEnv::getEnvConfig('debug.profile-rate');
+        if (mt_rand(1, $rate) == 1) {
+          $profilerRequested = true;
+        } else {
+          $profilerRequested = false;
+        }
+      }
     }
 
-    return false;
+    return $profilerRequested;
   }
 
   public static function includeXHProfLib() {
@@ -73,9 +66,7 @@ final class DarkConsoleXHProfPluginAPI {
 
   public static function startProfiler() {
     self::includeXHProfLib();
-    // Note: HPHP's implementation of XHProf currently requires an argument
-    // to xhprof_enable() -- see Facebook Task #531011.
-    xhprof_enable(0);
+    xhprof_enable();
   }
 
   public static function stopProfiler() {

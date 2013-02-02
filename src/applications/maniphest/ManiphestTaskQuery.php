@@ -1,37 +1,22 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Query tasks by specific criteria. This class uses the higher-performance
  * but less-general Maniphest indexes to satisfy queries.
  *
  * @group maniphest
  */
-final class ManiphestTaskQuery {
+final class ManiphestTaskQuery extends PhabricatorQuery {
 
   private $taskIDs          = array();
+  private $taskPHIDs        = array();
   private $authorPHIDs      = array();
   private $ownerPHIDs       = array();
   private $includeUnowned   = null;
   private $projectPHIDs     = array();
   private $xprojectPHIDs    = array();
   private $subscriberPHIDs  = array();
-  private $anyProject       = false;
+  private $anyProjectPHIDs  = array();
   private $includeNoProject = null;
 
   private $fullTextSearch   = '';
@@ -85,6 +70,11 @@ final class ManiphestTaskQuery {
     return $this;
   }
 
+  public function withTaskPHIDs(array $phids) {
+    $this->taskPHIDs = $phids;
+    return $this;
+  }
+
   public function withOwners(array $owners) {
     $this->includeUnowned = false;
     foreach ($owners as $k => $phid) {
@@ -98,7 +88,7 @@ final class ManiphestTaskQuery {
     return $this;
   }
 
-  public function withProjects(array $projects) {
+  public function withAllProjects(array $projects) {
     $this->includeNoProject = false;
     foreach ($projects as $k => $phid) {
       if ($phid == ManiphestTaskOwner::PROJECT_NO_PROJECT) {
@@ -179,8 +169,8 @@ final class ManiphestTaskQuery {
     return $this->groupByProjectResults;
   }
 
-  public function withAnyProject($any_project) {
-    $this->anyProject = $any_project;
+  public function withAnyProjects(array $projects) {
+    $this->anyProjectPHIDs = $projects;
     return $this;
   }
 
@@ -197,24 +187,22 @@ final class ManiphestTaskQuery {
 
     $where = array();
     $where[] = $this->buildTaskIDsWhereClause($conn);
+    $where[] = $this->buildTaskPHIDsWhereClause($conn);
     $where[] = $this->buildStatusWhereClause($conn);
     $where[] = $this->buildPriorityWhereClause($conn);
     $where[] = $this->buildAuthorWhereClause($conn);
     $where[] = $this->buildOwnerWhereClause($conn);
     $where[] = $this->buildSubscriberWhereClause($conn);
     $where[] = $this->buildProjectWhereClause($conn);
+    $where[] = $this->buildAnyProjectWhereClause($conn);
     $where[] = $this->buildXProjectWhereClause($conn);
     $where[] = $this->buildFullTextWhereClause($conn);
 
-    $where = array_filter($where);
-    if ($where) {
-      $where = 'WHERE ('.implode(') AND (', $where).')';
-    } else {
-      $where = '';
-    }
+    $where = $this->formatWhereClause($where);
 
     $join = array();
     $join[] = $this->buildProjectJoinClause($conn);
+    $join[] = $this->buildAnyProjectJoinClause($conn);
     $join[] = $this->buildXProjectJoinClause($conn);
     $join[] = $this->buildSubscriberJoinClause($conn);
 
@@ -228,25 +216,25 @@ final class ManiphestTaskQuery {
     $having = '';
     $count = '';
     $group = '';
-    if (count($this->projectPHIDs) > 1) {
 
-      // If we're searching for more than one project:
-      //  - We'll get multiple rows for tasks when they join the project table
-      //    multiple times. We use GROUP BY to make them distinct again.
-      //  - We want to treat the query as an intersection query, not a union
-      //    query. We sum the project count and require it be the same as the
-      //    number of projects we're searching for. (If 'anyProject' is set,
-      //    we do union instead.)
-
+    if (count($this->projectPHIDs) > 1 || count($this->anyProjectPHIDs) > 1) {
+      // If we're joining multiple rows, we need to group the results by the
+      // task IDs.
       $group = 'GROUP BY task.id';
+    } else {
+      $group = '';
+    }
 
-      if (!$this->anyProject) {
-        $count = ', COUNT(project.projectPHID) projectCount';
-        $having = qsprintf(
-          $conn,
-          'HAVING projectCount = %d',
-          count($this->projectPHIDs));
-      }
+    if (count($this->projectPHIDs) > 1) {
+      // We want to treat the query as an intersection query, not a union
+      // query. We sum the project count and require it be the same as the
+      // number of projects we're searching for.
+
+      $count = ', COUNT(project.projectPHID) projectCount';
+      $having = qsprintf(
+        $conn,
+        'HAVING projectCount = %d',
+        count($this->projectPHIDs));
     }
 
     $order = $this->buildOrderClause($conn);
@@ -291,7 +279,7 @@ final class ManiphestTaskQuery {
     return $tasks;
   }
 
-  private function buildTaskIDsWhereClause($conn) {
+  private function buildTaskIDsWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->taskIDs) {
       return null;
     }
@@ -302,7 +290,18 @@ final class ManiphestTaskQuery {
       $this->taskIDs);
   }
 
-  private function buildStatusWhereClause($conn) {
+  private function buildTaskPHIDsWhereClause(AphrontDatabaseConnection $conn) {
+    if (!$this->taskPHIDs) {
+      return null;
+    }
+
+    return qsprintf(
+      $conn,
+      'phid in (%Ls)',
+      $this->taskPHIDs);
+  }
+
+  private function buildStatusWhereClause(AphrontDatabaseConnection $conn) {
 
     static $map = array(
       self::STATUS_RESOLVED   => ManiphestTaskStatus::STATUS_CLOSED_RESOLVED,
@@ -331,7 +330,7 @@ final class ManiphestTaskQuery {
     }
   }
 
-  private function buildPriorityWhereClause($conn) {
+  private function buildPriorityWhereClause(AphrontDatabaseConnection $conn) {
     if ($this->priority !== null) {
       return qsprintf(
         $conn,
@@ -348,7 +347,7 @@ final class ManiphestTaskQuery {
     return null;
   }
 
-  private function buildAuthorWhereClause($conn) {
+  private function buildAuthorWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->authorPHIDs) {
       return null;
     }
@@ -359,7 +358,7 @@ final class ManiphestTaskQuery {
       $this->authorPHIDs);
   }
 
-  private function buildOwnerWhereClause($conn) {
+  private function buildOwnerWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->ownerPHIDs) {
       if ($this->includeUnowned === null) {
         return null;
@@ -387,7 +386,7 @@ final class ManiphestTaskQuery {
     }
   }
 
-  private function buildFullTextWhereClause($conn) {
+  private function buildFullTextWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->fullTextSearch) {
       return null;
     }
@@ -411,7 +410,7 @@ final class ManiphestTaskQuery {
       $fulltext_results);
   }
 
-  private function buildSubscriberWhereClause($conn) {
+  private function buildSubscriberWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->subscriberPHIDs) {
       return null;
     }
@@ -422,7 +421,7 @@ final class ManiphestTaskQuery {
       $this->subscriberPHIDs);
   }
 
-  private function buildProjectWhereClause($conn) {
+  private function buildProjectWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->projectPHIDs && !$this->includeNoProject) {
       return null;
     }
@@ -443,7 +442,7 @@ final class ManiphestTaskQuery {
     return '('.implode(') OR (', $parts).')';
   }
 
-  private function buildProjectJoinClause($conn) {
+  private function buildProjectJoinClause(AphrontDatabaseConnection $conn) {
     if (!$this->projectPHIDs && !$this->includeNoProject) {
       return null;
     }
@@ -456,7 +455,30 @@ final class ManiphestTaskQuery {
       $project_dao->getTableName());
   }
 
-  private function buildXProjectWhereClause($conn) {
+  private function buildAnyProjectWhereClause(AphrontDatabaseConnection $conn) {
+    if (!$this->anyProjectPHIDs) {
+      return null;
+    }
+
+    return qsprintf(
+      $conn,
+      'anyproject.projectPHID IN (%Ls)',
+      $this->anyProjectPHIDs);
+  }
+
+  private function buildAnyProjectJoinClause(AphrontDatabaseConnection $conn) {
+    if (!$this->anyProjectPHIDs) {
+      return null;
+    }
+
+    $project_dao = new ManiphestTaskProject();
+    return qsprintf(
+      $conn,
+      'JOIN %T anyproject ON anyproject.taskPHID = task.phid',
+      $project_dao->getTableName());
+  }
+
+  private function buildXProjectWhereClause(AphrontDatabaseConnection $conn) {
     if (!$this->xprojectPHIDs) {
       return null;
     }
@@ -466,7 +488,7 @@ final class ManiphestTaskQuery {
       'xproject.projectPHID IS NULL');
   }
 
-  private function buildXProjectJoinClause($conn) {
+  private function buildXProjectJoinClause(AphrontDatabaseConnection $conn) {
     if (!$this->xprojectPHIDs) {
       return null;
     }
@@ -480,7 +502,7 @@ final class ManiphestTaskQuery {
       $this->xprojectPHIDs);
   }
 
-  private function buildSubscriberJoinClause($conn) {
+  private function buildSubscriberJoinClause(AphrontDatabaseConnection $conn) {
     if (!$this->subscriberPHIDs) {
       return null;
     }
@@ -492,7 +514,7 @@ final class ManiphestTaskQuery {
       $subscriber_dao->getTableName());
   }
 
-  private function buildOrderClause($conn) {
+  private function buildOrderClause(AphrontDatabaseConnection $conn) {
     $order = array();
 
     switch ($this->groupBy) {
@@ -592,7 +614,7 @@ final class ManiphestTaskQuery {
     $ii = 0;
     foreach ($tasks as $key => $task) {
       $phids = $task->getProjectPHIDs();
-      if (!$this->anyProject && $this->projectPHIDs) {
+      if ($this->projectPHIDs) {
         $phids = array_diff($phids, $this->projectPHIDs);
       }
       if ($phids) {

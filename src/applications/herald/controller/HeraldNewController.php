@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class HeraldNewController extends HeraldController {
 
   private $contentType;
@@ -75,20 +59,21 @@ final class HeraldNewController extends HeraldController {
       ->setAction('/herald/rule/')
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('New rule for')
+          ->setLabel(pht('New rule for'))
           ->setName('content_type')
           ->setValue($this->contentType)
           ->setOptions($content_type_map))
       ->appendChild($radio)
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Create Rule')
+          ->setValue(pht('Create Rule'))
           ->addCancelButton('/herald/view/'.$this->contentType.'/'));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Create New Herald Rule');
+    $panel->setHeader(pht('Create New Herald Rule'));
     $panel->setWidth(AphrontPanelView::WIDTH_FULL);
     $panel->appendChild($form);
+    $panel->setNoBackground();
 
     $nav = $this->renderNav();
     $nav->selectFilter('new');

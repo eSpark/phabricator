@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorOwnersDetailController
   extends PhabricatorOwnersController {
 
@@ -59,9 +43,7 @@ final class PhabricatorOwnersDetailController
     }
     $phids = array_keys($phids);
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($this->getRequest()->getUser())
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $rows = array();
 
@@ -99,15 +81,16 @@ final class PhabricatorOwnersDetailController
 
     $path_links = array();
     foreach ($paths as $path) {
-      $repo = $repositories[$path->getRepositoryPHID()];
-      $drequest = DiffusionRequest::newFromDictionary(
+      $repo = idx($repositories, $path->getRepositoryPHID());
+      if (!$repo) {
+        continue;
+      }
+      $href = DiffusionRequest::generateDiffusionURI(
         array(
-          'repository' => $repo,
-          'path'       => $path->getPath(),
-      ));
-      $href = $drequest->generateURI(
-        array(
-          'action' => 'browse'
+          'callsign' => $repo->getCallsign(),
+          'branch'   => $repo->getDefaultBranch(),
+          'path'     => $path->getPath(),
+          'action'   => 'browse'
         ));
       $repo_name = '<strong>'.phutil_escape_html($repo->getName()).
                    '</strong>';
@@ -117,7 +100,9 @@ final class PhabricatorOwnersDetailController
           'href' => (string) $href,
         ),
         phutil_escape_html($path->getPath()));
-      $path_links[] = $repo_name.' '.$path_link;
+      $path_links[] =
+        ($path->getExcluded() ? '&ndash;' : '+').' '.
+        $repo_name.' '.$path_link;
     }
     $path_links = implode('<br />', $path_links);
     $rows[] = array(
@@ -168,6 +153,7 @@ final class PhabricatorOwnersDetailController
       ->withPackagePHIDs(array($package->getPHID()))
       ->withStatus(PhabricatorAuditCommitQuery::STATUS_OPEN)
       ->needCommitData(true)
+      ->needAudits(true)
       ->setLimit(10);
     $attention_commits = $attention_query->execute();
     if ($attention_commits) {
@@ -191,6 +177,7 @@ final class PhabricatorOwnersDetailController
     $all_query = id(new PhabricatorAuditCommitQuery())
       ->withPackagePHIDs(array($package->getPHID()))
       ->needCommitData(true)
+      ->needAudits(true)
       ->setLimit(100);
     $all_commits = $all_query->execute();
 
@@ -216,9 +203,7 @@ final class PhabricatorOwnersDetailController
       $phids[] = $commit_view['view']->getRequiredHandlePHIDs();
     }
     $phids = array_mergev($phids);
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($user)
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $commit_panels = array();
     foreach ($commit_views as $commit_view) {
@@ -243,12 +228,9 @@ final class PhabricatorOwnersDetailController
       ));
   }
 
-  protected function getExtraPackageViews() {
+  protected function getExtraPackageViews(AphrontSideNavFilterView $view) {
     $package = $this->package;
-    return array(
-      array('name' => 'Details',
-            'key'  => 'package/'.$package->getID(),
-        ));
+    $view->addFilter('package/'.$package->getID(), 'Details');
   }
 
 }

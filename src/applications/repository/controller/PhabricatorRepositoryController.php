@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorRepositoryController extends PhabricatorController {
 
   public function shouldRequireAdmin() {
@@ -37,12 +21,15 @@ abstract class PhabricatorRepositoryController extends PhabricatorController {
     return $response->setContent($page->render());
   }
 
-  private function isPullDaemonRunningOnThisMachine() {
-
-    // This is sort of hacky, but should probably work.
-
-    list($stdout) = execx('ps auxwww');
-    return preg_match('/PhabricatorRepositoryPullLocalDaemon/', $stdout);
+  private function isPullDaemonRunning() {
+    $control = new PhabricatorDaemonControl();
+    $daemons = $control->loadRunningDaemons();
+    foreach ($daemons as $daemon) {
+      if ($daemon->isRunning() &&
+          $daemon->getName() == 'PhabricatorRepositoryPullLocalDaemon')
+        return true;
+    }
+    return false;
   }
 
   protected function renderDaemonNotice() {
@@ -60,7 +47,7 @@ abstract class PhabricatorRepositoryController extends PhabricatorController {
       "<strong>{$documentation}</strong>.";
 
     try {
-      $daemon_running = $this->isPullDaemonRunningOnThisMachine();
+      $daemon_running = $this->isPullDaemonRunning();
       if ($daemon_running) {
         return null;
       }
@@ -68,7 +55,7 @@ abstract class PhabricatorRepositoryController extends PhabricatorController {
       $message =
         "<p>The repository daemon is not running on this machine. ".
         "{$common}</p>";
-    } catch (CommandException $ex) {
+    } catch (Exception $ex) {
       $title = "Unable To Verify Repository Daemon";
       $message =
         "<p>Unable to determine if the repository daemon is running on this ".

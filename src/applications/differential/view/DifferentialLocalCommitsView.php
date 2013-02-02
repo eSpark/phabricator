@@ -1,33 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialLocalCommitsView extends AphrontView {
 
   private $localCommits;
-  private $user;
 
   public function setLocalCommits($local_commits) {
     $this->localCommits = $local_commits;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -57,7 +35,16 @@ final class DifferentialLocalCommitsView extends AphrontView {
     }
 
     $rows = array();
+    $highlight = true;
     foreach ($local as $commit) {
+      if ($highlight) {
+        $class = 'alt';
+        $highlight = false;
+      } else {
+        $class = '';
+        $highlight = true;
+      }
+
 
       $row = array();
       if (idx($commit, 'commit')) {
@@ -122,28 +109,30 @@ final class DifferentialLocalCommitsView extends AphrontView {
       }
       $row[] = '<td>'.$date.'</td>';
 
-      $rows[] = '<tr>'.implode('', $row).'</tr>';
+      $rows[] = '<tr class="'.$class.'">'.implode('', $row).'</tr>';
     }
 
 
     $headers = array();
-    $headers[] = '<th>Commit</th>';
+    $headers[] = '<th>'.pht('Commit').'</th>';
     if ($has_tree) {
-      $headers[] = '<th>Tree</th>';
+      $headers[] = '<th>'.pht('Tree').'</th>';
     }
     if ($has_local) {
-      $headers[] = '<th>Local</th>';
+      $headers[] = '<th>'.pht('Local').'</th>';
     }
-    $headers[] = '<th>Parents</th>';
-    $headers[] = '<th>Author</th>';
-    $headers[] = '<th>Summary</th>';
-    $headers[] = '<th>Date</th>';
+    $headers[] = '<th>'.pht('Parents').'</th>';
+    $headers[] = '<th>'.pht('Author').'</th>';
+    $headers[] = '<th>'.pht('Summary').'</th>';
+    $headers[] = '<th>'.pht('Date').'</th>';
 
     $headers = '<tr>'.implode('', $headers).'</tr>';
 
     return
+      id(new PhabricatorHeaderView())
+        ->setHeader(pht('Local Commits'))
+        ->render().
       '<div class="differential-panel">'.
-        '<h1>Local Commits</h1>'.
         '<table class="differential-local-commits-table">'.
           $headers.
           implode("\n", $rows).

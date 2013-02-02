@@ -1,30 +1,13 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Handle major edit operations to DifferentialRevision -- adding and removing
  * reviewers, diffs, and CCs. Unlike simple edits, these changes trigger
  * complicated email workflows.
  */
-final class DifferentialRevisionEditor {
+final class DifferentialRevisionEditor extends PhabricatorEditor {
 
   protected $revision;
-  protected $actorPHID;
 
   protected $cc         = null;
   protected $reviewers  = null;
@@ -35,24 +18,22 @@ final class DifferentialRevisionEditor {
   private $auxiliaryFields = array();
   private $contentSource;
 
-  public function __construct(DifferentialRevision $revision, $actor_phid) {
+  public function __construct(DifferentialRevision $revision) {
     $this->revision = $revision;
-    $this->actorPHID = $actor_phid;
   }
 
   public static function newRevisionFromConduitWithDiff(
     array $fields,
     DifferentialDiff $diff,
-    $user_phid) {
+    PhabricatorUser $actor) {
 
     $revision = new DifferentialRevision();
     $revision->setPHID($revision->generatePHID());
-
-    $revision->setAuthorPHID($user_phid);
+    $revision->setAuthorPHID($actor->getPHID());
     $revision->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVIEW);
 
-    $editor = new DifferentialRevisionEditor($revision, $user_phid);
-
+    $editor = new DifferentialRevisionEditor($revision);
+    $editor->setActor($actor);
     $editor->copyFieldsFromConduit($fields);
 
     $editor->addDiff($diff, null);
@@ -63,19 +44,16 @@ final class DifferentialRevisionEditor {
 
   public function copyFieldsFromConduit(array $fields) {
 
+    $actor = $this->getActor();
     $revision = $this->revision;
     $revision->loadRelationships();
 
     $aux_fields = DifferentialFieldSelector::newSelector()
       ->getFieldSpecifications();
 
-    $user = id(new PhabricatorUser())->loadOneWhere(
-      'phid = %s',
-      $this->actorPHID);
-
     foreach ($aux_fields as $key => $aux_field) {
       $aux_field->setRevision($revision);
-      $aux_field->setUser($user);
+      $aux_field->setUser($actor);
       if (!$aux_field->shouldAppearOnCommitMessage()) {
         unset($aux_fields[$key]);
       }
@@ -148,7 +126,7 @@ final class DifferentialRevisionEditor {
   }
 
   protected function getActorPHID() {
-    return $this->actorPHID;
+    return $this->getActor()->getPHID();
   }
 
   public function isNewRevision() {
@@ -182,6 +160,18 @@ final class DifferentialRevisionEditor {
 
     if ($this->cc === null) {
       $this->cc = $revision->getCCPHIDs();
+    }
+
+    if ($is_new) {
+      $content_blocks = array();
+      foreach ($this->auxiliaryFields as $field) {
+        if ($field->shouldExtractMentions()) {
+          $content_blocks[] = $field->renderValueForCommitMessage(false);
+        }
+      }
+      $phids = PhabricatorMarkupEngine::extractPHIDsFromMentions(
+        $content_blocks);
+      $this->cc = array_unique(array_merge($this->cc, $phids));
     }
 
     $diff = $this->getDiff();
@@ -299,7 +289,7 @@ final class DifferentialRevisionEditor {
       $this->reviewers,
       array_keys($rem['rev']),
       array_keys($add['rev']),
-      $this->actorPHID);
+      $this->getActorPHID());
 
     // We want to attribute new CCs to a "reasonPHID", representing the reason
     // they were added. This is either a user (if some user explicitly CCs
@@ -312,18 +302,18 @@ final class DifferentialRevisionEditor {
         if (empty($new['ccs'][$phid])) {
           $reasons[$phid] = $xscript_phid;
         } else {
-          $reasons[$phid] = $this->actorPHID;
+          $reasons[$phid] = $this->getActorPHID();
         }
       }
       foreach ($rem['ccs'] as $phid => $ignored) {
         if (empty($new['ccs'][$phid])) {
-          $reasons[$phid] = $this->actorPHID;
+          $reasons[$phid] = $this->getActorPHID();
         } else {
           $reasons[$phid] = $xscript_phid;
         }
       }
     } else {
-      $reasons = $this->actorPHID;
+      $reasons = $this->getActorPHID();
     }
 
     self::alterCCs(
@@ -426,8 +416,62 @@ final class DifferentialRevisionEditor {
     id(new PhabricatorTimelineEvent('difx', $event_data))
       ->recordEvent();
 
+    $mailed_phids = array();
+    if (!$this->silentUpdate) {
+      $revision->loadRelationships();
+
+      if ($add['rev']) {
+        $message = id(new DifferentialNewDiffMail(
+            $revision,
+            $actor_handle,
+            $changesets))
+          ->setIsFirstMailAboutRevision($is_new)
+          ->setIsFirstMailToRecipients(true)
+          ->setToPHIDs(array_keys($add['rev']));
+
+        if ($is_new) {
+          // The first time we send an email about a revision, put the CCs in
+          // the "CC:" field of the same "Review Requested" email that reviewers
+          // get, so you don't get two initial emails if you're on a list that
+          // is CC'd.
+          $message->setCCPHIDs(array_keys($add['ccs']));
+        }
+
+        $mail[] = $message;
+      }
+
+      // If we added CCs, we want to send them an email, but only if they were
+      // not already a reviewer and were not added as one (in these cases, they
+      // got a "NewDiff" mail, either in the past or just a moment ago). You can
+      // still get two emails, but only if a revision is updated and you are
+      // added as a reviewer at the same time a list you are on is added as a
+      // CC, which is rare and reasonable.
+
+      $implied_ccs = self::getImpliedCCs($revision);
+      $implied_ccs = array_fill_keys($implied_ccs, true);
+      $add['ccs'] = array_diff_key($add['ccs'], $implied_ccs);
+
+      if (!$is_new && $add['ccs']) {
+        $mail[] = id(new DifferentialCCWelcomeMail(
+            $revision,
+            $actor_handle,
+            $changesets))
+          ->setIsFirstMailToRecipients(true)
+          ->setToPHIDs(array_keys($add['ccs']));
+      }
+
+      foreach ($mail as $message) {
+        $message->setHeraldTranscriptURI($xscript_uri);
+        $message->setXHeraldRulesHeader($xscript_header);
+        $message->send();
+
+        $mailed_phids[] = $message->getRawMail()->buildRecipientList();
+      }
+      $mailed_phids = array_mergev($mailed_phids);
+    }
+
     id(new PhabricatorFeedStoryPublisher())
-      ->setStoryType(PhabricatorFeedStoryTypeConstants::STORY_DIFFERENTIAL)
+      ->setStoryType('PhabricatorFeedStoryDifferential')
       ->setStoryData($event_data)
       ->setStoryTime(time())
       ->setStoryAuthorPHID($revision->getAuthorPHID())
@@ -442,62 +486,11 @@ final class DifferentialRevisionEditor {
           array($revision->getAuthorPHID()),
           $revision->getReviewers(),
           $revision->getCCPHIDs()))
+      ->setMailRecipientPHIDs($mailed_phids)
       ->publish();
 
-//  TODO: Move this into a worker task thing.
-    PhabricatorSearchDifferentialIndexer::indexRevision($revision);
-
-    if ($this->silentUpdate) {
-      return;
-    }
-
-    $revision->loadRelationships();
-
-    if ($add['rev']) {
-      $message = id(new DifferentialNewDiffMail(
-          $revision,
-          $actor_handle,
-          $changesets))
-        ->setIsFirstMailAboutRevision($is_new)
-        ->setIsFirstMailToRecipients(true)
-        ->setToPHIDs(array_keys($add['rev']));
-
-      if ($is_new) {
-        // The first time we send an email about a revision, put the CCs in
-        // the "CC:" field of the same "Review Requested" email that reviewers
-        // get, so you don't get two initial emails if you're on a list that
-        // is CC'd.
-        $message->setCCPHIDs(array_keys($add['ccs']));
-      }
-
-      $mail[] = $message;
-    }
-
-    // If we added CCs, we want to send them an email, but only if they were not
-    // already a reviewer and were not added as one (in these cases, they got
-    // a "NewDiff" mail, either in the past or just a moment ago). You can still
-    // get two emails, but only if a revision is updated and you are added as a
-    // reviewer at the same time a list you are on is added as a CC, which is
-    // rare and reasonable.
-
-    $implied_ccs = self::getImpliedCCs($revision);
-    $implied_ccs = array_fill_keys($implied_ccs, true);
-    $add['ccs'] = array_diff_key($add['ccs'], $implied_ccs);
-
-    if (!$is_new && $add['ccs']) {
-      $mail[] = id(new DifferentialCCWelcomeMail(
-          $revision,
-          $actor_handle,
-          $changesets))
-        ->setIsFirstMailToRecipients(true)
-        ->setToPHIDs(array_keys($add['ccs']));
-    }
-
-    foreach ($mail as $message) {
-      $message->setHeraldTranscriptURI($xscript_uri);
-      $message->setXHeraldRulesHeader($xscript_header);
-      $message->send();
-    }
+    id(new PhabricatorSearchIndexer())
+      ->indexDocumentByPHID($revision->getPHID());
   }
 
   public static function addCCAndUpdateRevision(
@@ -826,21 +819,15 @@ final class DifferentialRevisionEditor {
     }
     $all_paths = array_keys($all_paths);
 
-    $path_map = id(new DiffusionPathIDQuery($all_paths))->loadPathIDs();
+    $path_ids =
+      PhabricatorRepositoryCommitChangeParserWorker::lookupOrCreatePaths(
+        $all_paths);
 
     $table = new DifferentialAffectedPath();
     $conn_w = $table->establishConnection('w');
 
     $sql = array();
-    foreach ($all_paths as $path) {
-      $path_id = idx($path_map, $path);
-      if (!$path_id) {
-        // Don't bother creating these, it probably means we're either adding
-        // a file (in which case having this row is irrelevant since Diffusion
-        // won't be querying for it) or something is misconfigured (in which
-        // case we'd just be writing garbage).
-        continue;
-      }
+    foreach ($path_ids as $path_id) {
       $sql[] = qsprintf(
         $conn_w,
         '(%d, %d, %d, %d)',

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPasteEditController extends PhabricatorPasteController {
 
   private $id;
@@ -44,11 +28,13 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
           ->setViewer($user)
           ->withIDs(array($parent_id))
           ->needContent(true)
+          ->needRawContent(true)
           ->execute();
         $parent = head($parent);
 
         if ($parent) {
           $paste->setParentPHID($parent->getPHID());
+          $paste->setViewPolicy($parent->getViewPolicy());
         }
       }
 
@@ -87,6 +73,10 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
 
       $paste->setTitle($request->getStr('title'));
       $paste->setLanguage($request->getStr('language'));
+      $paste->setViewPolicy($request->getStr('can_view'));
+
+      // NOTE: The author is the only editor and can always view the paste,
+      // so it's impossible for them to choose an invalid policy.
 
       if (!$errors) {
         if ($is_create) {
@@ -106,7 +96,7 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
       if ($is_create && $parent) {
         $paste->setTitle('Fork of '.$parent->getFullName());
         $paste->setLanguage($parent->getLanguage());
-        $text = $parent->getContent();
+        $text = $parent->getRawContent();
       }
     }
 
@@ -121,7 +111,7 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
     $form->setFlexible(true);
 
     $langs = array(
-      '' => '(Detect With Wizardly Powers)',
+      '' => '(Detect From Filename in Title)',
     ) + PhabricatorEnv::getEnvConfig('pygments.dropdown-choices');
 
     $form
@@ -139,6 +129,19 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
           ->setValue($paste->getLanguage())
           ->setOptions($langs));
 
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($paste)
+      ->execute();
+
+    $form->appendChild(
+      id(new AphrontFormPolicyControl())
+        ->setUser($user)
+        ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
+        ->setPolicyObject($paste)
+        ->setPolicies($policies)
+        ->setName('can_view'));
+
     if ($is_create) {
       $form
         ->appendChild(
@@ -149,43 +152,57 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
             ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
             ->setCustomClass('PhabricatorMonospaced')
             ->setName('text'));
-    }
-
-    /* TODO: Doesn't have any useful options yet.
-      ->appendChild(
-        id(new AphrontFormPolicyControl())
-          ->setLabel('Visible To')
-          ->setUser($user)
+    } else {
+      $fork_link = phutil_render_tag(
+        'a',
+        array(
+          'href' => $this->getApplicationURI('?parent='.$paste->getID())
+        ),
+        'Fork'
+      );
+      $form
+        ->appendChild(
+          id(new AphrontFormMarkupControl())
+          ->setLabel('Text')
           ->setValue(
-            $new_paste->getPolicy(PhabricatorPolicyCapability::CAN_VIEW))
-          ->setName('policy'))
-    */
+            'Paste text can not be edited. '.
+            $fork_link.' to create a new paste.'
+          ));
+    }
 
     $submit = new AphrontFormSubmitControl();
 
     if (!$is_create) {
       $submit->addCancelButton($paste->getURI());
-      $submit->setValue('Save Paste');
-      $title = 'Edit '.$paste->getFullName();
+      $submit->setValue(pht('Save Paste'));
+      $title = pht('Edit %s', $paste->getFullName());
+      $short = pht('Edit');
     } else {
-      $submit->setValue('Create Paste');
-      $title = 'Create Paste';
+      $submit->setValue(pht('Create Paste'));
+      $title = pht('Create Paste');
+      $short = pht('Create');
     }
 
     $form
       ->appendChild($submit);
 
-    $nav = $this->buildSideNavView();
-    $nav->selectFilter('edit');
-    $nav->appendChild(
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView());
+    if (!$is_create) {
+      $crumbs->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName('P'.$paste->getID())
+          ->setHref('/P'.$paste->getID()));
+    }
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())->setName($short));
+
+    return $this->buildApplicationPage(
       array(
+        $crumbs,
         id(new PhabricatorHeaderView())->setHeader($title),
         $error_view,
         $form,
-      ));
-
-    return $this->buildApplicationPage(
-      $nav,
+      ),
       array(
         'title' => $title,
         'device' => true,

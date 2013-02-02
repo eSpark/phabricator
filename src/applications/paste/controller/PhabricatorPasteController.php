@@ -1,41 +1,53 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorPasteController extends PhabricatorController {
 
-  public function buildSideNavView(PhabricatorPaste $paste = null) {
+  public function buildSideNavView($filter = null, $for_app = false) {
+    $user = $this->getRequest()->getUser();
+
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI(new PhutilURI($this->getApplicationURI('filter/')));
 
-    if ($paste) {
-      $nav->addFilter('paste', 'P'.$paste->getID(), '/P'.$paste->getID());
-      $nav->addSpacer();
+    if ($for_app) {
+      $nav->addFilter('', 'Create Paste', $this->getApplicationURI('/create/'));
     }
 
-    $nav->addLabel('Create');
-    $nav->addFilter('edit', 'New Paste', $this->getApplicationURI());
-
-    $nav->addSpacer();
-    $nav->addLabel('Pastes');
-    $nav->addFilter('my', 'My Pastes');
+    $nav->addLabel('Filters');
     $nav->addFilter('all', 'All Pastes');
+    if ($user->isLoggedIn()) {
+      $nav->addFilter('my', 'My Pastes');
+    }
+
+    $nav->selectFilter($filter, 'all');
 
     return $nav;
+  }
+
+  public function buildApplicationMenu() {
+    return $this->buildSideNavView(null, true)->getMenu();
+  }
+
+  public function buildApplicationCrumbs() {
+    $crumbs = parent::buildApplicationCrumbs();
+
+    $crumbs->addAction(
+      id(new PhabricatorMenuItemView())
+        ->setName(pht('Create Paste'))
+        ->setHref($this->getApplicationURI('create/'))
+        ->setIcon('create'));
+
+    return $crumbs;
+  }
+
+  public function buildSourceCodeView(
+    PhabricatorPaste $paste,
+    $max_lines = null) {
+
+    $lines = explode("\n", rtrim($paste->getContent()));
+
+    return id(new PhabricatorSourceCodeView())
+      ->setLimit($max_lines)
+      ->setLines($lines);
   }
 
 }

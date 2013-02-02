@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * Configurable test query for implementing Policy unit tests.
+ */
+final class PhabricatorPolicyAwareTestQuery
+  extends PhabricatorPolicyAwareQuery {
+
+  private $results;
+  private $offset = 0;
+
+  public function setResults(array $results) {
+    $this->results = $results;
+    return $this;
+  }
+
+  protected function willExecute() {
+    $this->offset = 0;
+  }
+
+  public function loadPage() {
+    if ($this->getRawResultLimit()) {
+      return array_slice(
+        $this->results,
+        $this->offset,
+        $this->getRawResultLimit());
+    } else {
+      return array_slice($this->results, $this->offset);
+    }
+  }
+
+  public function nextPage(array $page) {
+    $this->offset += count($page);
+  }
+
+}

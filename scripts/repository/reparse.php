@@ -1,22 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root.'/scripts/__init_script__.php';
 
@@ -71,6 +55,10 @@ $args->parse(
                     'delete existing relationship entries between your '.
                     'package and some old commits!)',
     ),
+    array(
+      'name'     => 'harbormaster',
+      'help'     => 'EXPERIMENTAL. Execute Harbormaster.',
+    ),
     // misc options
     array(
       'name'     => 'force',
@@ -89,6 +77,7 @@ $reparse_message = $args->getArg('message');
 $reparse_change = $args->getArg('change');
 $reparse_herald = $args->getArg('herald');
 $reparse_owners = $args->getArg('owners');
+$reparse_harbormaster = $args->getArg('harbormaster');
 $reparse_what = $args->getArg('revision');
 $force = $args->getArg('force');
 $force_local = $args->getArg('force-local');
@@ -99,9 +88,9 @@ if (!$all_from_repo && !$reparse_what) {
 }
 
 if (!$reparse_message && !$reparse_change && !$reparse_herald &&
-    !$reparse_owners) {
+    !$reparse_owners && !$reparse_harbormaster) {
   usage("Specify what information to reparse with --message, --change,  ".
-        "--herald, and/or --owners");
+        "--herald, --harbormaster, and/or --owners");
 }
 if ($reparse_owners && !$force) {
   echo phutil_console_wrap(
@@ -137,10 +126,11 @@ if ($all_from_repo) {
     'repositoryID = %d %Q',
     $repository->getID(),
     $constraint);
-  if (!$commits) {
-    throw new Exception("No commits have been discovered in that repository!");
-  }
   $callsign = $repository->getCallsign();
+  if (!$commits) {
+    echo "No commits have been discovered in {$callsign} repository!\n";
+    exit;
+  }
 } else {
   $commits = array();
   foreach ($reparse_what as $identifier) {
@@ -217,6 +207,10 @@ foreach ($commits as $commit) {
     $classes[] = 'PhabricatorRepositoryCommitOwnersWorker';
   }
 
+  if ($reparse_harbormaster) {
+    $classes[] = 'HarbormasterRunnerWorker';
+  }
+
   $spec = array(
     'commitID'  => $commit->getID(),
     'only'      => true,
@@ -224,10 +218,7 @@ foreach ($commits as $commit) {
 
   if ($all_from_repo && !$force_local) {
     foreach ($classes as $class) {
-      $task = new PhabricatorWorkerTask();
-      $task->setTaskClass($class);
-      $task->setData($spec);
-      $task->save();
+      PhabricatorWorker::scheduleTask($class, $spec);
 
       $commit_name = 'r'.$callsign.$commit->getCommitIdentifier();
       echo "  Queued '{$class}' for commit '{$commit_name}'.\n";
@@ -236,7 +227,7 @@ foreach ($commits as $commit) {
     foreach ($classes as $class) {
       $worker = newv($class, array($spec));
       echo "Running '{$class}'...\n";
-      $worker->doWork();
+      $worker->executeTask();
     }
   }
 }

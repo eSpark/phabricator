@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Flexible query API for Differential revisions. Example:
  *
@@ -54,6 +38,7 @@ final class DifferentialRevisionQuery {
   private $responsibles = array();
   private $branches = array();
   private $arcanistProjectPHIDs = array();
+  private $draftRevisions = array();
 
   private $order            = 'order-modified';
   const ORDER_MODIFIED      = 'order-modified';
@@ -483,6 +468,32 @@ final class DifferentialRevisionQuery {
     $table = new DifferentialRevision();
     $conn_r = $table->establishConnection('r');
 
+    if ($this->draftAuthors) {
+      $this->draftRevisions = array();
+
+      $draft_key = 'differential-comment-';
+      $drafts = id(new PhabricatorDraft())->loadAllWhere(
+        'authorPHID IN (%Ls) AND draftKey LIKE %> AND draft != %s',
+        $this->draftAuthors,
+        $draft_key,
+        '');
+      $len = strlen($draft_key);
+      foreach ($drafts as $draft) {
+        $this->draftRevisions[] = substr($draft->getDraftKey(), $len);
+      }
+
+      $inlines = id(new DifferentialInlineComment())->loadAllWhere(
+        'commentID IS NULL AND authorPHID IN (%Ls)',
+        $this->draftAuthors);
+      foreach ($inlines as $inline) {
+        $this->draftRevisions[] = $inline->getRevisionID();
+      }
+
+      if (!$this->draftRevisions) {
+        return array();
+      }
+    }
+
     $select = qsprintf(
       $conn_r,
       'SELECT r.* FROM %T r',
@@ -584,14 +595,6 @@ final class DifferentialRevisionQuery {
         $this->responsibles);
     }
 
-    if ($this->draftAuthors) {
-      $joins[] = qsprintf(
-        $conn_r,
-        'JOIN %T inline_comment ON inline_comment.revisionID = r.id '.
-        'AND inline_comment.commentID is NULL',
-        id(new DifferentialInlineComment())->getTableName());
-    }
-
     $joins = implode(' ', $joins);
 
     return $joins;
@@ -625,12 +628,13 @@ final class DifferentialRevisionQuery {
         $this->authors);
     }
 
-    if ($this->draftAuthors) {
+    if ($this->draftRevisions) {
       $where[] = qsprintf(
         $conn_r,
-        'inline_comment.authorPHID IN (%Ls)',
-        $this->draftAuthors);
+        'r.id IN (%Ld)',
+        $this->draftRevisions);
     }
+
     if ($this->revIDs) {
       $where[] = qsprintf(
         $conn_r,
@@ -887,29 +891,34 @@ final class DifferentialRevisionQuery {
     }
   }
 
-  public static function splitResponsible(array $revisions, $user_phid) {
+  public static function splitResponsible(array $revisions, array $user_phids) {
+    $blocking = array();
     $active = array();
     $waiting = array();
     $status_review = ArcanistDifferentialRevisionStatus::NEEDS_REVIEW;
 
-    // Bucket revisions into $active (revisions you need to do something
-    // about) and $waiting (revisions you're waiting on someone else to do
-    // something about).
+    // Bucket revisions into $blocking (revisions where you are blocking
+    // others), $active (revisions you need to do something about) and $waiting
+    // (revisions you're waiting on someone else to do something about).
     foreach ($revisions as $revision) {
       $needs_review = ($revision->getStatus() == $status_review);
-      $filter_is_author = ($revision->getAuthorPHID() == $user_phid);
+      $filter_is_author = in_array($revision->getAuthorPHID(), $user_phids);
 
       // If exactly one of "needs review" and "the user is the author" is
       // true, the user needs to act on it. Otherwise, they're waiting on
       // it.
       if ($needs_review ^ $filter_is_author) {
-        $active[] = $revision;
+        if ($needs_review) {
+          array_unshift($blocking, $revision);
+        } else {
+          $active[] = $revision;
+        }
       } else {
         $waiting[] = $revision;
       }
     }
 
-    return array($active, $waiting);
+    return array($blocking, $active, $waiting);
   }
 
 

@@ -1,24 +1,12 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorApplicationAuth extends PhabricatorApplication {
 
   public function shouldAppearInLaunchView() {
+    return false;
+  }
+
+  public function canUninstall() {
     return false;
   }
 
@@ -28,19 +16,14 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
 
     $items = array();
 
-    if ($controller instanceof PhabricatorLogoutController) {
-      $class = 'main-menu-item-icon-logout-selected';
-    } else {
-      $class = 'main-menu-item-icon-logout';
-    }
-
     if ($user->isLoggedIn()) {
-      $item = new PhabricatorMainMenuIconView();
+      $item = new PhabricatorMenuItemView();
       $item->setName(pht('Log Out'));
-      $item->addClass('autosprite main-menu-item-icon '.$class);
+      $item->setIcon('power');
       $item->setWorkflow(true);
       $item->setHref('/logout/');
-      $item->setSortOrder(1.0);
+      $item->setSortOrder(2.0);
+      $item->setSelected(($controller instanceof PhabricatorLogoutController));
       $items[] = $item;
     }
 

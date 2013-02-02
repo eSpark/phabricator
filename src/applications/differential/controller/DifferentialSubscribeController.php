@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialSubscribeController extends DifferentialController {
 
   private $id;
@@ -41,16 +25,16 @@ final class DifferentialSubscribeController extends DifferentialController {
 
       switch ($this->action) {
         case 'add':
-          $button = 'Subscribe';
-          $title = 'Subscribe to Revision';
-          $prompt = 'Really subscribe to this revision?';
+          $button = pht('Subscribe');
+          $title = pht('Subscribe to Revision');
+          $prompt = pht('Really subscribe to this revision?');
           break;
         case 'rem':
-          $button = 'Unsubscribe';
-          $title = 'Unsubscribe from Revision';
-          $prompt = 'Really unsubscribe from this revision? Herald will '.
+          $button = pht('Unsubscribe');
+          $title = pht('Unsubscribe from Revision');
+          $prompt = pht('Really unsubscribe from this revision? Herald will '.
                     'not resubscribe you to a revision you unsubscribe '.
-                    'from.';
+                    'from.');
           break;
         default:
           return new Aphront400Response();

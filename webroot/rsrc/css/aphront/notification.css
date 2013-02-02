@@ -7,8 +7,6 @@
 
   bottom: 24px;
   left: 24px;
-
-  z-index: 7;
 }
 
 .jx-notification {
@@ -37,4 +35,14 @@
 .jx-notification-debug {
   background: #ffa0ff;
   border: 1px solid #aa60aa;
+}
+
+.jx-notification-done {
+  background: #d0ffd0;
+  border: 1px solid #60aa60;
+}
+
+.jx-notification-error {
+  background: #ffd0d0;
+  border: 1px solid #aa6060;
 }

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionCommentView extends AphrontView {
 
   private $comment;
@@ -26,7 +10,6 @@ final class DifferentialRevisionCommentView extends AphrontView {
   private $changesets;
   private $target;
   private $anchorName;
-  private $user;
   private $versusDiffID;
 
   public function setComment($comment) {
@@ -40,7 +23,7 @@ final class DifferentialRevisionCommentView extends AphrontView {
     return $this;
   }
 
-  public function setMarkupEngine($markup_engine) {
+  public function setMarkupEngine(PhabricatorMarkupEngine $markup_engine) {
     $this->markupEngine = $markup_engine;
     return $this;
   }
@@ -78,11 +61,6 @@ final class DifferentialRevisionCommentView extends AphrontView {
     return $this;
   }
 
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
-
   public function render() {
 
     if (!$this->user) {
@@ -104,19 +82,11 @@ final class DifferentialRevisionCommentView extends AphrontView {
     $hide_comments = true;
     if (strlen(rtrim($content))) {
       $hide_comments = false;
-      $cache = $comment->getCache();
-      if (strlen($cache)) {
-        $content = $cache;
-      } else {
-        $content = $this->markupEngine->markupText($content);
-        if ($comment->getID()) {
-          $comment->setCache($content);
 
-          $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-          $comment->save();
-          unset($unguarded);
-        }
-      }
+      $content = $this->markupEngine->getOutput(
+        $comment,
+        PhabricatorInlineCommentInterface::MARKUP_FIELD_BODY);
+
       $content =
         '<div class="phabricator-remarkup">'.
           $content.
@@ -149,6 +119,7 @@ final class DifferentialRevisionCommentView extends AphrontView {
     $verb = phutil_escape_html($verb);
 
     $actions = array();
+    // TODO: i18n
     switch ($comment->getAction()) {
       case DifferentialAction::ACTION_ADDCCS:
         $actions[] = "{$author_link} added CCs: ".
@@ -210,10 +181,11 @@ final class DifferentialRevisionCommentView extends AphrontView {
     } else {
       $xaction_view->setEpoch($comment->getDateCreated());
       if ($this->anchorName) {
-        $anchor_name = $this->anchorName;
-        $anchor_text = 'D'.$comment->getRevisionID().'#'.$anchor_name;
+        $anchor_text =
+          'D'.$comment->getRevisionID().
+          '#'.preg_replace('/^comment-/', '', $this->anchorName);
 
-        $xaction_view->setAnchor($anchor_name, $anchor_text);
+        $xaction_view->setAnchor($this->anchorName, $anchor_text);
       }
     }
 
@@ -292,9 +264,9 @@ final class DifferentialRevisionCommentView extends AphrontView {
           'id'      => $inline->getID(),
           'line'    => $inline->getLineNumber(),
           'length'  => $inline->getLineLength(),
-          'content' => PhabricatorInlineSummaryView::renderCommentContent(
+          'content' => $this->markupEngine->getOutput(
             $inline,
-            $this->markupEngine),
+            DifferentialInlineComment::MARKUP_FIELD_BODY),
         );
 
         if (!$is_visible) {
@@ -313,6 +285,5 @@ final class DifferentialRevisionCommentView extends AphrontView {
 
     return $view;
   }
-
 
 }

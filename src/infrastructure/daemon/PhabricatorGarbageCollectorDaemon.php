@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Collects old logs and caches to reduce the amount of data stored in the
  * database.
@@ -25,51 +9,21 @@
 final class PhabricatorGarbageCollectorDaemon extends PhabricatorDaemon {
 
   public function run() {
-
-    // Keep track of when we start and stop the GC so we can emit useful log
-    // messages.
-    $just_ran = false;
-
     do {
-      $run_at   = PhabricatorEnv::getEnvConfig('gcdaemon.run-at');
-      $run_for  = PhabricatorEnv::getEnvConfig('gcdaemon.run-for');
-
-      // Just use the default timezone, we don't need to get fancy and try
-      // to localize this.
-      $start = strtotime($run_at);
-      if ($start === false) {
-        throw new Exception(
-          "Configuration 'gcdaemon.run-at' could not be parsed: '{$run_at}'.");
-      }
-
-      $now = time();
-
-      if ($now < $start || $now > ($start + $run_for)) {
-        if ($just_ran) {
-          $this->log("Stopped garbage collector.");
-          $just_ran = false;
-        }
-        // The configuration says we can't collect garbage right now, so
-        // just sleep until we can.
-        $this->sleep(300);
-        continue;
-      }
-
-      if (!$just_ran) {
-        $this->log("Started garbage collector.");
-        $just_ran = true;
-      }
-
       $n_herald = $this->collectHeraldTranscripts();
       $n_daemon = $this->collectDaemonLogs();
       $n_parse  = $this->collectParseCaches();
       $n_markup = $this->collectMarkupCaches();
+      $n_tasks  = $this->collectArchivedTasks();
+      $n_cache  = $this->collectGeneralCaches();
 
       $collected = array(
         'Herald Transcript'           => $n_herald,
         'Daemon Log'                  => $n_daemon,
         'Differential Parse Cache'    => $n_parse,
         'Markup Cache'                => $n_markup,
+        'Archived Tasks'              => $n_tasks,
+        'General Cache Entries'       => $n_cache,
       );
       $collected = array_filter($collected);
 
@@ -82,8 +36,8 @@ final class PhabricatorGarbageCollectorDaemon extends PhabricatorDaemon {
       if ($total < 100) {
         // We didn't max out any of the GCs so we're basically caught up. Ease
         // off the GC loop so we don't keep doing table scans just to delete
-        // a handful of rows.
-        $this->sleep(300);
+        // a handful of rows; wake up in a few hours.
+        $this->sleep(4 * (60 * 60));
       } else {
         $this->stillWorking();
       }
@@ -167,6 +121,69 @@ final class PhabricatorGarbageCollectorDaemon extends PhabricatorDaemon {
       $conn_w,
       'DELETE FROM %T WHERE dateCreated < %d LIMIT 100',
       $table->getTableName(),
+      time() - $ttl);
+
+    return $conn_w->getAffectedRows();
+  }
+
+  private function collectArchivedTasks() {
+    $key = 'gcdaemon.ttl.task-archive';
+    $ttl = PhabricatorEnv::getEnvConfig($key);
+    if ($ttl <= 0) {
+      return 0;
+    }
+
+    $table = new PhabricatorWorkerArchiveTask();
+    $data_table = new PhabricatorWorkerTaskData();
+    $conn_w = $table->establishConnection('w');
+
+    $rows = queryfx_all(
+      $conn_w,
+      'SELECT id, dataID FROM %T WHERE dateCreated < %d LIMIT 100',
+      $table->getTableName(),
+      time() - $ttl);
+
+    if (!$rows) {
+      return 0;
+    }
+
+    $data_ids = array_filter(ipull($rows, 'dataID'));
+    $task_ids = ipull($rows, 'id');
+
+    $table->openTransaction();
+      if ($data_ids) {
+        queryfx(
+          $conn_w,
+          'DELETE FROM %T WHERE id IN (%Ld)',
+          $data_table->getTableName(),
+          $data_ids);
+      }
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE id IN (%Ld)',
+        $table->getTableName(),
+        $task_ids);
+    $table->saveTransaction();
+
+    return count($task_ids);
+  }
+
+
+  private function collectGeneralCaches() {
+    $key = 'gcdaemon.ttl.general-cache';
+    $ttl = PhabricatorEnv::getEnvConfig($key);
+    if ($ttl <= 0) {
+      return 0;
+    }
+
+    $cache = new PhabricatorKeyValueDatabaseCache();
+    $conn_w = $cache->establishConnection('w');
+
+    queryfx(
+      $conn_w,
+      'DELETE FROM %T WHERE cacheCreated < %d
+        ORDER BY cacheCreated ASC LIMIT 100',
+      $cache->getTableName(),
       time() - $ttl);
 
     return $conn_w->getAffectedRows();

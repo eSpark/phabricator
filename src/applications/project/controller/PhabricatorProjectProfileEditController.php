@@ -1,23 +1,9 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorProjectProfileEditController
   extends PhabricatorProjectController {
+
+  private $id;
 
   public function willProcessRequest(array $data) {
     $this->id = $data['id'];
@@ -90,7 +76,7 @@ final class PhabricatorProjectProfileEditController
         $xactions[] = $xaction;
 
         $editor = new PhabricatorProjectEditor($project);
-        $editor->setUser($user);
+        $editor->setActor($user);
         $editor->applyTransactions($xactions);
       } catch (PhabricatorProjectNameCollisionException $ex) {
         $e_name = 'Not Unique';
@@ -154,6 +140,11 @@ final class PhabricatorProjectProfileEditController
     $title = 'Edit Project';
     $action = '/project/edit/'.$project->getID().'/';
 
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($project)
+      ->execute();
+
     $form = new AphrontFormView();
     $form
       ->setID('project-edit-form')
@@ -187,12 +178,14 @@ final class PhabricatorProjectProfileEditController
           ->setName('can_view')
           ->setCaption('Members can always view a project.')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_VIEW))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setUser($user)
           ->setName('can_edit')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_EDIT))
       ->appendChild(
         id(new AphrontFormPolicyControl())
@@ -201,6 +194,7 @@ final class PhabricatorProjectProfileEditController
           ->setCaption(
             'Users who can edit a project can always join a project.')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_JOIN))
       ->appendChild(
         id(new AphrontFormMarkupControl())

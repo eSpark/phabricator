@@ -1,25 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class DifferentialMail {
 
   protected $to = array();
   protected $cc = array();
+  protected $excludePHIDs = array();
 
   protected $actorHandle;
 
@@ -33,6 +18,15 @@ abstract class DifferentialMail {
   protected $heraldRulesHeader;
   protected $replyHandler;
   protected $parentMessageID;
+
+  private $rawMail;
+
+  public function getRawMail() {
+    if (!$this->rawMail) {
+      throw new Exception("Call send() before getRawMail()!");
+    }
+    return $this->rawMail;
+  }
 
   protected function renderSubject() {
     $revision = $this->getRevision();
@@ -91,6 +85,7 @@ abstract class DifferentialMail {
     $template
       ->setIsHTML($this->shouldMarkMailAsHTML())
       ->setParentMessageID($this->parentMessageID)
+      ->setExcludeMailRecipientPHIDs($this->getExcludeMailRecipientPHIDs())
       ->addHeader('Thread-Topic', $this->getThreadTopic());
 
     $template->setAttachments($attachments);
@@ -185,6 +180,10 @@ abstract class DifferentialMail {
 
     $this->prepareBody();
 
+    $this->rawMail = clone $template;
+    $this->rawMail->addTos($to_phids);
+    $this->rawMail->addCCs($cc_phids);
+
     $mails = $reply_handler->multiplexMail($template, $to_handles, $cc_handles);
 
     $original_translator = PhutilTranslator::getInstance();
@@ -234,6 +233,8 @@ abstract class DifferentialMail {
     }
 
     PhutilTranslator::setInstance($original_translator);
+
+    return $this;
   }
 
   protected function getMailTags() {
@@ -315,35 +316,23 @@ abstract class DifferentialMail {
     return implode("\n", $text);
   }
 
+  public function setExcludeMailRecipientPHIDs(array $exclude) {
+    $this->excludePHIDs = $exclude;
+    return $this;
+  }
+
+  public function getExcludeMailRecipientPHIDs() {
+    return $this->excludePHIDs;
+  }
+
   public function setToPHIDs(array $to) {
-    $this->to = $this->filterContactPHIDs($to);
+    $this->to = $to;
     return $this;
   }
 
   public function setCCPHIDs(array $cc) {
-    $this->cc = $this->filterContactPHIDs($cc);
+    $this->cc = $cc;
     return $this;
-  }
-
-  protected function filterContactPHIDs(array $phids) {
-    return $phids;
-
-    // TODO: actually do this?
-
-    // Differential revisions use Subscriptions for CCs, so any arbitrary
-    // PHID can end up CC'd to them. Only try to actually send email PHIDs
-    // which have ToolsHandle types that are marked emailable. If we don't
-    // filter here, sending the email will fail.
-/*
-    $handles = array();
-    prep(new ToolsHandleData($phids, $handles));
-    foreach ($handles as $phid => $handle) {
-      if (!$handle->isEmailable()) {
-        unset($handles[$phid]);
-      }
-    }
-    return array_keys($handles);
-*/
   }
 
   protected function getToPHIDs() {

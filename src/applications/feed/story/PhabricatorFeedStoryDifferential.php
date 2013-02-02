@@ -1,46 +1,23 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorFeedStoryDifferential extends PhabricatorFeedStory {
 
-  public function getRequiredHandlePHIDs() {
-    $data = $this->getStoryData();
-    return array(
-      $this->getStoryData()->getAuthorPHID(),
-      $data->getValue('revision_phid'),
-      $data->getValue('revision_author_phid'),
-    );
-  }
-
-  public function getRequiredObjectPHIDs() {
-    return array(
-      $this->getStoryData()->getAuthorPHID(),
-    );
+  public function getPrimaryObjectPHID() {
+    return $this->getValue('revision_phid');
   }
 
   public function renderView() {
     $data = $this->getStoryData();
 
     $view = new PhabricatorFeedStoryView();
+    $view->setViewed($this->getHasViewed());
 
     $line = $this->getLineForData($data);
     $view->setTitle($line);
     $view->setEpoch($data->getEpoch());
+
+    $href = $this->getHandle($data->getValue('revision_phid'))->getURI();
+    $view->setHref($href);
 
     $action = $data->getValue('action');
     switch ($action) {
@@ -64,33 +41,34 @@ final class PhabricatorFeedStoryDifferential extends PhabricatorFeedStory {
     return $view;
   }
 
-  public function renderNotificationView() {
-    $data = $this->getStoryData();
-
-    $view = new PhabricatorNotificationStoryView();
-
-    $view->setTitle($this->getLineForData($data));
-    $view->setEpoch($data->getEpoch());
-    $view->setViewed($this->getHasViewed());
-
-    return $view;
-  }
-
   private function getLineForData($data) {
     $actor_phid = $data->getAuthorPHID();
-    $owner_phid = $data->getValue('revision_author_phid');
     $revision_phid = $data->getValue('revision_phid');
     $action = $data->getValue('action');
 
     $actor_link = $this->linkTo($actor_phid);
     $revision_link = $this->linkTo($revision_phid);
-    $owner_link = $this->linkTo($owner_phid);
 
     $verb = DifferentialAction::getActionPastTenseVerb($action);
 
     $one_line = "{$actor_link} {$verb} revision {$revision_link}";
 
     return $one_line;
+  }
+
+  public function renderText() {
+    $author_name = $this->getHandle($this->getAuthorPHID())->getLinkName();
+
+    $revision_handle = $this->getHandle($this->getPrimaryObjectPHID());
+    $revision_title = $revision_handle->getLinkName();
+    $revision_uri = PhabricatorEnv::getURI($revision_handle->getURI());
+
+    $action = $this->getValue('action');
+    $verb = DifferentialAction::getActionPastTenseVerb($action);
+
+    $text = "{$author_name} {$verb} revision {$revision_title} {$revision_uri}";
+
+    return $text;
   }
 
   public function getNotificationAggregations() {

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Editor class for creating and adjusting users. This class guarantees data
  * integrity and writes logs when user information changes.
@@ -26,22 +10,9 @@
  * @task email      Adding, Removing and Changing Email
  * @task internal   Internals
  */
-final class PhabricatorUserEditor {
+final class PhabricatorUserEditor extends PhabricatorEditor {
 
-  private $actor;
   private $logs = array();
-
-
-/* -(  Configuration  )------------------------------------------------------ */
-
-
-  /**
-   * @task config
-   */
-  public function setActor(PhabricatorUser $actor) {
-    $this->actor = $actor;
-    return $this;
-  }
 
 
 /* -(  Creating and Editing Users  )----------------------------------------- */
@@ -88,7 +59,7 @@ final class PhabricatorUserEditor {
       }
 
       $log = PhabricatorUserLog::newLog(
-        $this->actor,
+        $this->requireActor(),
         $user,
         PhabricatorUserLog::ACTION_CREATE);
       $log->setNewValue($email->getAddress());
@@ -110,7 +81,6 @@ final class PhabricatorUserEditor {
       throw new Exception("User has not been created yet!");
     }
 
-    $actor = $this->requireActor();
     $user->openTransaction();
       $user->save();
       if ($email) {
@@ -118,7 +88,7 @@ final class PhabricatorUserEditor {
       }
 
       $log = PhabricatorUserLog::newLog(
-        $actor,
+        $this->requireActor(),
         $user,
         PhabricatorUserLog::ACTION_EDIT);
       $log->save();
@@ -147,7 +117,7 @@ final class PhabricatorUserEditor {
       $user->save();
 
       $log = PhabricatorUserLog::newLog(
-        $this->actor,
+        $this->requireActor(),
         $user,
         PhabricatorUserLog::ACTION_CHANGE_PASSWORD);
       $log->save();
@@ -186,7 +156,7 @@ final class PhabricatorUserEditor {
       }
 
       $log = PhabricatorUserLog::newLog(
-        $this->actor,
+        $actor,
         $user,
         PhabricatorUserLog::ACTION_CHANGE_USERNAME);
       $log->setOldValue($old_username);
@@ -429,7 +399,7 @@ final class PhabricatorUserEditor {
         }
 
         $log = PhabricatorUserLog::newLog(
-          $this->actor,
+          $actor,
           $user,
           PhabricatorUserLog::ACTION_EMAIL_ADD);
         $log->setNewValue($email->getAddress());
@@ -474,7 +444,7 @@ final class PhabricatorUserEditor {
         $email->delete();
 
         $log = PhabricatorUserLog::newLog(
-          $this->actor,
+          $actor,
           $user,
           PhabricatorUserLog::ACTION_EMAIL_REMOVE);
         $log->setOldValue($email->getAddress());
@@ -551,17 +521,6 @@ final class PhabricatorUserEditor {
 
 
 /* -(  Internals  )---------------------------------------------------------- */
-
-
-  /**
-   * @task internal
-   */
-  private function requireActor() {
-    if (!$this->actor) {
-      throw new Exception("User edit requires actor!");
-    }
-    return $this->actor;
-  }
 
 
   /**

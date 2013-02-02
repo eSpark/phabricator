@@ -1,64 +1,70 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorApplicationsListController
-  extends PhabricatorController {
+  extends PhabricatorApplicationsController {
 
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $applications = PhabricatorApplication::getAllInstalledApplications();
-    $applications = msort($applications, 'getName');
+    $nav = $this->buildSideNavView();
+    $nav->selectFilter('/');
 
-    foreach ($applications as $key => $application) {
-      if (!$application->shouldAppearInLaunchView()) {
-        unset($applications[$key]);
-      }
-    }
+    $applications = PhabricatorApplication::getAllApplications();
 
-    $status = array();
-    foreach ($applications as $key => $application) {
-      $status[$key] = $application->loadStatus($user);
-    }
+    $list = $this->buildInstalledApplicationsList($applications);
 
-    $views = array();
-    foreach ($applications as $key => $application) {
-      $views[] = id(new PhabricatorApplicationLaunchView())
-        ->setApplication($application)
-        ->setApplicationStatus(idx($status, $key, array()))
-        ->setUser($user);
-    }
+    $title = pht('Installed Applications');
 
-    $view = phutil_render_tag(
-      'div',
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader($title);
+
+    $nav->appendChild(
       array(
-        'class' => 'phabricator-application-list',
-      ),
-      id(new AphrontNullView())->appendChild($views)->render());
+        $header,
+        $list
+      ));
+
+    $crumbs = $this
+      ->buildApplicationCrumbs()
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName(pht('Applications'))
+          ->setHref($this->getApplicationURI()));
+
+    $nav->setCrumbs($crumbs);
 
     return $this->buildApplicationPage(
-      $view,
+      $nav,
       array(
-        'title' => 'Applications',
+        'title' => $title,
         'device' => true,
-      ));
+      )
+    );
   }
 
-}
 
+  private function buildInstalledApplicationsList(array $applications) {
+    $list = new PhabricatorObjectItemListView();
+
+    foreach ($applications as $application) {
+        $item = id(new PhabricatorObjectItemView())
+          ->setHeader($application->getName())
+          ->setHref('/applications/view/'.get_class($application).'/')
+          ->addAttribute(
+            phutil_escape_html($application->getShortDescription()));
+
+        if (!$application->isInstalled()) {
+          $item->addIcon('delete', pht('Uninstalled'));
+        }
+
+        if ($application->isBeta()) {
+          $item->addIcon('lint-warning', pht('Beta'));
+        }
+        $list->addItem($item);
+
+      }
+    return $list;
+   }
+
+}

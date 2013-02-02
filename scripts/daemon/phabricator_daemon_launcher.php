@@ -1,22 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root.'/scripts/__init_script__.php';
 
@@ -87,35 +71,6 @@ switch ($command) {
       echo "Launching '{$name}'...\n";
       $control->launchDaemon($name, $argv);
     }
-
-    echo "Done.\n";
-    break;
-
-  case 'repository-launch-readonly':
-  case 'repository-launch-master':
-    if ($command == 'repository-launch-readonly') {
-      $daemon_args = array(
-        '--',
-        '--no-discovery',
-      );
-    } else {
-      $daemon_args = array();
-    }
-
-    $need_launch = phd_load_tracked_repositories();
-    if (!$need_launch) {
-      echo "There are no repositories with tracking enabled.\n";
-      exit(1);
-    }
-
-    will_launch($control);
-
-    echo "Launching PullLocal daemon...\n";
-    $control->launchDaemon(
-      'PhabricatorRepositoryPullLocalDaemon',
-      $daemon_args);
-
-    echo "NOTE: '{$command}' is deprecated. Consult the documentation.\n";
 
     echo "Done.\n";
     break;
@@ -208,17 +163,6 @@ switch ($command) {
   default:
     $err = $control->executeHelpCommand();
     exit($err);
-}
-
-function phd_load_tracked_repositories() {
-  $repositories = id(new PhabricatorRepository())->loadAll();
-  foreach ($repositories as $key => $repository) {
-    if (!$repository->isTracked()) {
-      unset($repositories[$key]);
-    }
-  }
-
-  return $repositories;
 }
 
 function will_launch($control, $with_logs = true) {

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class AphrontErrorView extends AphrontView {
 
   const SEVERITY_ERROR = 'error';
@@ -23,15 +7,19 @@ final class AphrontErrorView extends AphrontView {
   const SEVERITY_NOTICE = 'notice';
   const SEVERITY_NODATA = 'nodata';
 
-  const WIDTH_DEFAULT = 'default';
-  const WIDTH_WIDE = 'wide';
-  const WIDTH_DIALOG = 'dialog';
-
   private $title;
   private $errors;
   private $severity;
-  private $width;
   private $id;
+  private $insideDialogue;
+
+  public function setInsideDialogue($inside_dialogue) {
+    $this->insideDialogue = $inside_dialogue;
+    return $this;
+  }
+  public function getInsideDialogue() {
+    return $this->insideDialogue;
+  }
 
   public function setTitle($title) {
     $this->title = $title;
@@ -48,14 +36,18 @@ final class AphrontErrorView extends AphrontView {
     return $this;
   }
 
-  public function setWidth($width) {
-    $this->width = $width;
-    return $this;
-  }
-
   public function setID($id) {
     $this->id = $id;
     return $this;
+  }
+
+  private function getBaseClass() {
+    if ($this->getInsideDialogue()) {
+      $class = 'aphront-error-view-dialogue';
+    } else {
+      $class = 'aphront-error-view';
+    }
+    return $class;
   }
 
   final public function render() {
@@ -71,40 +63,48 @@ final class AphrontErrorView extends AphrontView {
           array(),
           phutil_escape_html($error));
       }
-      $list = '<ul>'.implode("\n", $list).'</ul>';
+      $list = phutil_render_tag(
+        'ul',
+        array(
+          'class' => 'aphront-error-view-list',
+        ),
+        implode("\n", $list));
     } else {
       $list = null;
     }
 
     $title = $this->title;
     if (strlen($title)) {
-      $title = '<h1>'.phutil_escape_html($title).'</h1>';
+      $title = phutil_render_tag(
+        'h1',
+        array(
+          'class' => 'aphront-error-view-head',
+        ),
+        phutil_escape_html($title));
     } else {
       $title = null;
     }
 
     $this->severity = nonempty($this->severity, self::SEVERITY_ERROR);
-    $this->width = nonempty($this->width, self::WIDTH_DEFAULT);
 
-    $more_classes = array();
-    $more_classes[] = 'aphront-error-severity-'.$this->severity;
-    $more_classes[] = 'aphront-error-width-'.$this->width;
-    $more_classes = implode(' ', $more_classes);
+    $classes = array();
+    $classes[] = $this->getBaseClass();
+    $classes[] = 'aphront-error-severity-'.$this->severity;
+    $classes = implode(' ', $classes);
 
-    return
+    return phutil_render_tag(
+      'div',
+      array(
+        'id' => $this->id,
+        'class' => $classes,
+      ),
+      $title.
       phutil_render_tag(
         'div',
         array(
-          'id' => $this->id,
-          'class' => 'aphront-error-view '.$more_classes,
+          'class' => 'aphront-error-view-body',
         ),
-        $title.
-        phutil_render_tag(
-          'div',
-          array(
-            'class' => 'aphront-error-view-body',
-          ),
-          $this->renderChildren().
-          $list));
+        $this->renderChildren().
+        $list));
   }
 }

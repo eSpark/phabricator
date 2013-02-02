@@ -1,22 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPasteViewController extends PhabricatorPasteController {
+
+  public function shouldAllowPublic() {
+    return true;
+  }
 
   private $id;
   private $handles;
@@ -32,6 +20,7 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
     $paste = id(new PhabricatorPasteQuery())
       ->setViewer($user)
       ->withIDs(array($this->id))
+      ->needContent(true)
       ->executeOne();
     if (!$paste) {
       return new Aphront404Response();
@@ -61,21 +50,22 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
     $header = $this->buildHeaderView($paste);
     $actions = $this->buildActionView($user, $paste, $file);
     $properties = $this->buildPropertyView($paste, $fork_phids);
-    $source_code = $this->buildSourceCodeView($paste, $file);
+    $source_code = $this->buildSourceCodeView($paste);
 
-    $nav = $this->buildSideNavView($paste);
-    $nav->selectFilter('paste');
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView())
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName('P'.$paste->getID())
+          ->setHref('/P'.$paste->getID()));
 
-    $nav->appendChild(
+    return $this->buildApplicationPage(
       array(
+        $crumbs,
         $header,
         $actions,
         $properties,
         $source_code,
-      ));
-
-    return $this->buildApplicationPage(
-      $nav,
+      ),
       array(
         'title' => $paste->getFullName(),
         'device' => true,
@@ -98,6 +88,9 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
       $paste,
       PhabricatorPolicyCapability::CAN_EDIT);
 
+    $can_fork = $user->isLoggedIn();
+    $fork_uri = $this->getApplicationURI('/create/?parent='.$paste->getID());
+
     return id(new PhabricatorActionListView())
       ->setUser($user)
       ->setObject($paste)
@@ -105,7 +98,9 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
         id(new PhabricatorActionView())
           ->setName(pht('Fork This Paste'))
           ->setIcon('fork')
-          ->setHref($this->getApplicationURI('?parent='.$paste->getID())))
+          ->setDisabled(!$can_fork)
+          ->setWorkflow(!$can_fork)
+          ->setHref($fork_uri))
       ->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('View Raw File'))
@@ -147,30 +142,15 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
         $this->renderHandlesForPHIDs($child_phids));
     }
 
+    $descriptions = PhabricatorPolicyQuery::renderPolicyDescriptions(
+      $user,
+      $paste);
+
+    $properties->addProperty(
+      pht('Visible To'),
+      $descriptions[PhabricatorPolicyCapability::CAN_VIEW]);
+
     return $properties;
-  }
-
-  private function buildSourceCodeView(
-    PhabricatorPaste $paste,
-    PhabricatorFile $file) {
-
-    $language = $paste->getLanguage();
-    $source = $file->loadFileData();
-
-    if (empty($language)) {
-      $source = PhabricatorSyntaxHighlighter::highlightWithFilename(
-        $paste->getTitle(),
-        $source);
-    } else {
-      $source = PhabricatorSyntaxHighlighter::highlightWithLanguage(
-        $language,
-        $source);
-    }
-
-    $lines = explode("\n", $source);
-
-    return id(new PhabricatorSourceCodeView())
-      ->setLines($lines);
   }
 
 }

@@ -1,32 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorAuditCommitListView extends AphrontView {
 
-  private $user;
   private $commits;
   private $handles;
   private $noDataString;
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
 
   public function setNoDataString($no_data_string) {
     $this->noDataString = $no_data_string;
@@ -57,6 +35,11 @@ final class PhabricatorAuditCommitListView extends AphrontView {
         $phids[$commit->getAuthorPHID()] = true;
       }
       $phids[$commit->getPHID()] = true;
+      if ($commit->getAudits()) {
+        foreach ($commit->getAudits() as $audit) {
+          $phids[$audit->getActorPHID()] = true;
+        }
+      }
     }
     return array_keys($phids);
   }
@@ -77,12 +60,20 @@ final class PhabricatorAuditCommitListView extends AphrontView {
       if ($commit->getAuthorPHID()) {
         $author_name = $this->getHandle($commit->getAuthorPHID())->renderLink();
       }
+      $auditors = array();
+      if ($commit->getAudits()) {
+        foreach ($commit->getAudits() as $audit) {
+          $actor_phid = $audit->getActorPHID();
+          $auditors[$actor_phid] = $this->getHandle($actor_phid)->renderLink();
+        }
+      }
       $rows[] = array(
         $commit_name,
         $author_name,
         phutil_escape_html($commit->getCommitData()->getSummary()),
         PhabricatorAuditCommitStatusConstants::getStatusName(
           $commit->getAuditStatus()),
+        implode(', ', $auditors),
         phabricator_datetime($commit->getEpoch(), $this->user),
       );
     }
@@ -94,6 +85,7 @@ final class PhabricatorAuditCommitListView extends AphrontView {
         'Author',
         'Summary',
         'Audit Status',
+        'Auditors',
         'Date',
       ));
     $table->setColumnClasses(
@@ -103,7 +95,20 @@ final class PhabricatorAuditCommitListView extends AphrontView {
         'wide',
         '',
         '',
+        '',
       ));
+
+    if ($this->commits && reset($this->commits)->getAudits() === null) {
+      $table->setColumnVisibility(
+        array(
+          true,
+          true,
+          true,
+          true,
+          false,
+          true,
+        ));
+    }
 
     if ($this->noDataString) {
       $table->setNoDataString($this->noDataString);

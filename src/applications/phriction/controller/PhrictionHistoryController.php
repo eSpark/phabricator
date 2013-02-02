@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group phriction
  */
@@ -55,8 +39,7 @@ final class PhrictionHistoryController
     $history = $pager->sliceResults($history);
 
     $author_phids = mpull($history, 'getAuthorPHID');
-    $handles = id(new PhabricatorObjectHandleData($author_phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($author_phids);
 
     $rows = array();
     foreach ($history as $content) {
@@ -113,21 +96,6 @@ final class PhrictionHistoryController
       );
     }
 
-    $crumbs = new AphrontCrumbsView();
-    $crumbs->setCrumbs(
-      array(
-        'Phriction',
-        phutil_render_tag(
-          'a',
-          array(
-            'href' => PhrictionDocument::getSlugURI($document->getSlug()),
-          ),
-          phutil_escape_html($current->getTitle())
-        ),
-        'History',
-      ));
-
-
     $table = new AphrontTableView($rows);
     $table->setHeaders(
       array(
@@ -152,18 +120,30 @@ final class PhrictionHistoryController
         '',
       ));
 
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumb_views = $this->renderBreadcrumbs($document->getSlug());
+    foreach ($crumb_views as $view) {
+      $crumbs->addCrumb($view);
+    }
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName(pht('History'))
+        ->setHref(
+          PhrictionDocument::getSlugURI($document->getSlug(), 'history')));
+
     $panel = new AphrontPanelView();
     $panel->setHeader('Document History');
     $panel->appendChild($table);
     $panel->appendChild($pager);
 
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       array(
         $crumbs,
         $panel,
       ),
       array(
         'title'     => 'Document History',
+        'device'    => true,
       ));
 
   }

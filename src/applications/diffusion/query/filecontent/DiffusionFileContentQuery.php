@@ -1,25 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class DiffusionFileContentQuery extends DiffusionQuery {
 
   private $needsBlame;
   private $fileContent;
+  private $viewer;
 
   final public static function newFromDiffusionRequest(
     DiffusionRequest $request) {
@@ -45,17 +30,17 @@ abstract class DiffusionFileContentQuery extends DiffusionQuery {
   }
 
   final public function getBlameData() {
-    $raw_data = $this->getRawData();
+    $raw_data = preg_replace('/\n$/', '', $this->getRawData());
 
     $text_list = array();
     $rev_list = array();
     $blame_dict = array();
 
     if (!$this->getNeedsBlame()) {
-      $text_list = explode("\n", rtrim($raw_data));
-    } else {
+      $text_list = explode("\n", $raw_data);
+    } else if ($raw_data != '') {
       $lines = array();
-      foreach (explode("\n", rtrim($raw_data)) as $k => $line) {
+      foreach (explode("\n", $raw_data) as $k => $line) {
         $lines[$k] = $this->tokenizeLine($line);
 
         list($rev_id, $author, $text) = $lines[$k];
@@ -99,8 +84,11 @@ abstract class DiffusionFileContentQuery extends DiffusionQuery {
         $phids[] = $data->getCommitDetail('authorPHID');
       }
 
-      $handles = id(new PhabricatorObjectHandleData(array_unique($phids)))
-        ->loadHandles();
+      $loader = new PhabricatorObjectHandleData(array_unique($phids));
+      if ($this->viewer) {
+        $loader->setViewer($this->viewer);
+      }
+      $handles = $loader->loadHandles();
 
       foreach ($commits_data as $data) {
         if ($data->getCommitDetail('authorPHID')) {
@@ -124,6 +112,11 @@ abstract class DiffusionFileContentQuery extends DiffusionQuery {
 
   public function getNeedsBlame() {
     return $this->needsBlame;
+  }
+
+  public function setViewer(PhabricatorUser $user) {
+    $this->viewer = $user;
+    return $this;
   }
 
   protected function processRevList(array $rev_list) {

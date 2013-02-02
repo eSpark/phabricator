@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorOwnersListController
   extends PhabricatorOwnersController {
 
@@ -50,6 +34,7 @@ final class PhabricatorOwnersListController
 
         $where = array('1 = 1');
         $join = array();
+        $having = '';
 
         if ($request->getStr('name')) {
           $where[] = qsprintf(
@@ -75,10 +60,14 @@ final class PhabricatorOwnersListController
           if ($request->getStr('path')) {
             $where[] = qsprintf(
               $conn_r,
-              'path.path LIKE %~ OR %s LIKE CONCAT(path.path, %s)',
+              '(path.path LIKE %~ AND NOT path.excluded) OR
+                %s LIKE CONCAT(REPLACE(path.path, %s, %s), %s)',
               $request->getStr('path'),
               $request->getStr('path'),
+              '_',
+              '\_',
               '%');
+            $having = 'HAVING MAX(path.excluded) = 0';
           }
 
         }
@@ -96,10 +85,11 @@ final class PhabricatorOwnersListController
 
         $data = queryfx_all(
           $conn_r,
-          'SELECT p.* FROM %T p %Q WHERE %Q GROUP BY p.id',
+          'SELECT p.* FROM %T p %Q WHERE %Q GROUP BY p.id %Q',
           $package->getTableName(),
           implode(' ', $join),
-          '('.implode(') AND (', $where).')');
+          '('.implode(') AND (', $where).')',
+          $having);
         $packages = $package->loadAllFromArray($data);
 
         $header = 'Search Results';
@@ -132,21 +122,12 @@ final class PhabricatorOwnersListController
       $nodata);
 
     $filter = new AphrontListFilterView();
-    $filter->addButton(
-      phutil_render_tag(
-        'a',
-        array(
-          'href' => '/owners/new/',
-          'class' => 'green button',
-        ),
-        'Create New Package'));
 
     $owners_search_value = array();
     if ($request->getArr('owner')) {
       $phids = $request->getArr('owner');
       $phid = reset($phids);
-      $handles = id(new PhabricatorObjectHandleData(array($phid)))
-        ->loadHandles();
+      $handles = $this->loadViewerHandles(array($phid));
       $owners_search_value = array(
         $phid => $handles[$phid]->getFullName(),
       );
@@ -222,9 +203,7 @@ final class PhabricatorOwnersListController
         $phids[$owner->getUserPHID()] = true;
       }
       $phids = array_keys($phids);
-      $handles = id(new PhabricatorObjectHandleData($phids))
-        ->setViewer($this->getRequest()->getUser())
-        ->loadHandles();
+      $handles = $this->loadViewerHandles($phids);
 
       $repository_phids = array();
       foreach ($paths as $path) {
@@ -263,18 +242,17 @@ final class PhabricatorOwnersListController
 
       $pkg_paths = idx($paths, $package->getID(), array());
       foreach ($pkg_paths as $key => $path) {
-        $repo = $repositories[$path->getRepositoryPHID()];
+        $repo = idx($repositories, $path->getRepositoryPHID());
         if ($repo) {
-          $drequest = DiffusionRequest::newFromDictionary(
+          $href = DiffusionRequest::generateDiffusionURI(
             array(
-              'repository' => $repo,
-              'path'       => $path->getPath(),
-            ));
-          $href = $drequest->generateURI(
-            array(
-              'action' => 'browse',
+              'callsign' => $repo->getCallsign(),
+              'branch'   => $repo->getDefaultBranch(),
+              'path'     => $path->getPath(),
+              'action'   => 'browse',
             ));
           $pkg_paths[$key] =
+            ($path->getExcluded() ? '&ndash;' : '+').' '.
             '<strong>'.phutil_escape_html($repo->getName()).'</strong> '.
             phutil_render_tag(
               'a',
@@ -325,21 +303,14 @@ final class PhabricatorOwnersListController
     $panel = new AphrontPanelView();
     $panel->setHeader($header);
     $panel->appendChild($table);
+    $panel->setNoBackground();
 
     return $panel;
   }
 
-  protected function getExtraPackageViews() {
-    switch ($this->view) {
-      case 'search':
-        $extra = array(array('name' => 'Search Results',
-                             'key'  => 'view/search'));
-        break;
-      default:
-        $extra = array();
-        break;
+  protected function getExtraPackageViews(AphrontSideNavFilterView $view) {
+    if ($this->view == 'search') {
+      $view->addFilter('view/search', 'Search Results');
     }
-
-    return $extra;
   }
 }

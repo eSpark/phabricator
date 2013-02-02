@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorProjectProfileController
   extends PhabricatorProjectController {
 
@@ -84,8 +68,6 @@ final class PhabricatorProjectProfileController
         throw new Exception("Unimplemented filter '{$this->page}'.");
     }
 
-    $content = '<div style="padding: 1em;">'.$content.'</div>';
-    $nav_view->appendChild($content);
 
     $header = new PhabricatorProfileHeaderView();
     $header->setName($project->getName());
@@ -128,10 +110,13 @@ final class PhabricatorProjectProfileController
 
     $header->addAction($action);
 
-    $header->appendChild($nav_view);
+    $nav_view->appendChild($header);
+
+    $content = '<div style="padding: 1em;">'.$content.'</div>';
+    $header->appendChild($content);
 
     return $this->buildStandardPageResponse(
-      $header,
+      $nav_view,
       array(
         'title' => $project->getName().' Project',
       ));
@@ -149,8 +134,7 @@ final class PhabricatorProjectProfileController
 
     $phids = array($project->getAuthorPHID());
     $phids = array_unique($phids);
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $timestamp = phabricator_datetime($project->getDateCreated(), $viewer);
 
@@ -187,8 +171,7 @@ final class PhabricatorProjectProfileController
     PhabricatorProjectProfile $profile) {
 
     $member_phids = $project->getMemberPHIDs();
-    $handles = id(new PhabricatorObjectHandleData($member_phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($member_phids);
 
     $affiliated = array();
     foreach ($handles as $phids => $handle) {
@@ -249,7 +232,7 @@ final class PhabricatorProjectProfileController
     PhabricatorProjectProfile $profile) {
 
     $query = id(new ManiphestTaskQuery())
-      ->withProjects(array($project->getPHID()))
+      ->withAnyProjects(array($project->getPHID()))
       ->withStatus(ManiphestTaskQuery::STATUS_OPEN)
       ->setOrderBy(ManiphestTaskQuery::ORDER_PRIORITY)
       ->setLimit(10)
@@ -259,8 +242,7 @@ final class PhabricatorProjectProfileController
 
     $phids = mpull($tasks, 'getOwnerPHID');
     $phids = array_filter($phids);
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $task_views = array();
     foreach ($tasks as $task) {

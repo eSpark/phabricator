@@ -1,37 +1,21 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionBrowseController extends DiffusionController {
 
   public function processRequest() {
     $drequest = $this->diffusionRequest;
 
-    $browse_query = DiffusionBrowseQuery::newFromDiffusionRequest($drequest);
-    $results = $browse_query->loadPaths();
+    if ($this->getRequest()->getStr('before')) {
+      $results = array();
+      $is_file = true;
+    } else {
+      $browse_query = DiffusionBrowseQuery::newFromDiffusionRequest($drequest);
+      $results = $browse_query->loadPaths();
+      $reason = $browse_query->getReasonForEmptyResultSet();
+      $is_file = ($reason == DiffusionBrowseQuery::REASON_IS_FILE);
+    }
 
     $content = array();
-
-    $content[] = $this->buildCrumbs(
-      array(
-        'branch' => true,
-        'path'   => true,
-        'view'   => 'browse',
-      ));
 
     if ($drequest->getTagContent()) {
       $title = 'Tag: '.$drequest->getSymbolicCommit();
@@ -46,10 +30,10 @@ final class DiffusionBrowseController extends DiffusionController {
 
     if (!$results) {
 
-      if ($browse_query->getReasonForEmptyResultSet() ==
-          DiffusionBrowseQuery::REASON_IS_FILE) {
+      if ($is_file) {
         $controller = new DiffusionBrowseFileController($this->getRequest());
         $controller->setDiffusionRequest($drequest);
+        $controller->setCurrentApplication($this->getCurrentApplication());
         return $this->delegateToController($controller);
       }
 
@@ -61,8 +45,6 @@ final class DiffusionBrowseController extends DiffusionController {
 
     } else {
 
-      $readme = null;
-
       $phids = array();
       foreach ($results as $result) {
         $data = $result->getLastCommitData();
@@ -71,15 +53,10 @@ final class DiffusionBrowseController extends DiffusionController {
             $phids[$data->getCommitDetail('authorPHID')] = true;
           }
         }
-
-        $path = $result->getPath();
-        if (preg_match('/^readme(|\.txt|\.remarkup)$/i', $path)) {
-          $readme = $result;
-        }
       }
 
       $phids = array_keys($phids);
-      $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+      $handles = $this->loadViewerHandles($phids);
 
       $browse_table = new DiffusionBrowseTableView();
       $browse_table->setDiffusionRequest($drequest);
@@ -89,6 +66,7 @@ final class DiffusionBrowseController extends DiffusionController {
 
       $browse_panel = new AphrontPanelView();
       $browse_panel->appendChild($browse_table);
+      $browse_panel->setNoBackground();
 
       $content[] = $browse_panel;
     }
@@ -108,7 +86,15 @@ final class DiffusionBrowseController extends DiffusionController {
     $nav = $this->buildSideNav('browse', false);
     $nav->appendChild($content);
 
-    return $this->buildStandardPageResponse(
+    $crumbs = $this->buildCrumbs(
+      array(
+        'branch' => true,
+        'path'   => true,
+        'view'   => 'browse',
+      ));
+    $nav->setCrumbs($crumbs);
+
+    return $this->buildApplicationPage(
       $nav,
       array(
         'title' => array(

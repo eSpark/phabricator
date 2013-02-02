@@ -1,26 +1,9 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PonderAnswerListView extends AphrontView {
 
   private $question;
   private $handles;
-  private $user;
   private $answers;
 
   public function setQuestion($question) {
@@ -31,11 +14,6 @@ final class PonderAnswerListView extends AphrontView {
   public function setHandles(array $handles) {
     assert_instances_of($handles, 'PhabricatorObjectHandle');
     $this->handles = $handles;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -73,7 +51,7 @@ final class PonderAnswerListView extends AphrontView {
       ->setHeader("Responses:");
 
     foreach ($this->answers as $cur_answer) {
-      $view = new PonderCommentBodyView();
+      $view = new PonderPostBodyView();
       $view
         ->setQuestion($question)
         ->setTarget($cur_answer)
@@ -81,7 +59,19 @@ final class PonderAnswerListView extends AphrontView {
         ->setHandles($handles)
         ->setUser($user);
 
+      $commentview = new PonderCommentListView();
+      $commentview
+        ->setUser($user)
+        ->setHandles($handles)
+        ->setComments($cur_answer->getComments())
+        ->setTarget($cur_answer->getPHID())
+        ->setQuestionID($question->getID())
+        ->setActionURI(new PhutilURI('/ponder/comment/add/'));
+
       $panel->appendChild($view);
+      $panel->appendChild($commentview);
+      $panel->appendChild('<div style="height: 40px; clear : both"></div>');
+
     }
 
     return $panel->render();

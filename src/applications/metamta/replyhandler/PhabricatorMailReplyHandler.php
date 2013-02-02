@@ -1,25 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorMailReplyHandler {
 
   private $mailReceiver;
   private $actor;
+  private $excludePHIDs = array();
 
   final public function setMailReceiver($mail_receiver) {
     $this->validateMailReceiver($mail_receiver);
@@ -40,10 +25,23 @@ abstract class PhabricatorMailReplyHandler {
     return $this->actor;
   }
 
+  final public function setExcludeMailRecipientPHIDs(array $exclude) {
+    $this->excludePHIDs = $exclude;
+    return $this;
+  }
+
+  final public function getExcludeMailRecipientPHIDs() {
+    return $this->excludePHIDs;
+  }
+
   abstract public function validateMailReceiver($mail_receiver);
   abstract public function getPrivateReplyHandlerEmailAddress(
     PhabricatorObjectHandle $handle);
-  abstract public function getReplyHandlerDomain();
+  public function getReplyHandlerDomain() {
+    return PhabricatorEnv::getEnvConfig(
+      'metamta.reply-handler-domain'
+    );
+  }
   abstract public function getReplyHandlerInstructions();
   abstract protected function receiveEmail(
     PhabricatorMetaMTAReceivedMail $mail);
@@ -62,8 +60,10 @@ abstract class PhabricatorMailReplyHandler {
   }
 
   private function sanityCheckEmail(PhabricatorMetaMTAReceivedMail $mail) {
-    $body = $mail->getCleanTextBody();
-    if (empty($body)) {
+    $body        = $mail->getCleanTextBody();
+    $attachments = $mail->getAttachments();
+
+    if (empty($body) && empty($attachments)) {
       return 'Empty email body. Email should begin with an !action and / or '.
              'text to comment. Inline replies and signatures are ignored.';
     }
@@ -77,8 +77,8 @@ abstract class PhabricatorMailReplyHandler {
    * since this code is running and everything.
    */
   private function shouldSendErrorEmail(PhabricatorMetaMTAReceivedMail $mail) {
-    return count($mail->getToAddresses() == 1) &&
-           count($mail->getCCAddresses() == 0);
+    return (count($mail->getToAddresses()) == 1) &&
+           (count($mail->getCCAddresses()) == 0);
   }
 
   private function sendErrorEmail($error,
@@ -293,6 +293,30 @@ EOBODY;
 
     $address = "{$prefix}{$receiver_id}+{$user_id}+{$hash}@{$domain}";
     return $this->getSingleReplyHandlerPrefix($address);
+  }
+
+  final protected function enhanceBodyWithAttachments(
+    $body,
+    array $attachments,
+    $format = '- {F%d, layout=link}') {
+    if (!$attachments) {
+      return $body;
+    }
+
+    $files = id(new PhabricatorFile())
+      ->loadAllWhere('phid in (%Ls)', $attachments);
+
+    // if we have some text then double return before adding our file list
+    if ($body) {
+      $body .= "\n\n";
+    }
+
+    foreach ($files as $file) {
+      $file_str = sprintf($format, $file->getID());
+      $body .= $file_str."\n";
+    }
+
+    return rtrim($body);
   }
 
 }

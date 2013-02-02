@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorSettingsPanelOAuth
   extends PhabricatorSettingsPanel {
 
@@ -176,17 +160,27 @@ final class PhabricatorSettingsPanelOAuth
       }
 
       $status = $oauth_info->getTokenStatus();
-      $status = PhabricatorUserOAuthInfo::getReadableTokenStatus($status);
+      $readable_status = PhabricatorUserOAuthInfo::getReadableTokenStatus(
+        $status);
+      $rappable_status = PhabricatorUserOAuthInfo::getRappableTokenStatus(
+        $status);
+      $beat = self::getBeat();
+      $rap = $beat . "Yo yo yo<br />".
+        'My name\'s DJ Token and I\'m here to say<br />'.
+        // pronounce as "dollar rappable status" for meter to work
+        "$rappable_status, hey hey hey hey<br />".
+        'I rap \'bout tokens, that might be why<br />'.
+        'I\'m such a cool and popular guy';
 
       $token_form = new AphrontFormView();
       $token_form
         ->setUser($user)
         ->appendChild(
-          '<p class="aphront-from-instructions">insert rap about tokens</p>')
+          '<p class="aphront-from-instructions">'.$rap.'</p>')
         ->appendChild(
           id(new AphrontFormStaticControl())
             ->setLabel('Token Status')
-            ->setValue($status))
+            ->setValue($readable_status))
         ->appendChild(
           id(new AphrontFormStaticControl())
             ->setLabel('Expires')
@@ -210,7 +204,8 @@ final class PhabricatorSettingsPanelOAuth
 
     $panel = new AphrontPanelView();
     $panel->setHeader($provider_name.' Account Settings');
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+    $panel->setNoBackground();
+
     foreach ($forms as $name => $form) {
       if ($name) {
         $panel->appendChild('<br /><h1>'.$name.'</h1><br />');
@@ -282,5 +277,17 @@ final class PhabricatorSettingsPanelOAuth
         ->setTitle('Successfully Refreshed Profile Picture');
     }
     return $notice;
+  }
+
+  private static function getBeat() {
+    // Gangsta's Paradise (karaoke version).
+    // Chosen because it's the only thing I listen to.
+    $song_id = "Gangsta\\'s Paradise";
+
+    // Make a musical note which you can click for the beat.
+    $beat = '<a href="javascript:void(0);" onclick="javascript:alert('.
+      "'Think about $song_id.'".
+      '); return 0;">&#9835; </a>';
+    return $beat;
   }
 }

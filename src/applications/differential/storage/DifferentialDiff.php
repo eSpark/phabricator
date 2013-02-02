@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialDiff extends DifferentialDAO {
 
   protected $revisionID;
@@ -133,9 +117,17 @@ final class DifferentialDiff extends DifferentialDAO {
 
     $lines = 0;
     foreach ($changes as $change) {
+      if ($change->getType() == ArcanistDiffChangeType::TYPE_MESSAGE) {
+        // If a user pastes a diff into Differential which includes a commit
+        // message (e.g., they ran `git show` to generate it), discard that
+        // change when constructing a DifferentialDiff.
+        continue;
+      }
+
       $changeset = new DifferentialChangeset();
       $add_lines = 0;
       $del_lines = 0;
+      $first_line = PHP_INT_MAX;
       $hunks = $change->getHunks();
       if ($hunks) {
         foreach ($hunks as $hunk) {
@@ -148,6 +140,10 @@ final class DifferentialDiff extends DifferentialDAO {
           $changeset->addUnsavedHunk($dhunk);
           $add_lines += $hunk->getAddLines();
           $del_lines += $hunk->getDelLines();
+          $added_lines = $hunk->getChangedLines('new');
+          if ($added_lines) {
+            $first_line = min($first_line, head_key($added_lines));
+          }
         }
         $lines += $add_lines + $del_lines;
       } else {
@@ -155,12 +151,17 @@ final class DifferentialDiff extends DifferentialDAO {
         $changeset->attachHunks(array());
       }
 
+      $metadata = $change->getAllMetadata();
+      if ($first_line != PHP_INT_MAX) {
+        $metadata['line:first'] = $first_line;
+      }
+
       $changeset->setOldFile($change->getOldPath());
       $changeset->setFilename($change->getCurrentPath());
       $changeset->setChangeType($change->getType());
 
       $changeset->setFileType($change->getFileType());
-      $changeset->setMetadata($change->getAllMetadata());
+      $changeset->setMetadata($metadata);
       $changeset->setOldProperties($change->getOldProperties());
       $changeset->setNewProperties($change->getNewProperties());
       $changeset->setAwayPaths($change->getAwayPaths());
@@ -171,89 +172,24 @@ final class DifferentialDiff extends DifferentialDAO {
     }
     $diff->setLineCount($lines);
 
-    $diff->detectCopiedCode();
+    $parser = new DifferentialChangesetParser();
+    $changesets = $parser->detectCopiedCode(
+      $diff->getChangesets(),
+      $min_width = 30,
+      $min_lines = 3);
+    $diff->attachChangesets($changesets);
 
     return $diff;
   }
 
-  public function detectCopiedCode($min_width = 30, $min_lines = 3) {
-    $map = array();
-    $files = array();
-    $types = array();
-    foreach ($this->changesets as $changeset) {
-      $file = $changeset->getFilename();
-      foreach ($changeset->getHunks() as $hunk) {
-        $line = $hunk->getOldOffset();
-        foreach (explode("\n", $hunk->getChanges()) as $code) {
-          $type = (isset($code[0]) ? $code[0] : '');
-          if ($type == '-' || $type == ' ') {
-            $code = trim(substr($code, 1));
-            $files[$file][$line] = $code;
-            $types[$file][$line] = $type;
-            if (strlen($code) >= $min_width) {
-              $map[$code][] = array($file, $line);
-            }
-            $line++;
-          }
-        }
-      }
-    }
-
-    foreach ($this->changesets as $changeset) {
-      $copies = array();
-      foreach ($changeset->getHunks() as $hunk) {
-        $added = array_map('trim', $hunk->getAddedLines());
-        for (reset($added); list($line, $code) = each($added); next($added)) {
-          if (isset($map[$code])) { // We found a long matching line.
-            $best_length = 0;
-            foreach ($map[$code] as $val) { // Explore all candidates.
-              list($file, $orig_line) = $val;
-              $length = 1;
-              // Search also backwards for short lines.
-              foreach (array(-1, 1) as $direction) {
-                $offset = $direction;
-                while (!isset($copies[$line + $offset]) &&
-                    isset($added[$line + $offset]) &&
-                    idx($files[$file], $orig_line + $offset) ===
-                      $added[$line + $offset]) {
-                  $length++;
-                  $offset += $direction;
-                }
-              }
-              if ($length > $best_length ||
-                  ($length == $best_length && // Prefer moves.
-                   idx($types[$file], $orig_line) == '-')) {
-                $best_length = $length;
-                // ($offset - 1) contains number of forward matching lines.
-                $best_offset = $offset - 1;
-                $best_file = $file;
-                $best_line = $orig_line;
-              }
-            }
-            $file = ($best_file == $changeset->getFilename() ? '' : $best_file);
-            for ($i = $best_length; $i--; ) {
-              $type = idx($types[$best_file], $best_line + $best_offset - $i);
-              $copies[$line + $best_offset - $i] = ($best_length < $min_lines
-                ? array() // Ignore short blocks.
-                : array($file, $best_line + $best_offset - $i, $type));
-            }
-            for ($i = 0; $i < $best_offset; $i++) {
-              next($added);
-            }
-          }
-        }
-      }
-      $metadata = $changeset->getMetadata();
-      $metadata['copy:lines'] = array_filter($copies);
-      $changeset->setMetadata($metadata);
-    }
-  }
 
   public function getDiffDict() {
     $dict = array(
       'id' => $this->getID(),
       'parent' => $this->getParentRevisionID(),
       'revisionID' => $this->getRevisionID(),
+      'dateCreated' => $this->getDateCreated(),
+      'dateModified' => $this->getDateModified(),
       'sourceControlBaseRevision' => $this->getSourceControlBaseRevision(),
       'sourceControlPath' => $this->getSourceControlPath(),
       'sourceControlSystem' => $this->getSourceControlSystem(),
@@ -307,5 +243,52 @@ final class DifferentialDiff extends DifferentialDAO {
     }
 
     return $dict;
+  }
+
+  /**
+   * Figures out the right author information for a given diff based on the
+   * repository and Phabricator configuration settings.
+   *
+   * Git is particularly finicky as it requires author information to be in
+   * the format "George Washington <gwashington@example.com>" to
+   * consistently work. If the Phabricator instance isn't configured to
+   * expose emails prudently, then we are unable to get any author information
+   * for git.
+   */
+  public function loadAuthorInformation() {
+    $author = id(new PhabricatorUser())
+      ->loadOneWhere('phid = %s', $this->getAuthorPHID());
+
+    $use_emails =
+      PhabricatorEnv::getEnvConfig('differential.expose-emails-prudently');
+
+    switch ($this->getSourceControlSystem()) {
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
+        if (!$use_emails) {
+          $author_info = '';
+        } else {
+          $author_info = $this->getFullAuthorInfo($author);
+        }
+        break;
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
+        if (!$use_emails) {
+          $author_info = $author->getUsername();
+        } else {
+          $author_info = $this->getFullAuthorInfo($author);
+        }
+       break;
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+      default:
+        $author_info = $author->getUsername();
+        break;
+    }
+
+    return $author_info;
+  }
+
+  private function getFullAuthorInfo(PhabricatorUser $author) {
+    return sprintf('%s <%s>',
+                   $author->getRealName(),
+                   $author->loadPrimaryEmailAddress());
   }
 }

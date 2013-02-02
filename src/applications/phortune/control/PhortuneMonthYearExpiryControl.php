@@ -1,33 +1,8 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhortuneMonthYearExpiryControl extends AphrontFormControl {
-  private $user;
   private $monthValue;
   private $yearValue;
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
-  private function getUser() {
-    return $this->user;
-  }
 
   public function setMonthInputValue($value) {
     $this->monthValue = $value;
@@ -84,7 +59,7 @@ final class PhortuneMonthYearExpiryControl extends AphrontFormControl {
 
     $current_year = $this->getCurrentYear();
     $years = range($current_year, $current_year + 20);
-    $years = array_combine($years, $years);
+    $years = array_fuse($years);
 
     if ($this->getMonthInputValue()) {
       $selected_month = $this->getMonthInputValue();

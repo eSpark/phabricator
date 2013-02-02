@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorOAuthUnlinkController extends PhabricatorAuthController {
 
   private $provider;
@@ -32,7 +16,7 @@ final class PhabricatorOAuthUnlinkController extends PhabricatorAuthController {
 
     if ($provider->isProviderLinkPermanent()) {
       throw new Exception(
-        "You may not unlink accounts from this OAuth provider.");
+        pht("You may not unlink accounts from this OAuth provider."));
     }
 
     $provider_key = $provider->getProviderKey();
@@ -49,11 +33,11 @@ final class PhabricatorOAuthUnlinkController extends PhabricatorAuthController {
     if (!$request->isDialogFormPost()) {
       $dialog = new AphrontDialogView();
       $dialog->setUser($user);
-      $dialog->setTitle('Really unlink account?');
+      $dialog->setTitle(pht('Really unlink account?'));
       $dialog->appendChild(
-        '<p><strong>You will not be able to login</strong> using this account '.
-        'once you unlink it. Continue?</p>');
-      $dialog->addSubmitButton('Unlink Account');
+        '<p>'.pht('You will not be able to login using this account '.
+        'once you unlink it. Continue?').'</p>');
+      $dialog->addSubmitButton(pht('Unlink Account'));
       $dialog->addCancelButton($provider->getSettingsPanelURI());
 
       return id(new AphrontDialogResponse())->setDialog($dialog);

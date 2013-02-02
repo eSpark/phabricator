@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorApplicationPeople extends PhabricatorApplication {
 
   public function getShortDescription() {
@@ -30,8 +14,20 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
     return "\xE2\x99\x9F";
   }
 
-  public function getAutospriteName() {
+  public function getIconName() {
     return 'people';
+  }
+
+  public function getFlavorText() {
+    return pht('Sort of a social utility.');
+  }
+
+  public function getApplicationGroup() {
+    return self::GROUP_ADMIN;
+  }
+
+  public function canUninstall() {
+    return false;
   }
 
   public function getRoutes() {
@@ -39,7 +35,7 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
       '/people/' => array(
         '' => 'PhabricatorPeopleListController',
         'logs/' => 'PhabricatorPeopleLogsController',
-        'edit/(?:(?P<id>\d+)/(?:(?P<view>\w+)/)?)?'
+        'edit/(?:(?P<id>[1-9]\d*)/(?:(?P<view>\w+)/)?)?'
           => 'PhabricatorPeopleEditController',
         'ldap/' => 'PhabricatorPeopleLdapController',
       ),
@@ -56,23 +52,29 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
 
     $items = array();
 
-    if (($controller instanceof PhabricatorPeopleProfileController) &&
-        ($controller->getProfileUser()) &&
-        ($controller->getProfileUser()->getPHID() == $user->getPHID())) {
-      $class = 'main-menu-item-icon-profile-selected';
-    } else {
-      $class = 'main-menu-item-icon-profile-not-selected';
-    }
-
     if ($user->isLoggedIn()) {
       $image = $user->loadProfileImageURI();
 
-      $item = new PhabricatorMainMenuIconView();
+      $item = new PhabricatorMenuItemView();
       $item->setName($user->getUsername());
-      $item->addClass('main-menu-item-icon-profile '.$class);
-      $item->addStyle('background-image: url('.$image.')');
       $item->setHref('/p/'.$user->getUsername().'/');
       $item->setSortOrder(0.0);
+      $item->addClass('phabricator-core-menu-item-profile');
+
+      $classes = array(
+        'phabricator-core-menu-icon',
+        'phabricator-core-menu-profile-image',
+      );
+
+      $item->appendChild(
+        phutil_render_tag(
+          'span',
+          array(
+            'class' => implode(' ', $classes),
+            'style' => 'background-image: url('.$image.')',
+          ),
+          ''));
+
       $items[] = $item;
     }
 

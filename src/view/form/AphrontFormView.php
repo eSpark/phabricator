@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class AphrontFormView extends AphrontView {
 
   private $action;
@@ -23,10 +7,10 @@ final class AphrontFormView extends AphrontView {
   private $header;
   private $data = array();
   private $encType;
-  private $user;
   private $workflow;
   private $id;
   private $flexible;
+  private $sigils = array();
 
   public function setFlexible($flexible) {
     $this->flexible = $flexible;
@@ -35,11 +19,6 @@ final class AphrontFormView extends AphrontView {
 
   public function setID($id) {
     $this->id = $id;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -68,6 +47,11 @@ final class AphrontFormView extends AphrontView {
     return $this;
   }
 
+  public function addSigil($sigil) {
+    $this->sigils[] = $sigil;
+    return $this;
+  }
+
   public function render() {
     if ($this->flexible) {
       require_celerity_resource('phabricator-form-view-css');
@@ -92,6 +76,11 @@ final class AphrontFormView extends AphrontView {
       throw new Exception('You must pass the user to AphrontFormView.');
     }
 
+    $sigils = $this->sigils;
+    if ($this->workflow) {
+      $sigils[] = 'workflow';
+    }
+
     return phabricator_render_form(
       $this->user,
       array(
@@ -99,7 +88,7 @@ final class AphrontFormView extends AphrontView {
         'action'  => $this->action,
         'method'  => $this->method,
         'enctype' => $this->encType,
-        'sigil'   => $this->workflow ? 'workflow' : null,
+        'sigil'   => $sigils ? implode(' ', $sigils) : null,
         'id'      => $this->id,
       ),
       $layout->render());

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorMetaMTASendController
   extends PhabricatorMetaMTAController {
 
@@ -58,8 +42,8 @@ final class PhabricatorMetaMTASendController
     }
 
     $failure_caption =
-      "Enter a number to simulate that many consecutive send failures before ".
-      "really attempting to deliver via the underlying MTA.";
+      pht("Enter a number to simulate that many consecutive send failures ".
+      "brefore really attempting to deliver via the underlying MTA.");
 
     $doclink_href = PhabricatorEnv::getDoclink(
       'article/Configuring_Outbound_Email.html');
@@ -70,11 +54,12 @@ final class PhabricatorMetaMTASendController
         'href' => $doclink_href,
         'target' => '_blank',
       ),
-    'Configuring Outbound Email');
+    pht('Configuring Outbound Email'));
     $instructions =
-      '<p class="aphront-form-instructions">This form will send a normal '.
-      'email using the settings you have configured for Phabricator. For more '.
-      'information, see '.$doclink.'.</p>';
+      '<p class="aphront-form-instructions">'.
+      pht('This form will send a normal email using the settings you have '.
+      'configured for Phabricator. For more information, see %s.', $doclink).
+      '</p>';
 
     $adapter = PhabricatorEnv::getEnvConfig('metamta.mail-adapter');
     $warning = null;
@@ -83,14 +68,12 @@ final class PhabricatorMetaMTASendController
       $warning->setTitle('Email is Disabled');
       $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
       $warning->appendChild(
-        '<p>This installation of Phabricator is currently set to use '.
+        '<p>'.pht('This installation of Phabricator is currently set to use '.
         '<tt>PhabricatorMailImplementationTestAdapter</tt> to deliver '.
         'outbound email. This completely disables outbound email! All '.
         'outbound email will be thrown in a deep, dark hole until you '.
-        'configure a real adapter.</p>');
+        'configure a real adapter.').'</p>');
     }
-
-    $panel_id = celerity_generate_unique_node_id();
 
     $phdlink_href = PhabricatorEnv::getDoclink(
       'article/Managing_Daemons_with_phd.html');
@@ -109,50 +92,49 @@ final class PhabricatorMetaMTASendController
       ->appendChild($instructions)
       ->appendChild(
         id(new AphrontFormStaticControl())
-          ->setLabel('Adapter')
+          ->setLabel(pht('Adapter'))
           ->setValue($adapter))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('To')
+          ->setLabel(pht('To'))
           ->setName('to')
           ->setDatasource('/typeahead/common/mailable/'))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('CC')
+          ->setLabel(pht('CC'))
           ->setName('cc')
           ->setDatasource('/typeahead/common/mailable/'))
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Subject')
+          ->setLabel(pht('Subject'))
           ->setName('subject'))
       ->appendChild(
         id(new AphrontFormTextAreaControl())
-          ->setLabel('Body')
+          ->setLabel(pht('Body'))
           ->setName('body'))
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Mail Tags')
+          ->setLabel(pht('Mail Tags'))
           ->setName('mailtags')
           ->setCaption(
-            'Example: <tt>differential-cc, differential-comment</tt>'))
+            pht('Example:').' <tt>differential-cc, differential-comment</tt>'))
       ->appendChild(
         id(new AphrontFormDragAndDropUploadControl())
-          ->setLabel('Attach Files')
+          ->setLabel(pht('Attach Files'))
           ->setName('files')
-          ->setDragAndDropTarget($panel_id)
           ->setActivatedClass('aphront-panel-view-drag-and-drop'))
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Simulate Failures')
+          ->setLabel(pht('Simulate Failures'))
           ->setName('failures')
           ->setCaption($failure_caption))
       ->appendChild(
         id(new AphrontFormCheckboxControl())
-          ->setLabel('HTML')
+          ->setLabel(pht('HTML'))
           ->addCheckbox('html', '1', 'Send as HTML email.'))
       ->appendChild(
         id(new AphrontFormCheckboxControl())
-          ->setLabel('Bulk')
+          ->setLabel(pht('Bulk'))
           ->addCheckbox('bulk', '1', 'Send with bulk email headers.'))
       ->appendChild(
         id(new AphrontFormCheckboxControl())
@@ -160,19 +142,18 @@ final class PhabricatorMetaMTASendController
           ->addCheckbox(
             'immediately',
             '1',
-            'Send immediately. (Do not enqueue for daemons.)',
+            pht('Send immediately. (Do not enqueue for daemons.)'),
             PhabricatorEnv::getEnvConfig('metamta.send-immediately'))
-          ->setCaption('Daemons can be started with '.$phdlink.'.')
+          ->setCaption(pht('Daemons can be started with %s.', $phdlink))
           )
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Send Mail'));
+          ->setValue(pht('Send Mail')));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Send Email');
+    $panel->setHeader(pht('Send Email'));
     $panel->appendChild($form);
-    $panel->setID($panel_id);
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+    $panel->setNoBackground();
 
     $nav = $this->buildSideNavView();
     $nav->selectFilter('send');
@@ -185,7 +166,8 @@ final class PhabricatorMetaMTASendController
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'Send Test',
+        'title' => pht('Send Test'),
+        'device' => true,
       ));
   }
 

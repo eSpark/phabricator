@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorRepositoryCommitMessageParserWorker
   extends PhabricatorRepositoryCommitParserWorker {
 
@@ -36,27 +20,54 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     }
     $data->setCommitID($commit->getID());
     $data->setAuthorName($author);
+    $data->setCommitDetail(
+      'authorPHID',
+      $this->resolveUserPHID($author));
+
     $data->setCommitMessage($message);
 
     if ($committer) {
       $data->setCommitDetail('committer', $committer);
+      $data->setCommitDetail(
+        'committerPHID',
+        $this->resolveUserPHID($committer));
     }
 
     $repository = $this->repository;
-    $detail_parser = $repository->getDetail(
-      'detail-parser',
-      'PhabricatorRepositoryDefaultCommitMessageDetailParser');
-
-    if ($detail_parser) {
-      $parser_obj = newv($detail_parser, array($commit, $data));
-      $parser_obj->parseCommitDetails();
-    }
 
     $author_phid = $this->lookupUser(
       $commit,
       $data->getAuthorName(),
       $data->getCommitDetail('authorPHID'));
     $data->setCommitDetail('authorPHID', $author_phid);
+
+    $user = new PhabricatorUser();
+    if ($author_phid) {
+      $user = $user->loadOneWhere(
+        'phid = %s',
+        $author_phid);
+    }
+
+    $call = new ConduitCall(
+      'differential.parsecommitmessage',
+      array(
+        'corpus' => $message,
+        'partial' => true,
+      ));
+    $call->setUser($user);
+    $result = $call->execute();
+
+    $field_values = $result['fields'];
+
+    if (!empty($field_values['reviewedByPHIDs'])) {
+      $data->setCommitDetail(
+        'reviewerPHID',
+        reset($field_values['reviewedByPHIDs']));
+    }
+
+    $data->setCommitDetail(
+      'differential.revisionID',
+      idx($field_values, 'revisionID'));
 
     $committer_phid = $this->lookupUser(
       $commit,
@@ -79,6 +90,8 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     // revisit this and do something differently. (If we match several revisions
     // someone probably did something very silly, though.)
 
+    $revision = null;
+    $should_autoclose = $repository->shouldAutocloseCommit($commit, $data);
     $revision_id = $data->getCommitDetail('differential.revisionID');
     if (!$revision_id) {
       $hashes = $this->getCommitHashes(
@@ -98,8 +111,16 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     }
 
     if ($revision_id) {
+      $lock = PhabricatorGlobalLock::newLock(get_class($this).':'.$revision_id);
+      $lock->lock(5 * 60);
+
       $revision = id(new DifferentialRevision())->load($revision_id);
       if ($revision) {
+        $data->setCommitDetail(
+          'differential.revisionPHID',
+          $revision->getPHID());
+
+        $revision->loadRelationships();
         queryfx(
           $conn_w,
           'INSERT IGNORE INTO %T (revisionID, commitPHID) VALUES (%d, %s)',
@@ -107,51 +128,25 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
           $revision->getID(),
           $commit->getPHID());
 
-        $committer_phid = $data->getCommitDetail('committerPHID');
-        if ($committer_phid) {
-          $handle = PhabricatorObjectHandleData::loadOneHandle($committer_phid);
-          $committer_name = '@'.$handle->getName();
-        } else {
-          $committer_name = $data->getCommitDetail('committer');
-        }
-
-        $author_phid = $data->getCommitDetail('authorPHID');
-        if ($author_phid) {
-          $handle = PhabricatorObjectHandleData::loadOneHandle($author_phid);
-          $author_name = '@'.$handle->getName();
-        } else {
-          $author_name = $data->getAuthorName();
-        }
-
-        $commit_name = $repository->formatCommitName(
-          $commit->getCommitIdentifier());
-
-        $info = array();
-        $info[] = "authored by {$author_name}";
-        if ($committer_name && ($committer_name != $author_name)) {
-          $info[] = "committed by {$committer_name}";
-        }
-        $info = implode(', ', $info);
-
-        $message = "Closed by commit {$commit_name} ({$info}).";
-
-        $actor_phid = nonempty(
-          $committer_phid,
-          $author_phid,
-          $revision->getAuthorPHID());
-
         $status_closed = ArcanistDifferentialRevisionStatus::CLOSED;
         $should_close = ($revision->getStatus() != $status_closed) &&
-                        $repository->shouldAutocloseCommit($commit, $data);
+                        $should_autoclose;
 
         if ($should_close) {
+          $actor_phid = nonempty(
+            $committer_phid,
+            $author_phid,
+            $revision->getAuthorPHID());
+          $actor = id(new PhabricatorUser())
+            ->loadOneWhere('phid = %s', $actor_phid);
+
           $diff = $this->attachToRevision($revision, $actor_phid);
 
           $revision->setDateCommitted($commit->getEpoch());
           $editor = new DifferentialCommentEditor(
             $revision,
-            $actor_phid,
             DifferentialAction::ACTION_CLOSE);
+          $editor->setActor($actor);
           $editor->setIsDaemonWorkflow(true);
 
           $vs_diff = $this->loadChangedByCommit($diff);
@@ -166,13 +161,60 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
             $editor->setChangedByCommit($changed_by_commit);
           }
 
-          $editor->setMessage($message)->save();
+          $commit_name = $repository->formatCommitName(
+            $commit->getCommitIdentifier());
+
+          $committer_name = $this->loadUserName(
+            $committer_phid,
+            $data->getCommitDetail('committer'));
+
+          $author_name = $this->loadUserName(
+            $author_phid,
+            $data->getAuthorName());
+
+          $info = array();
+          $info[] = "authored by {$author_name}";
+          if ($committer_name && ($committer_name != $author_name)) {
+            $info[] = "committed by {$committer_name}";
+          }
+          $info = implode(', ', $info);
+
+          $editor
+            ->setMessage("Closed by commit {$commit_name} ({$info}).")
+            ->save();
         }
 
+      }
+
+      $lock->unlock();
+    }
+
+    if ($should_autoclose) {
+      $fields = DifferentialFieldSelector::newSelector()
+        ->getFieldSpecifications();
+      foreach ($fields as $key => $field) {
+        if (!$field->shouldAppearOnCommitMessage()) {
+          continue;
+        }
+        $field->setUser($user);
+        $value = idx($field_values, $field->getCommitMessageKey());
+        $field->setValueFromParsedCommitMessage($value);
+        if ($revision) {
+          $field->setRevision($revision);
+        }
+        $field->didParseCommit($repository, $commit, $data);
       }
     }
 
     $data->save();
+  }
+
+  private function loadUserName($user_phid, $default) {
+    if (!$user_phid) {
+      return $default;
+    }
+    $handle = PhabricatorObjectHandleData::loadOneHandle($user_phid);
+    return '@'.$handle->getName();
   }
 
   private function attachToRevision(
@@ -187,6 +229,7 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     $raw_diff = DiffusionRawDiffQuery::newFromDiffusionRequest($drequest)
       ->loadRawDiff();
 
+    // TODO: Support adds, deletes and moves under SVN.
     $changes = id(new ArcanistDiffParser())->parseDiff($raw_diff);
     $diff = DifferentialDiff::newFromRawChanges($changes)
       ->setRevisionID($revision->getID())
@@ -398,6 +441,78 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     PhutilEventEngine::dispatchEvent($event);
 
     return $event->getValue('result');
+  }
+
+  private function resolveUserPHID($user_name) {
+    if (!strlen($user_name)) {
+      return null;
+    }
+
+    $phid = $this->findUserByUserName($user_name);
+    if ($phid) {
+      return $phid;
+    }
+    $phid = $this->findUserByEmailAddress($user_name);
+    if ($phid) {
+      return $phid;
+    }
+    $phid = $this->findUserByRealName($user_name);
+    if ($phid) {
+      return $phid;
+    }
+
+    // No hits yet, try to parse it as an email address.
+
+    $email = new PhutilEmailAddress($user_name);
+
+    $phid = $this->findUserByEmailAddress($email->getAddress());
+    if ($phid) {
+      return $phid;
+    }
+
+    $display_name = $email->getDisplayName();
+    if ($display_name) {
+      $phid = $this->findUserByUserName($display_name);
+      if ($phid) {
+        return $phid;
+      }
+      $phid = $this->findUserByRealName($display_name);
+      if ($phid) {
+        return $phid;
+      }
+    }
+
+    return null;
+  }
+
+  private function findUserByUserName($user_name) {
+    $by_username = id(new PhabricatorUser())->loadOneWhere(
+      'userName = %s',
+      $user_name);
+    if ($by_username) {
+      return $by_username->getPHID();
+    }
+    return null;
+  }
+
+  private function findUserByRealName($real_name) {
+    // Note, real names are not guaranteed unique, which is why we do it this
+    // way.
+    $by_realname = id(new PhabricatorUser())->loadAllWhere(
+      'realName = %s',
+      $real_name);
+    if (count($by_realname) == 1) {
+      return reset($by_realname)->getPHID();
+    }
+    return null;
+  }
+
+  private function findUserByEmailAddress($email_address) {
+    $by_email = PhabricatorUser::loadOneWithEmailAddress($email_address);
+    if ($by_email) {
+      return $by_email->getPHID();
+    }
+    return null;
   }
 
 }

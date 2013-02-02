@@ -1,25 +1,8 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-final class DifferentialCommentEditor {
+final class DifferentialCommentEditor extends PhabricatorEditor {
 
   protected $revision;
-  protected $actorPHID;
   protected $action;
 
   protected $attachInlineComments;
@@ -37,11 +20,9 @@ final class DifferentialCommentEditor {
 
   public function __construct(
     DifferentialRevision $revision,
-    $actor_phid,
     $action) {
 
     $this->revision = $revision;
-    $this->actorPHID  = $actor_phid;
     $this->action   = $action;
   }
 
@@ -112,21 +93,23 @@ final class DifferentialCommentEditor {
   }
 
   public function save() {
-    $revision = $this->revision;
-    $action = $this->action;
-    $actor_phid = $this->actorPHID;
-    $actor = id(new PhabricatorUser())->loadOneWhere('PHID = %s', $actor_phid);
-    $actor_is_author = ($actor_phid == $revision->getAuthorPHID());
-    $allow_self_accept = PhabricatorEnv::getEnvConfig(
-      'differential.allow-self-accept', false);
+    $actor              = $this->requireActor();
+    $revision           = $this->revision;
+    $action             = $this->action;
+    $actor_phid         = $actor->getPHID();
+    $actor_is_author    = ($actor_phid == $revision->getAuthorPHID());
+    $allow_self_accept  = PhabricatorEnv::getEnvConfig(
+      'differential.allow-self-accept');
     $always_allow_close = PhabricatorEnv::getEnvConfig(
-      'differential.always-allow-close', false);
-    $revision_status = $revision->getStatus();
+      'differential.always-allow-close');
+    $allow_reopen = PhabricatorEnv::getEnvConfig(
+      'differential.allow-reopen');
+    $revision_status    = $revision->getStatus();
 
     $revision->loadRelationships();
     $reviewer_phids = $revision->getReviewers();
     if ($reviewer_phids) {
-      $reviewer_phids = array_combine($reviewer_phids, $reviewer_phids);
+      $reviewer_phids = array_fuse($reviewer_phids);
     }
 
     $metadata = array();
@@ -135,7 +118,7 @@ final class DifferentialCommentEditor {
     if ($this->attachInlineComments) {
       $inline_comments = id(new DifferentialInlineComment())->loadAllWhere(
         'authorPHID = %s AND revisionID = %d AND commentID IS NULL',
-        $this->actorPHID,
+        $actor_phid,
         $revision->getID());
     }
 
@@ -379,6 +362,21 @@ final class DifferentialCommentEditor {
         $revision->setStatus(ArcanistDifferentialRevisionStatus::CLOSED);
         break;
 
+      case DifferentialAction::ACTION_REOPEN:
+        if (!$allow_reopen) {
+          throw new Exception(
+            "You cannot reopen a revision when this action is disabled.");
+        }
+
+        if ($revision_status != ArcanistDifferentialRevisionStatus::CLOSED) {
+          throw new Exception(
+            "You cannot reopen a revision that is not currently closed.");
+        }
+
+        $revision->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVIEW);
+
+        break;
+
       case DifferentialAction::ACTION_ADDREVIEWERS:
         list($added_reviewers, $ignored) = $this->alterReviewers();
 
@@ -414,7 +412,7 @@ final class DifferentialCommentEditor {
             DifferentialRevisionEditor::addCC(
               $revision,
               $cc,
-              $this->actorPHID);
+              $actor_phid);
           }
 
           $key = DifferentialComment::METADATA_ADDED_CCS;
@@ -490,12 +488,12 @@ final class DifferentialCommentEditor {
     if ($action != DifferentialAction::ACTION_RESIGN) {
       DifferentialRevisionEditor::addCC(
         $revision,
-        $this->actorPHID,
-        $this->actorPHID);
+        $actor_phid,
+        $actor_phid);
     }
 
     $comment = id(new DifferentialComment())
-      ->setAuthorPHID($this->actorPHID)
+      ->setAuthorPHID($actor_phid)
       ->setRevisionID($revision->getID())
       ->setAction($action)
       ->setContent((string)$this->message)
@@ -541,7 +539,7 @@ final class DifferentialCommentEditor {
           DifferentialRevisionEditor::addCC(
             $revision,
             $cc_phid,
-            $this->actorPHID);
+            $actor_phid);
           $metacc[] = $cc_phid;
         }
         $metadata[DifferentialComment::METADATA_ADDED_CCS] = $metacc;
@@ -553,21 +551,23 @@ final class DifferentialCommentEditor {
 
     $revision->saveTransaction();
 
-    $phids = array($this->actorPHID);
+    $phids = array($actor_phid);
     $handles = id(new PhabricatorObjectHandleData($phids))
       ->loadHandles();
-    $actor_handle = $handles[$this->actorPHID];
+    $actor_handle = $handles[$actor_phid];
 
     $xherald_header = HeraldTranscript::loadXHeraldRulesHeader(
       $revision->getPHID());
 
+    $mailed_phids = array();
     if (!$this->noEmail) {
-      id(new DifferentialCommentMail(
+      $mail = id(new DifferentialCommentMail(
         $revision,
         $actor_handle,
         $comment,
         $changesets,
         $inline_comments))
+        ->setExcludeMailRecipientPHIDs($this->getExcludeMailRecipientPHIDs())
         ->setToPHIDs(
           array_merge(
             $revision->getReviewers(),
@@ -577,6 +577,8 @@ final class DifferentialCommentEditor {
         ->setXHeraldRulesHeader($xherald_header)
         ->setParentMessageID($this->parentMessageID)
         ->send();
+
+      $mailed_phids = $mail->getRawMail()->buildRecipientList();
     }
 
     $event_data = array(
@@ -586,21 +588,22 @@ final class DifferentialCommentEditor {
       'revision_author_phid' => $revision->getAuthorPHID(),
       'action'               => $comment->getAction(),
       'feedback_content'     => $comment->getContent(),
-      'actor_phid'           => $this->actorPHID,
+      'actor_phid'           => $actor_phid,
     );
+
+    // TODO: Get rid of this
     id(new PhabricatorTimelineEvent('difx', $event_data))
       ->recordEvent();
 
-    // TODO: Move to a daemon?
     id(new PhabricatorFeedStoryPublisher())
-      ->setStoryType(PhabricatorFeedStoryTypeConstants::STORY_DIFFERENTIAL)
+      ->setStoryType('PhabricatorFeedStoryDifferential')
       ->setStoryData($event_data)
       ->setStoryTime(time())
-      ->setStoryAuthorPHID($this->actorPHID)
+      ->setStoryAuthorPHID($actor_phid)
       ->setRelatedPHIDs(
         array(
           $revision->getPHID(),
-          $this->actorPHID,
+          $actor_phid,
           $revision->getAuthorPHID(),
         ))
       ->setPrimaryObjectPHID($revision->getPHID())
@@ -609,10 +612,11 @@ final class DifferentialCommentEditor {
           array($revision->getAuthorPHID()),
           $revision->getReviewers(),
           $revision->getCCPHIDs()))
+      ->setMailRecipientPHIDs($mailed_phids)
       ->publish();
 
-    // TODO: Move to a daemon?
-    PhabricatorSearchDifferentialIndexer::indexRevision($revision);
+    id(new PhabricatorSearchIndexer())
+      ->indexDocumentByPHID($revision->getPHID());
 
     return $comment;
   }
@@ -642,14 +646,17 @@ final class DifferentialCommentEditor {
   }
 
   private function alterReviewers() {
-    $revision = $this->revision;
-    $added_reviewers = $this->getAddedReviewers();
+    $actor_phid        = $this->getActor()->getPHID();
+    $revision          = $this->revision;
+    $added_reviewers   = $this->getAddedReviewers();
     $removed_reviewers = $this->getRemovedReviewers();
-    $reviewer_phids = $revision->getReviewers();
+    $reviewer_phids    = $revision->getReviewers();
+    $allow_self_accept = PhabricatorEnv::getEnvConfig(
+      'differential.allow-self-accept');
 
     $reviewer_phids_map = array_fill_keys($reviewer_phids, true);
     foreach ($added_reviewers as $k => $user_phid) {
-      if ($user_phid == $revision->getAuthorPHID()) {
+      if (!$allow_self_accept && $user_phid == $revision->getAuthorPHID()) {
         unset($added_reviewers[$k]);
       }
       if (isset($reviewer_phids_map[$user_phid])) {
@@ -672,7 +679,7 @@ final class DifferentialCommentEditor {
         $reviewer_phids,
         $removed_reviewers,
         $added_reviewers,
-        $this->actorPHID);
+        $actor_phid);
     }
 
     return array($added_reviewers, $removed_reviewers);

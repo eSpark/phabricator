@@ -1,22 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPasteListController extends PhabricatorPasteController {
+
+  public function shouldRequireLogin() {
+    return false;
+  }
 
   private $filter;
 
@@ -28,19 +16,22 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $query = new PhabricatorPasteQuery();
-    $query->setViewer($user);
+    $query = id(new PhabricatorPasteQuery())
+      ->setViewer($user)
+      ->needContent(true);
 
-    $nav = $this->buildSideNavView();
-    $filter = $nav->selectFilter($this->filter, 'my');
+    $nav = $this->buildSideNavView($this->filter);
+    $filter = $nav->getSelectedFilter();
 
     switch ($filter) {
       case 'my':
         $query->withAuthorPHIDs(array($user->getPHID()));
-        $title = 'My Pastes';
+        $title = pht('My Pastes');
+        $nodata = pht("You haven't created any Pastes yet.");
         break;
       case 'all':
-        $title = 'All Pastes';
+        $title = pht('All Pastes');
+        $nodata = pht("There are no Pastes yet.");
         break;
     }
 
@@ -48,12 +39,27 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
     $pager->readFromRequest($request);
     $pastes = $query->executeWithCursorPager($pager);
 
-
     $list = $this->buildPasteList($pastes);
-    $list->setHeader($title);
     $list->setPager($pager);
+    $list->setNoDataString($nodata);
 
-    $nav->appendChild($list);
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader($title);
+
+    $nav->appendChild(
+      array(
+        $header,
+        $list,
+      ));
+
+    $crumbs = $this
+      ->buildApplicationCrumbs($nav)
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName($title)
+          ->setHref($this->getApplicationURI('filter/'.$filter.'/')));
+
+    $nav->setCrumbs($crumbs);
 
     return $this->buildApplicationPage(
       $nav,
@@ -71,17 +77,39 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
 
     $this->loadHandles(mpull($pastes, 'getAuthorPHID'));
 
+    $lang_map = PhabricatorEnv::getEnvConfig('pygments.dropdown-choices');
+
     $list = new PhabricatorObjectItemListView();
+    $list->setUser($user);
     foreach ($pastes as $paste) {
-      $created = phabricator_datetime($paste->getDateCreated(), $user);
+      $created = phabricator_date($paste->getDateCreated(), $user);
+      $author = $this->getHandle($paste->getAuthorPHID())->renderLink();
+      $source_code = $this->buildSourceCodeView($paste, 5)->render();
+      $source_code = phutil_render_tag(
+        'div',
+        array(
+          'class' => 'phabricator-source-code-summary',
+        ),
+        $source_code);
+
+      $line_count = count(explode("\n", $paste->getContent()));
+      $line_count = pht(
+        '%s Line(s)',
+        new PhutilNumber($line_count));
 
       $item = id(new PhabricatorObjectItemView())
         ->setHeader($paste->getFullName())
         ->setHref('/P'.$paste->getID())
-        ->addDetail(
-          pht('Author'),
-          $this->getHandle($paste->getAuthorPHID())->renderLink())
-        ->addAttribute(pht('Created %s', $created));
+        ->setObject($paste)
+        ->addAttribute(pht('Created %s by %s', $created, $author))
+        ->addIcon('none', $line_count)
+        ->appendChild($source_code);
+
+      $lang_name = $paste->getLanguage();
+      if ($lang_name) {
+        $lang_name = idx($lang_map, $lang_name, $lang_name);
+        $item->addIcon('none', phutil_escape_html($lang_name));
+      }
 
       $list->addItem($item);
     }

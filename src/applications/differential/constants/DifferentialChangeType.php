@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialChangeType {
 
   const TYPE_ADD        = 1;
@@ -109,17 +93,17 @@ final class DifferentialChangeType {
   }
 
   public static function getFullNameForChangeType($type) {
-    static $types = array(
-      self::TYPE_ADD        => 'Added',
-      self::TYPE_CHANGE     => 'Modified',
-      self::TYPE_DELETE     => 'Deleted',
-      self::TYPE_MOVE_AWAY  => 'Moved Away',
-      self::TYPE_COPY_AWAY  => 'Copied Away',
-      self::TYPE_MOVE_HERE  => 'Moved Here',
-      self::TYPE_COPY_HERE  => 'Copied Here',
-      self::TYPE_MULTICOPY  => 'Deleted After Multiple Copy',
-      self::TYPE_MESSAGE    => 'Commit Message',
-      self::TYPE_CHILD      => 'Contents Modified',
+    $types = array(
+      self::TYPE_ADD        => pht('Added'),
+      self::TYPE_CHANGE     => pht('Modified'),
+      self::TYPE_DELETE     => pht('Deleted'),
+      self::TYPE_MOVE_AWAY  => pht('Moved Away'),
+      self::TYPE_COPY_AWAY  => pht('Copied Away'),
+      self::TYPE_MOVE_HERE  => pht('Moved Here'),
+      self::TYPE_COPY_HERE  => pht('Copied Here'),
+      self::TYPE_MULTICOPY  => pht('Deleted After Multiple Copy'),
+      self::TYPE_MESSAGE    => pht('Commit Message'),
+      self::TYPE_CHILD      => pht('Contents Modified'),
     );
     return idx($types, coalesce($type, '?'), 'Unknown');
   }

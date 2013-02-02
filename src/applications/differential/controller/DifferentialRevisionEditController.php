@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionEditController extends DifferentialController {
 
   private $id;
@@ -62,8 +46,6 @@ final class DifferentialRevisionEditController extends DifferentialController {
 
 
     if ($request->isFormPost() && !$request->getStr('viaDiffView')) {
-      $user_phid = $request->getUser()->getPHID();
-
       foreach ($aux_fields as $aux_field) {
         $aux_field->setValueFromRequest($request);
         try {
@@ -74,7 +56,8 @@ final class DifferentialRevisionEditController extends DifferentialController {
       }
 
       if (!$errors) {
-        $editor = new DifferentialRevisionEditor($revision, $user_phid);
+        $editor = new DifferentialRevisionEditor($revision);
+        $editor->setActor($request->getUser());
         if ($diff) {
           $editor->addDiff($diff, $request->getStr('comments'));
         }
@@ -92,8 +75,7 @@ final class DifferentialRevisionEditController extends DifferentialController {
     }
     $phids = array_mergev($aux_phids);
     $phids = array_unique($phids);
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
     foreach ($aux_fields as $key => $aux_field) {
       $aux_field->setHandles(array_select_keys($handles, $aux_phids[$key]));
     }
@@ -113,7 +95,7 @@ final class DifferentialRevisionEditController extends DifferentialController {
     $error_view = null;
     if ($errors) {
       $error_view = id(new AphrontErrorView())
-        ->setTitle('Form Errors')
+        ->setTitle(pht('Form Errors'))
         ->setErrors($errors);
     }
 
@@ -121,13 +103,13 @@ final class DifferentialRevisionEditController extends DifferentialController {
       $form
         ->appendChild(
           id(new AphrontFormTextAreaControl())
-            ->setLabel('Comments')
+            ->setLabel(pht('Comments'))
             ->setName('comments')
-            ->setCaption("Explain what's new in this diff.")
+            ->setCaption(pht("Explain what's new in this diff."))
             ->setValue($request->getStr('comments')))
         ->appendChild(
           id(new AphrontFormSubmitControl())
-            ->setValue('Save'))
+            ->setValue(pht('Save')))
         ->appendChild(
           id(new AphrontFormDividerControl()));
     }
@@ -152,21 +134,22 @@ final class DifferentialRevisionEditController extends DifferentialController {
     $panel = new AphrontPanelView();
     if ($revision->getID()) {
       if ($diff) {
-        $panel->setHeader('Update Differential Revision');
+        $panel->setHeader(pht('Update Differential Revision'));
       } else {
-        $panel->setHeader('Edit Differential Revision');
+        $panel->setHeader(pht('Edit Differential Revision'));
       }
     } else {
-      $panel->setHeader('Create New Differential Revision');
+      $panel->setHeader(pht('Create New Differential Revision'));
     }
 
     $panel->appendChild($form);
     $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+    $panel->setNoBackground();
 
     return $this->buildStandardPageResponse(
       array($error_view, $panel),
       array(
-        'title' => 'Edit Differential Revision',
+        'title' => pht('Edit Differential Revision'),
       ));
   }
 

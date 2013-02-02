@@ -1,22 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root.'/scripts/__init_script__.php';
 
@@ -34,6 +18,11 @@ $args->parse(
       'name'      => 'no-purge',
       'help'      => 'Do not clear all symbols for this project before '.
                      'uploading new symbols. Useful for incremental updating.',
+    ),
+    array(
+      'name'      => 'ignore-errors',
+      'help'      => 'If a line can\'t be parsed, ignore that line and '.
+                     'continue instead of exiting.',
     ),
     array(
       'name'      => 'more',
@@ -66,72 +55,80 @@ $input = explode("\n", $input);
 
 $symbols = array();
 foreach ($input as $key => $line) {
-  $line_no = $key + 1;
-  $matches = null;
-  $ok = preg_match(
-    '/^((?P<context>[^ ]+)? )?(?P<name>[^ ]+) (?P<type>[^ ]+) '.
-    '(?P<lang>[^ ]+) (?P<line>\d+) (?P<path>.*)$/',
-    $line,
-    $matches);
-  if (!$ok) {
-    throw new Exception(
-      "Line #{$line_no} of input is invalid. Expected five or six ".
-      "space-delimited fields: maybe symbol context, symbol name, symbol ".
-      "type, symbol language, line number, path. ".
-      "For example:\n\n".
-      "idx function php 13 /path/to/some/file.php\n\n".
-      "Actual line was:\n\n".
-      "{$line}");
-  }
-  if (empty($matches['context'])) {
-    $matches['context'] = '';
-  }
-  $context     = $matches['context'];
-  $name        = $matches['name'];
-  $type        = $matches['type'];
-  $lang        = $matches['lang'];
-  $line_number = $matches['line'];
-  $path        = $matches['path'];
+  try {
+    $line_no = $key + 1;
+    $matches = null;
+    $ok = preg_match(
+      '/^((?P<context>[^ ]+)? )?(?P<name>[^ ]+) (?P<type>[^ ]+) '.
+      '(?P<lang>[^ ]+) (?P<line>\d+) (?P<path>.*)$/',
+      $line,
+      $matches);
+    if (!$ok) {
+      throw new Exception(
+        "Line #{$line_no} of input is invalid. Expected five or six ".
+        "space-delimited fields: maybe symbol context, symbol name, symbol ".
+        "type, symbol language, line number, path. ".
+        "For example:\n\n".
+        "idx function php 13 /path/to/some/file.php\n\n".
+        "Actual line was:\n\n".
+        "{$line}");
+    }
+    if (empty($matches['context'])) {
+      $matches['context'] = '';
+    }
+    $context     = $matches['context'];
+    $name        = $matches['name'];
+    $type        = $matches['type'];
+    $lang        = $matches['lang'];
+    $line_number = $matches['line'];
+    $path        = $matches['path'];
 
-  if (strlen($context) > 128) {
-    throw new Exception(
-      "Symbol context '{$context}' defined on line #{$line_no} is too long, ".
-      "maximum symbol context length is 128 characters.");
-  }
+    if (strlen($context) > 128) {
+      throw new Exception(
+        "Symbol context '{$context}' defined on line #{$line_no} is too long, ".
+        "maximum symbol context length is 128 characters.");
+    }
 
-  if (strlen($name) > 128) {
-    throw new Exception(
-      "Symbol name '{$name}' defined on line #{$line_no} is too long, maximum ".
-      "symbol name length is 128 characters.");
-  }
+    if (strlen($name) > 128) {
+      throw new Exception(
+        "Symbol name '{$name}' defined on line #{$line_no} is too long, ".
+        "maximum symbol name length is 128 characters.");
+    }
 
-  if (strlen($type) > 12) {
-    throw new Exception(
-      "Symbol type '{$type}' defined on line #{$line_no} is too long, maximum ".
-      "symbol type length is 12 characters.");
-  }
+    if (strlen($type) > 12) {
+      throw new Exception(
+        "Symbol type '{$type}' defined on line #{$line_no} is too long, ".
+        "maximum symbol type length is 12 characters.");
+    }
 
-  if (strlen($lang) > 32) {
-    throw new Exception(
-      "Symbol language '{$lang}' defined on line #{$line_no} is too long, ".
-      "maximum symbol language length is 32 characters.");
-  }
+    if (strlen($lang) > 32) {
+      throw new Exception(
+        "Symbol language '{$lang}' defined on line #{$line_no} is too long, ".
+        "maximum symbol language length is 32 characters.");
+    }
 
-  if (!strlen($path) || $path[0] != 0) {
-    throw new Exception(
-      "Path '{$path}' defined on line #{$line_no} is invalid. Paths should be ".
-      "begin with '/' and specify a path from the root of the project, like ".
-      "'/src/utils/utils.php'.");
-  }
+    if (!strlen($path) || $path[0] != 0) {
+      throw new Exception(
+        "Path '{$path}' defined on line #{$line_no} is invalid. Paths should ".
+        "begin with '/' and specify a path from the root of the project, like ".
+        "'/src/utils/utils.php'.");
+    }
 
-  $symbols[] = array(
-    'ctxt' => $context,
-    'name' => $name,
-    'type' => $type,
-    'lang' => $lang,
-    'line' => $line_number,
-    'path' => $path,
-  );
+    $symbols[] = array(
+      'ctxt' => $context,
+      'name' => $name,
+      'type' => $type,
+      'lang' => $lang,
+      'line' => $line_number,
+      'path' => $path,
+    );
+  } catch (Exception $e) {
+    if ($args->getArg('ignore-errors')) {
+      continue;
+    } else {
+      throw $e;
+    }
+  }
 }
 
 echo "Looking up path IDs...\n";

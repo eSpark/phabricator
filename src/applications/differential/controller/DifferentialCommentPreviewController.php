@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialCommentPreviewController
   extends DifferentialController {
 
@@ -33,7 +17,6 @@ final class DifferentialCommentPreviewController
 
     $action = $request->getStr('action');
 
-    $engine = PhabricatorMarkupEngine::newDifferentialMarkupEngine();
 
     $comment = new DifferentialComment();
     $comment->setContent($request->getStr('content'));
@@ -42,26 +25,26 @@ final class DifferentialCommentPreviewController
 
     $handles = array($author_phid);
 
-    $reviewers = $request->getStr('reviewers');
-    if (($action == DifferentialAction::ACTION_ADDREVIEWERS
-        || $action == DifferentialAction::ACTION_REQUEST) && $reviewers) {
-      $reviewers = explode(',', $reviewers);
+    $reviewers = $request->getStrList('reviewers');
+    if (DifferentialAction::allowReviewers($action) && $reviewers) {
       $comment->setMetadata(array(
         DifferentialComment::METADATA_ADDED_REVIEWERS => $reviewers));
       $handles = array_merge($handles, $reviewers);
     }
 
-    $ccs = $request->getStr('ccs');
+    $ccs = $request->getStrList('ccs');
     if ($action == DifferentialAction::ACTION_ADDCCS && $ccs) {
-      $ccs = explode(',', $ccs);
       $comment->setMetadata(array(
         DifferentialComment::METADATA_ADDED_CCS => $ccs));
       $handles = array_merge($handles, $ccs);
     }
 
-    $handles = id(new PhabricatorObjectHandleData($handles))
-      ->setViewer($request->getUser())
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($handles);
+
+    $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer($request->getUser());
+    $engine->addObject($comment, DifferentialComment::MARKUP_FIELD_BODY);
+    $engine->process();
 
     $view = new DifferentialRevisionCommentView();
     $view->setUser($request->getUser());
@@ -71,12 +54,20 @@ final class DifferentialCommentPreviewController
     $view->setPreview(true);
     $view->setTargetDiff(null);
 
-    $draft = new PhabricatorDraft();
-    $draft
+    $metadata = array(
+      'reviewers' => $reviewers,
+      'ccs' => $ccs,
+    );
+    if ($action != DifferentialAction::ACTION_COMMENT) {
+      $metadata['action'] = $action;
+    }
+
+    id(new PhabricatorDraft())
       ->setAuthorPHID($author_phid)
       ->setDraftKey('differential-comment-'.$this->id)
       ->setDraft($comment->getContent())
-      ->replace();
+      ->setMetadata($metadata)
+      ->replaceOrDelete();
 
     return id(new AphrontAjaxResponse())
       ->setContent($view->render());

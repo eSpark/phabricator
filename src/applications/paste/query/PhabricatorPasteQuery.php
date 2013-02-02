@@ -1,22 +1,7 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-final class PhabricatorPasteQuery extends PhabricatorCursorPagedPolicyQuery {
+final class PhabricatorPasteQuery
+  extends PhabricatorCursorPagedPolicyAwareQuery {
 
   private $ids;
   private $phids;
@@ -24,6 +9,7 @@ final class PhabricatorPasteQuery extends PhabricatorCursorPagedPolicyQuery {
   private $parentPHIDs;
 
   private $needContent;
+  private $needRawContent;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -50,6 +36,11 @@ final class PhabricatorPasteQuery extends PhabricatorCursorPagedPolicyQuery {
     return $this;
   }
 
+  public function needRawContent($need_raw_content) {
+    $this->needRawContent = $need_raw_content;
+    return $this;
+  }
+
   public function loadPage() {
     $table = new PhabricatorPaste();
     $conn_r = $table->establishConnection('r');
@@ -64,23 +55,15 @@ final class PhabricatorPasteQuery extends PhabricatorCursorPagedPolicyQuery {
 
     $pastes = $table->loadAllFromArray($data);
 
-    if ($pastes && $this->needContent) {
-      $file_phids = mpull($pastes, 'getFilePHID');
-      $files = id(new PhabricatorFile())->loadAllWhere(
-        'phid IN (%Ls)',
-        $file_phids);
-      $files = mpull($files, null, 'getPHID');
-      foreach ($pastes as $paste) {
-        $file = idx($files, $paste->getFilePHID());
-        if ($file) {
-          $paste->attachContent($file->loadFileData());
-        } else {
-          $paste->attachContent('');
-        }
-      }
+    if ($pastes && $this->needRawContent) {
+      $this->loadRawContent($pastes);
     }
 
-    return $this->processResults($pastes);
+    if ($pastes && $this->needContent) {
+      $this->loadContent($pastes);
+    }
+
+    return $pastes;
   }
 
   protected function buildWhereClause($conn_r) {
@@ -117,6 +100,84 @@ final class PhabricatorPasteQuery extends PhabricatorCursorPagedPolicyQuery {
     }
 
     return $this->formatWhereClause($where);
+  }
+
+  private function getContentCacheKey(PhabricatorPaste $paste) {
+    return 'P'.$paste->getID().':content/'.$paste->getLanguage();
+  }
+
+  private function loadRawContent(array $pastes) {
+    $file_phids = mpull($pastes, 'getFilePHID');
+    $files = id(new PhabricatorFile())->loadAllWhere(
+      'phid IN (%Ls)',
+      $file_phids);
+    $files = mpull($files, null, 'getPHID');
+
+    foreach ($pastes as $paste) {
+      $file = idx($files, $paste->getFilePHID());
+      if ($file) {
+        $paste->attachRawContent($file->loadFileData());
+      } else {
+        $paste->attachRawContent('');
+      }
+    }
+  }
+
+  private function loadContent(array $pastes) {
+    $cache = new PhabricatorKeyValueDatabaseCache();
+
+    $cache = new PhutilKeyValueCacheProfiler($cache);
+    $cache->setProfiler(PhutilServiceProfiler::getInstance());
+
+    $keys = array();
+    foreach ($pastes as $paste) {
+      $keys[] = $this->getContentCacheKey($paste);
+    }
+
+
+    $caches = $cache->getKeys($keys);
+
+    $need_raw = array();
+    foreach ($pastes as $paste) {
+      $key = $this->getContentCacheKey($paste);
+      if (isset($caches[$key])) {
+        $paste->attachContent($caches[$key]);
+      } else {
+        $need_raw[] = $paste;
+      }
+    }
+
+    if (!$need_raw) {
+      return;
+    }
+
+    $write_data = array();
+
+    $this->loadRawContent($need_raw);
+    foreach ($need_raw as $paste) {
+      $content = $this->buildContent($paste);
+      $paste->attachContent($content);
+
+      $write_data[$this->getContentCacheKey($paste)] = (string)$content;
+    }
+
+    $cache->setKeys($write_data);
+  }
+
+
+  private function buildContent(PhabricatorPaste $paste) {
+    $language = $paste->getLanguage();
+    $source = $paste->getRawContent();
+
+    if (empty($language)) {
+      return PhabricatorSyntaxHighlighter::highlightWithFilename(
+        $paste->getTitle(),
+        $source);
+    } else {
+      return PhabricatorSyntaxHighlighter::highlightWithLanguage(
+        $language,
+        $source);
+    }
   }
 
 }

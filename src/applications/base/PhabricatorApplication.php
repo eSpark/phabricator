@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @task  info  Application Information
  * @task  ui    UI Integration
@@ -25,6 +9,42 @@
  * @group apps
  */
 abstract class PhabricatorApplication {
+
+  const GROUP_CORE            = 'core';
+  const GROUP_COMMUNICATION   = 'communication';
+  const GROUP_ORGANIZATION    = 'organization';
+  const GROUP_UTILITIES       = 'util';
+  const GROUP_ADMIN           = 'admin';
+  const GROUP_DEVELOPER       = 'developer';
+  const GROUP_MISC            = 'misc';
+
+  const TILE_INVISIBLE        = 'invisible';
+  const TILE_HIDE             = 'hide';
+  const TILE_SHOW             = 'show';
+  const TILE_FULL             = 'full';
+
+  public static function getApplicationGroups() {
+    return array(
+      self::GROUP_CORE          => pht('Core Applications'),
+      self::GROUP_COMMUNICATION => pht('Communication'),
+      self::GROUP_ORGANIZATION  => pht('Organization'),
+      self::GROUP_UTILITIES     => pht('Utilities'),
+      self::GROUP_ADMIN         => pht('Administration'),
+      self::GROUP_DEVELOPER     => pht('Developer Tools'),
+      self::GROUP_MISC          => pht('Miscellaneous Applications'),
+    );
+  }
+
+  public static function getTileDisplayName($constant) {
+    $names = array(
+      self::TILE_INVISIBLE => pht('Invisible'),
+      self::TILE_HIDE => pht('Hidden'),
+      self::TILE_SHOW => pht('Show Small Tile'),
+      self::TILE_FULL => pht('Show Large Tile'),
+    );
+    return idx($names, $constant);
+  }
+
 
 
 /* -(  Application Information  )-------------------------------------------- */
@@ -39,6 +59,27 @@ abstract class PhabricatorApplication {
   }
 
   public function isEnabled() {
+    return true;
+  }
+
+  public function isInstalled() {
+    $uninstalled =
+      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
+
+      if (!$this->canUninstall()) {
+        return true;
+      } else if (isset($uninstalled[get_class($this)])) {
+        return false;
+      } else {
+        return true;
+      }
+  }
+
+  public function isBeta() {
+    return false;
+  }
+
+  public function canUninstall() {
     return true;
   }
 
@@ -58,16 +99,20 @@ abstract class PhabricatorApplication {
     return null;
   }
 
-  public function getAutospriteName() {
-    return 'default';
+  public function getIconName() {
+    return 'application';
   }
 
   public function shouldAppearInLaunchView() {
     return true;
   }
 
-  public function getCoreApplicationOrder() {
-    return null;
+  public function getApplicationOrder() {
+    return PHP_INT_MAX;
+  }
+
+  public function getApplicationGroup() {
+    return self::GROUP_MISC;
   }
 
   public function getTitleGlyph() {
@@ -77,13 +122,8 @@ abstract class PhabricatorApplication {
   public function getHelpURI() {
     // TODO: When these applications get created, link to their docs:
     //
-    //  - Conduit
     //  - Drydock
-    //  - Herald
     //  - OAuth Server
-    //  - Owners
-    //  - Phame
-    //  - Slowvote
 
 
     return null;
@@ -91,6 +131,25 @@ abstract class PhabricatorApplication {
 
   public function getEventListeners() {
     return array();
+  }
+
+  public function getDefaultTileDisplay(PhabricatorUser $user) {
+    switch ($this->getApplicationGroup()) {
+      case self::GROUP_CORE:
+        return self::TILE_FULL;
+      case self::GROUP_UTILITIES:
+      case self::GROUP_DEVELOPER:
+        return self::TILE_HIDE;
+      case self::GROUP_ADMIN:
+        if ($user->getIsAdmin()) {
+          return self::TILE_SHOW;
+        } else {
+          return self::TILE_INVISIBLE;
+        }
+        break;
+      default:
+        return self::TILE_SHOW;
+    }
   }
 
 
@@ -113,8 +172,30 @@ abstract class PhabricatorApplication {
 /* -(  UI Integration  )----------------------------------------------------- */
 
 
+  /**
+   * Render status elements (like "3 Waiting Reviews") for application list
+   * views. These provide a way to alert users to new or pending action items
+   * in applications.
+   *
+   * @param PhabricatorUser Viewing user.
+   * @return list<PhabricatorApplicationStatusView> Application status elements.
+   * @task ui
+   */
   public function loadStatus(PhabricatorUser $user) {
     return array();
+  }
+
+
+  /**
+   * You can provide an optional piece of flavor text for the application. This
+   * is currently rendered in application launch views if the application has no
+   * status elements.
+   *
+   * @return string|null Flavor text.
+   * @task ui
+   */
+  public function getFlavorText() {
+    return null;
   }
 
 
@@ -125,7 +206,7 @@ abstract class PhabricatorApplication {
    * @param  AphrontController  The current controller. May be null for special
    *                            pages like 404, exception handlers, etc.
    * @return list<PhabricatorMainMenuIconView> List of menu items.
-   * @task UI
+   * @task ui
    */
   public function buildMainMenuItems(
     PhabricatorUser $user,
@@ -134,26 +215,93 @@ abstract class PhabricatorApplication {
   }
 
 
+  /**
+   * On the Phabricator homepage sidebar, this function returns the URL for
+   * a quick create X link which is displayed in the wide button only.
+   *
+   * @return string
+   * @task ui
+   */
+  public function getQuickCreateURI() {
+    return null;
+  }
+
+
 /* -(  Application Management  )--------------------------------------------- */
 
+  public static function getByClass($class_name) {
 
-  public static function getAllInstalledApplications() {
+    $selected = null;
+    $applications = PhabricatorApplication::getAllApplications();
+
+    foreach ($applications as $application) {
+      if (get_class($application) == $class_name) {
+        $selected = $application;
+        break;
+      }
+    }
+    return $selected;
+  }
+
+  public static function getAllApplications() {
+
     $classes = id(new PhutilSymbolLoader())
-      ->setAncestorClass(__CLASS__)
-      ->setConcreteOnly(true)
-      ->selectAndLoadSymbols();
+            ->setAncestorClass(__CLASS__)
+            ->setConcreteOnly(true)
+            ->selectAndLoadSymbols();
 
     $apps = array();
+
     foreach ($classes as $class) {
       $app = newv($class['name'], array());
-      if (!$app->isEnabled()) {
-        continue;
-      }
       $apps[] = $app;
     }
 
     return $apps;
   }
 
+  public static function getAllInstalledApplications() {
+    static $applications;
+
+    $show_beta =
+      PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
+
+    $uninstalled =
+      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
+
+
+
+    if (empty($applications)) {
+      $classes = id(new PhutilSymbolLoader())
+        ->setAncestorClass(__CLASS__)
+        ->setConcreteOnly(true)
+        ->selectAndLoadSymbols();
+
+      $apps = array();
+      foreach ($classes as $class) {
+
+      if (isset($uninstalled[$class['name']])) {
+        continue;
+      }
+
+      $app = newv($class['name'], array());
+
+      if (!$app->isEnabled()) {
+          continue;
+      }
+
+      if (!$show_beta && $app->isBeta()) {
+          continue;
+      }
+
+      $apps[] = $app;
+      }
+
+      $applications = $apps;
+    }
+
+    return $applications;
+  }
 
 }
+

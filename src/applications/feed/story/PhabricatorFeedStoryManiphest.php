@@ -1,37 +1,15 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorFeedStoryManiphest
   extends PhabricatorFeedStory {
 
-  public function getRequiredHandlePHIDs() {
-    $data = $this->getStoryData();
-    return array_filter(
-      array(
-        $this->getStoryData()->getAuthorPHID(),
-        $data->getValue('taskPHID'),
-        $data->getValue('ownerPHID'),
-      ));
+  public function getPrimaryObjectPHID() {
+    return $this->getValue('taskPHID');
   }
 
-  public function getRequiredObjectPHIDs() {
+  public function getRequiredHandlePHIDs() {
     return array(
-      $this->getStoryData()->getAuthorPHID(),
+      $this->getValue('ownerPHID'),
     );
   }
 
@@ -39,6 +17,7 @@ final class PhabricatorFeedStoryManiphest
     $data = $this->getStoryData();
 
     $view = new PhabricatorFeedStoryView();
+    $view->setViewed($this->getHasViewed());
 
     $line = $this->getLineForData($data);
     $view->setTitle($line);
@@ -62,17 +41,8 @@ final class PhabricatorFeedStoryManiphest
       $view->setOneLineStory(true);
     }
 
-    return $view;
-  }
-
-  public function renderNotificationView() {
-    $data = $this->getStoryData();
-
-    $view = new PhabricatorNotificationStoryView();
-
-    $view->setTitle($this->getLineForData($data));
-    $view->setEpoch($data->getEpoch());
-    $view->setViewed($this->getHasViewed());
+    $href = $this->getHandle($data->getValue('taskPHID'))->getURI();
+    $view->setHref($href);
 
     return $view;
   }
@@ -110,6 +80,44 @@ final class PhabricatorFeedStoryManiphest
     }
 
     return $one_line;
+  }
+
+  public function renderText() {
+    $actor_phid = $this->getAuthorPHID();
+    $author_name = $this->getHandle($actor_phid)->getLinkName();
+
+    $owner_phid = $this->getValue('ownerPHID');
+    $owner_name = $this->getHandle($owner_phid)->getLinkName();
+
+    $task_phid = $this->getPrimaryObjectPHID();
+    $task_handle = $this->getHandle($task_phid);
+    $task_title = $task_handle->getLinkName();
+    $task_uri = PhabricatorEnv::getURI($task_handle->getURI());
+
+    $action = $this->getValue('action');
+    $verb = ManiphestAction::getActionPastTenseVerb($action);
+
+    switch ($action) {
+      case ManiphestAction::ACTION_ASSIGN:
+      case ManiphestAction::ACTION_REASSIGN:
+        if ($owner_phid) {
+          if ($owner_phid == $actor_phid) {
+            $text = "{$author_name} claimed {$task_title}";
+          } else {
+            $text = "{$author_name} {$verb} {$task_title} to {$owner_name}";
+          }
+        } else {
+          $text = "{$author_name} placed {$task_title} up for grabs";
+        }
+        break;
+      default:
+        $text = "{$author_name} {$verb} {$task_title}";
+        break;
+    }
+
+    $text .= " {$task_uri}";
+
+    return $text;
   }
 
   public function getNotificationAggregations() {

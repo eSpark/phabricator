@@ -1,26 +1,13 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group markup
  */
 final class PhabricatorRemarkupRuleEmbedFile
   extends PhutilRemarkupRule {
+
+  const KEY_RULE_EMBED_FILE = 'rule.embed.file';
+  const KEY_EMBED_FILE_PHIDS = 'phabricator.embedded-file-phids';
 
   public function apply($text) {
     return preg_replace_callback(
@@ -40,6 +27,13 @@ final class PhabricatorRemarkupRuleEmbedFile
     if (!$file) {
       return $matches[0];
     }
+    $phid = $file->getPHID();
+
+    $engine = $this->getEngine();
+    $token = $engine->storeText('');
+    $metadata_key = self::KEY_RULE_EMBED_FILE;
+    $metadata = $engine->getTextMetadata($metadata_key, array());
+    $bundle = array('token' => $token);
 
     $options = array(
       'size'    => 'thumb',
@@ -50,92 +44,140 @@ final class PhabricatorRemarkupRuleEmbedFile
 
     if (!empty($matches[2])) {
       $matches[2] = trim($matches[2], ', ');
-      $options = PhutilSimpleOptions::parse($matches[2]) + $options;
+      $parser = new PhutilSimpleOptions();
+      $options = $parser->parse($matches[2]) + $options;
     }
-
     $file_name = coalesce($options['name'], $file->getName());
+    $options['name'] = $file_name;
 
-    if (!$file->isViewableImage() || $options['layout'] == 'link') {
-      // If a file isn't in image, just render a link to it.
-      $link = phutil_render_tag(
-        'a',
-        array(
-          'href'    => $file->getBestURI(),
-          'target'  => '_blank',
-          'class'   => 'phabricator-remarkup-embed-layout-link',
-        ),
-        phutil_escape_html($file_name));
-      return $this->getEngine()->storeText($link);
-    }
-
-    $attrs = array(
-      'class' => 'phabricator-remarkup-embed-image',
-    );
-
-    switch ($options['size']) {
+    $attrs = array();
+    switch ((string)$options['size']) {
       case 'full':
         $attrs['src'] = $file->getBestURI();
-        $link = null;
+        $options['image_class'] = null;
+        $file_data = $file->getMetadata();
+        $height = idx($file_data, PhabricatorFile::METADATA_IMAGE_HEIGHT);
+        if ($height) {
+          $attrs['height'] = $height;
+        }
+        $width = idx($file_data, PhabricatorFile::METADATA_IMAGE_WIDTH);
+        if ($width) {
+          $attrs['width'] = $width;
+        }
         break;
       case 'thumb':
       default:
-        $attrs['src'] = $file->getThumb160x120URI();
-        $attrs['width'] = 160;
-        $attrs['height'] = 120;
-        $link = $file->getBestURI();
+        $attrs['src'] = $file->getPreview220URI();
+        $dimensions =
+          PhabricatorImageTransformer::getPreviewDimensions($file, 220);
+        $attrs['width'] = $dimensions['sdx'];
+        $attrs['height'] = $dimensions['sdy'];
+        $options['image_class'] = 'phabricator-remarkup-embed-image';
         break;
     }
+    $bundle['attrs'] = $attrs;
+    $bundle['options'] = $options;
 
-    $embed = phutil_render_tag('img', $attrs);
+    $bundle['meta'] = array(
+      'phid'     => $file->getPHID(),
+      'viewable' => $file->isViewableImage(),
+      'uri'      => $file->getBestURI(),
+      'dUri'     => $file->getDownloadURI(),
+      'name'     => $options['name'],
+    );
+    $metadata[$phid][] = $bundle;
+    $engine->setTextMetadata($metadata_key, $metadata);
 
-    if ($link) {
-      $embed = phutil_render_tag(
-        'a',
-        array(
-          'href' => $link,
-          'target' => '_blank',
-        ),
-        $embed);
+    return $token;
+  }
+
+  public function didMarkupText() {
+    $engine = $this->getEngine();
+
+    $metadata_key = self::KEY_RULE_EMBED_FILE;
+    $metadata = $engine->getTextMetadata($metadata_key, array());
+
+    if (!$metadata) {
+      return;
     }
 
-    $layout_class = null;
-    switch ($options['layout']) {
-      case 'right':
-      case 'center':
-      case 'inline':
-      case 'left':
-        $layout_class = 'phabricator-remarkup-embed-layout-'.$options['layout'];
-        break;
-      default:
-        $layout_class = 'phabricator-remarkup-embed-layout-left';
-        break;
-    }
+    $file_phids = array();
+    foreach ($metadata as $phid => $bundles) {
+      foreach ($bundles as $data) {
 
-    if ($options['float']) {
-      switch ($options['layout']) {
-        case 'center':
-        case 'inline':
-          break;
-        case 'right':
-          $layout_class .= ' phabricator-remarkup-embed-float-right';
-          break;
-        case 'left':
-        default:
-          $layout_class .= ' phabricator-remarkup-embed-float-left';
-          break;
+        $options = $data['options'];
+        $meta    = $data['meta'];
+
+        if (!$meta['viewable'] || $options['layout'] == 'link') {
+          $link = id(new PhabricatorFileLinkView())
+            ->setFilePHID($meta['phid'])
+            ->setFileName($meta['name'])
+            ->setFileDownloadURI($meta['dUri'])
+            ->setFileViewURI($meta['uri'])
+            ->setFileViewable($meta['viewable']);
+          $embed = $link->render();
+          $engine->overwriteStoredText($data['token'], $embed);
+          continue;
+        }
+
+        require_celerity_resource('lightbox-attachment-css');
+        $img = phutil_render_tag('img', $data['attrs']);
+
+        $embed = javelin_render_tag(
+          'a',
+          array(
+            'href'        => $meta['uri'],
+            'class'       => $options['image_class'],
+            'sigil'       => 'lightboxable',
+            'mustcapture' => true,
+            'meta'        => $meta,
+          ),
+          $img);
+
+        $layout_class = null;
+        switch ($options['layout']) {
+          case 'right':
+          case 'center':
+          case 'inline':
+          case 'left':
+            $layout_class = 'phabricator-remarkup-embed-layout-'.
+              $options['layout'];
+            break;
+          default:
+            $layout_class = 'phabricator-remarkup-embed-layout-left';
+            break;
+        }
+
+        if ($options['float']) {
+          switch ($options['layout']) {
+            case 'center':
+            case 'inline':
+              break;
+            case 'right':
+              $layout_class .= ' phabricator-remarkup-embed-float-right';
+              break;
+            case 'left':
+            default:
+              $layout_class .= ' phabricator-remarkup-embed-float-left';
+              break;
+          }
+        }
+
+        if ($layout_class) {
+          $embed = phutil_render_tag(
+            'div',
+            array(
+              'class' => $layout_class,
+            ),
+            $embed);
+        }
+
+        $engine->overwriteStoredText($data['token'], $embed);
       }
+      $file_phids[] = $phid;
     }
-
-    if ($layout_class) {
-      $embed = phutil_render_tag(
-        'div',
-        array(
-          'class' => $layout_class,
-        ),
-        $embed);
-    }
-
-    return $this->getEngine()->storeText($embed);
+    $engine->setTextMetadata(self::KEY_EMBED_FILE_PHIDS, $file_phids);
+    $engine->setTextMetadata($metadata_key, array());
   }
 
 }

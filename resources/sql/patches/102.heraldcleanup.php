@@ -1,24 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 echo "Cleaning up old Herald rule applied rows...\n";
+$table = new HeraldRule();
+$table->openTransaction();
+$table->beginReadLocking();
 
-$rules = id(new HeraldRule())->loadAll();
+$rules = $table->loadAll();
 foreach ($rules as $key => $rule) {
   $first_policy = HeraldRepetitionPolicyConfig::toInt(
     HeraldRepetitionPolicyConfig::FIRST);
@@ -27,7 +14,7 @@ foreach ($rules as $key => $rule) {
   }
 }
 
-$conn_w = id(new HeraldRule())->establishConnection('w');
+$conn_w = $table->establishConnection('w');
 
 $clause = '';
 if ($rules) {
@@ -47,5 +34,6 @@ do {
   echo ".";
 } while ($conn_w->getAffectedRows());
 
-echo "\n";
-echo "Done.\n";
+$table->endReadLocking();
+$table->saveTransaction();
+echo "\nDone.\n";

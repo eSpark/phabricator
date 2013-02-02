@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionChangeController extends DiffusionController {
 
   public function processRequest() {
@@ -30,13 +14,16 @@ final class DiffusionChangeController extends DiffusionController {
       // TODO: Refine this.
       return new Aphront404Response();
     }
-
-    $callsign = $drequest->getRepository()->getCallsign();
+    
+    $repository = $drequest->getRepository();
+    $callsign = $repository->getCallsign();
+    $commit = $drequest->getRawCommit();
     $changesets = array(
       0 => $changeset,
     );
 
     $changeset_view = new DifferentialChangesetListView();
+    $changeset_view->setTitle(DiffusionView::nameCommit($repository, $commit));
     $changeset_view->setChangesets($changesets);
     $changeset_view->setVisibleChangesets($changesets);
     $changeset_view->setRenderingReferences(
@@ -61,25 +48,22 @@ final class DiffusionChangeController extends DiffusionController {
       DifferentialChangesetParser::WHITESPACE_SHOW_ALL);
     $changeset_view->setUser($this->getRequest()->getUser());
 
-    $content[] = $this->buildCrumbs(
+    // TODO: This is pretty awkward, unify the CSS between Diffusion and
+    // Differential better.
+    require_celerity_resource('differential-core-view-css');
+    $content[] = $changeset_view->render();
+
+    $nav = $this->buildSideNav('change', true);
+    $nav->appendChild($content);
+    $crumbs = $this->buildCrumbs(
       array(
         'branch' => true,
         'path'   => true,
         'view'   => 'change',
       ));
+    $nav->setCrumbs($crumbs);
 
-    // TODO: This is pretty awkward, unify the CSS between Diffusion and
-    // Differential better.
-    require_celerity_resource('differential-core-view-css');
-    $content[] =
-      '<div class="differential-primary-pane">'.
-        $changeset_view->render().
-      '</div>';
-
-    $nav = $this->buildSideNav('change', true);
-    $nav->appendChild($content);
-
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       $nav,
       array(
         'title' => 'Change',

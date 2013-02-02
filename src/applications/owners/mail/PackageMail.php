@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PackageMail {
 
   protected $package;
@@ -62,8 +46,8 @@ abstract class PackageMail {
     $section[] = '  In repository '.$handles[$repository_phid]->getName().
       ' - '. PhabricatorEnv::getProductionURI($handles[$repository_phid]
       ->getURI());
-    foreach ($paths as $path => $ignored) {
-      $section[] = '    '.$path;
+    foreach ($paths as $path => $excluded) {
+      $section[] = '    '.($excluded ? 'Excluded' : 'Included').' '.$path;
     }
 
     return implode("\n", $section);
@@ -86,8 +70,11 @@ abstract class PackageMail {
     }
     $this->mailTo = $mail_to;
 
-    $paths = $package->loadPaths();
-    $this->paths = mgroup($paths, 'getRepositoryPHID', 'getPath');
+    $this->paths = array();
+    $repository_paths = mgroup($package->loadPaths(), 'getRepositoryPHID');
+    foreach ($repository_paths as $repository_phid => $paths) {
+      $this->paths[$repository_phid] = mpull($paths, 'getExcluded', 'getPath');
+    }
 
     $phids = array_merge(
       $this->mailTo,
@@ -160,7 +147,7 @@ abstract class PackageMail {
     $body[] = $this->renderAuditingEnabledSection();
     $body[] = $this->renderPathsSection();
     $body = array_filter($body);
-    return implode("\n\n", $body);
+    return implode("\n\n", $body)."\n";
   }
 
   final public function send() {

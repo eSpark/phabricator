@@ -1,44 +1,38 @@
 <?php
 
-/*
- * Copyright 2011 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorRepositoryCommitParserWorker
   extends PhabricatorWorker {
 
   protected $commit;
   protected $repository;
 
-  final public function doWork() {
+  private function loadCommit() {
+    if ($this->commit) {
+      return $this->commit;
+    }
+
     $commit_id = idx($this->getTaskData(), 'commitID');
     if (!$commit_id) {
-      return;
+      return false;
     }
 
     $commit = id(new PhabricatorRepositoryCommit())->load($commit_id);
 
     if (!$commit) {
       // TODO: Communicate permanent failure?
+      return false;
+    }
+
+    return $this->commit = $commit;
+  }
+
+  final public function doWork() {
+    if (!$this->loadCommit()) {
       return;
     }
 
-    $this->commit = $commit;
-
     $repository = id(new PhabricatorRepository())->load(
-      $commit->getRepositoryID());
+      $this->commit->getRepositoryID());
 
     if (!$repository) {
       return;
@@ -46,7 +40,7 @@ abstract class PhabricatorRepositoryCommitParserWorker
 
     $this->repository = $repository;
 
-    return $this->parseCommit($repository, $commit);
+    return $this->parseCommit($repository, $this->commit);
   }
 
   final protected function shouldQueueFollowupTasks() {
@@ -91,4 +85,17 @@ abstract class PhabricatorRepositoryCommitParserWorker
     return (bool)$bad_commit;
   }
 
+  public function renderForDisplay() {
+    $suffix = parent::renderForDisplay();
+    $commit = $this->loadCommit();
+    if (!$commit) {
+      return $suffix;
+    }
+
+    $repository = id(new PhabricatorRepository())
+      ->load($commit->getRepositoryID());
+    $link = DiffusionView::linkCommit($repository,
+                                      $commit->getCommitIdentifier());
+    return $link.$suffix;
+  }
 }

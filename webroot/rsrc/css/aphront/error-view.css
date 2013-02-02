@@ -2,82 +2,73 @@
  * @provides aphront-error-view-css
  */
 
-.aphront-error-view {
-  margin: 1em auto;
+.aphront-error-view,
+.aphront-error-view-dialogue {
+  border-style: solid;
+  border-width: 1px;
+}
 
-  -webkit-box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-  -mox-box-shadow:    1px 1px 2px rgba(0, 0, 0, 0.1);
-  box-shadow:         1px 1px 2px rgba(0, 0, 0, 0.1);
+.aphront-error-view {
+  margin: 20px;
+}
+.aphront-error-view-dialogue {
+  margin: 0px 0px 16px 0px;
+}
+
+.device-phone .aphront-error-view {
+  margin: 10px;
 }
 
 .aphront-error-view-body {
-  padding: 0.5em 1em;
-  font-size: 12px;
+  padding: 10px;
   line-height: 1.6em;
 }
 
-.aphront-error-view h1 {
-  font-size: 13px;
-  padding: 0.5em 1em;
+.aphront-error-view-head {
+  padding: 10px 10px 0 10px;
   font-weight: bold;
   color: #333333;
 }
 
-.aphront-error-view-body ul {
-  margin: 0.2em 0 0.2em 2em;
+.aphront-error-view-list {
+  margin: 0 0 0 20px;
   list-style: disc;
 }
 
-.aphront-error-width-default {
-  width: 720px;
-}
-
-.aphront-error-width-dialog {
-  width: 300px;
-}
-
-.aphront-error-width-wide {
-  width: 95%;
-}
-
 .aphront-error-severity-error {
-  border: 1px solid #aa0000;
-  background: #fff3f3;
+  color: #b94a48;
+  border-color: #eed3d7;
+  background: #f2dede;
 }
 
-.aphront-error-severity-error h1 {
-  background: #ffe3e3;
+.aphront-error-severity-error .aphront-error-view-head {
+  color: #aa0000;
 }
 
 .aphront-error-severity-warning {
-  border: 1px solid #888800;
-  background: #ffffee;
+  color: #bc7837;
+  border-color: #ebdcc1;
+  background: #fcf8e3;
 }
 
-.aphront-error-severity-warning h1 {
-  background: #ffffcc;
+.aphront-error-severity-warning .aphront-error-view-head {
+  color: #bc7837;
+  background: #fcf8e3;
 }
 
 .aphront-error-severity-notice {
-  border: 1px solid #000088;
-  background: #f3f3ff;
+  color: #3a87ad;
+  border-color: #a4bdec;
+  background: #dee7f8;
 }
 
-.aphront-error-severity-notice h1 {
-  background: #e3e3ff;
+.aphront-error-severity-notice .aphront-error-view-head {
+  color: #3a87ad;
+  background: #dee7f8;
 }
 
 .aphront-error-severity-nodata {
-  border: 1px solid #dfdfdf;
+  border-color: #dfdfdf;
   background: #f3f3f3;
-
-  color: #666666;
-
-  -webkit-box-shadow: 0px 0px 0px #000;
-  -mox-box-shadow:    0px 0px 0px #000;
-  box-shadow:         0px 0px 0px #000;
-}
-
-.aphront-error-severity-nodata h1 {
-  background: #e3e3e3;
+  color: #666;
 }

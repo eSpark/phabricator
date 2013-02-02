@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionHistoryController extends DiffusionController {
 
   public function processRequest() {
@@ -55,13 +39,6 @@ final class DiffusionHistoryController extends DiffusionController {
 
     $content = array();
 
-    $content[] = $this->buildCrumbs(
-      array(
-        'branch' => true,
-        'path'   => true,
-        'view'   => 'history',
-      ));
-
     if ($request->getBool('copies')) {
       $button_title = 'Hide Copies/Branches';
       $copies_new = null;
@@ -79,12 +56,13 @@ final class DiffusionHistoryController extends DiffusionController {
       phutil_escape_html($button_title));
 
     $history_table = new DiffusionHistoryTableView();
+    $history_table->setUser($request->getUser());
     $history_table->setDiffusionRequest($drequest);
     $history_table->setHistory($history);
     $history_table->loadRevisions();
 
     $phids = $history_table->getRequiredHandlePHIDs();
-    $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
     $history_table->setHandles($handles);
 
     if ($show_graph) {
@@ -97,6 +75,7 @@ final class DiffusionHistoryController extends DiffusionController {
     $history_panel->addButton($button);
     $history_panel->appendChild($history_table);
     $history_panel->appendChild($pager);
+    $history_panel->setNoBackground();
 
     $content[] = $history_panel;
 
@@ -105,8 +84,15 @@ final class DiffusionHistoryController extends DiffusionController {
 
     $nav = $this->buildSideNav('history', false);
     $nav->appendChild($content);
+    $crumbs = $this->buildCrumbs(
+      array(
+        'branch' => true,
+        'path'   => true,
+        'view'   => 'history',
+      ));
+    $nav->setCrumbs($crumbs);
 
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       $nav,
       array(
         'title' => 'history',

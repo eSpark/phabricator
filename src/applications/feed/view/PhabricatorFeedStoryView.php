@@ -1,35 +1,15 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorFeedStoryView extends PhabricatorFeedView {
 
   private $title;
   private $image;
   private $phid;
   private $epoch;
-  private $viewer;
+  private $viewed;
+  private $href;
 
   private $oneLine;
-
-  public function setViewer(PhabricatorUser $viewer) {
-    $this->viewer = $viewer;
-    return $this;
-  }
 
   public function setTitle($title) {
     $this->title = $title;
@@ -49,6 +29,45 @@ final class PhabricatorFeedStoryView extends PhabricatorFeedView {
   public function setOneLineStory($one_line) {
     $this->oneLine = $one_line;
     return $this;
+  }
+
+  public function setViewed($viewed) {
+    $this->viewed = $viewed;
+    return $this;
+  }
+
+  public function getViewed() {
+    return $this->viewed;
+  }
+
+  public function setHref($href) {
+    $this->href = $href;
+    return $this;
+  }
+
+  public function getHref() {
+    return $this->href;
+  }
+
+  public function renderNotification() {
+    $classes = array(
+      'phabricator-notification',
+    );
+
+    if (!$this->viewed) {
+      $classes[] = 'phabricator-notification-unread';
+    }
+
+    return javelin_render_tag(
+      'div',
+      array(
+        'class' => implode(' ', $classes),
+        'sigil' => 'notification',
+        'meta' => array(
+          'href' => $this->getHref(),
+        ),
+      ),
+      $this->title);
   }
 
   public function render() {
@@ -73,7 +92,7 @@ final class PhabricatorFeedStoryView extends PhabricatorFeedView {
         $this->renderChildren());
 
       if ($this->epoch) {
-        $foot = phabricator_datetime($this->epoch, $this->viewer);
+        $foot = phabricator_datetime($this->epoch, $this->user);
       } else {
         $foot = '';
       }

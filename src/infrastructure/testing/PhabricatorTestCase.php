@@ -1,23 +1,8 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
 
+  const NAMESPACE_PREFIX = 'phabricator_unittest_';
 
   /**
    * If true, put Lisk in process-isolated mode for the duration of the tests so
@@ -51,6 +36,7 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
 
   private static $storageFixtureReferences = 0;
   private static $storageFixture;
+  private static $storageFixtureObjectSeed = 0;
 
   protected function getPhabricatorTestCaseConfiguration() {
     return array();
@@ -105,6 +91,9 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
     }
 
     try {
+      if (phutil_is_hiphop_runtime()) {
+        $this->env->__destruct();
+      }
       unset($this->env);
     } catch (Exception $ex) {
       throw new Exception(
@@ -131,9 +120,47 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
 
   protected function newStorageFixture() {
     $bytes = Filesystem::readRandomCharacters(24);
-    $name = 'phabricator_unittest_'.$bytes;
+    $name = self::NAMESPACE_PREFIX.$bytes;
 
     return new PhabricatorStorageFixtureScopeGuard($name);
+  }
+
+  protected function getLink($method) {
+    $phabricator_project = 'PHID-APRJ-3f1fc779edeab89b2171';
+    return
+      'https://secure.phabricator.com/diffusion/symbol/'.$method.
+      '/?lang=php&projects='.$phabricator_project.
+      '&jump=true&context='.get_class($this);
+  }
+
+  /**
+   * Returns an integer seed to use when building unique identifiers (e.g.,
+   * non-colliding usernames). The seed is unstable and its value will change
+   * between test runs, so your tests must not rely on it.
+   *
+   * @return int A unique integer.
+   */
+  protected function getNextObjectSeed() {
+    self::$storageFixtureObjectSeed += mt_rand(1, 100);
+    return self::$storageFixtureObjectSeed;
+  }
+
+  protected function generateNewTestUser() {
+    $seed = $this->getNextObjectSeed();
+
+    $user = id(new PhabricatorUser())
+      ->setRealName("Test User {$seed}}")
+      ->setUserName("test{$seed}");
+
+    $email = id(new PhabricatorUserEmail())
+      ->setAddress("testuser{$seed}@example.com")
+      ->setIsVerified(1);
+
+    $editor = new PhabricatorUserEditor();
+    $editor->setActor($user);
+    $editor->createNewUser($user, $email);
+
+    return $user;
   }
 
 }

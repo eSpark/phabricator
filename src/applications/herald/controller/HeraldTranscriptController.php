@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class HeraldTranscriptController extends HeraldController {
 
   const FILTER_AFFECTED = 'affected';
@@ -61,8 +45,7 @@ final class HeraldTranscriptController extends HeraldController {
       $phids = array_unique($phids);
       $phids = array_filter($phids);
 
-      $handles = id(new PhabricatorObjectHandleData($phids))
-        ->loadHandles();
+      $handles = $this->loadViewerHandles($phids);
       $this->handles = $handles;
 
       if ($xscript->getDryRun()) {
@@ -87,12 +70,18 @@ final class HeraldTranscriptController extends HeraldController {
       $nav->appendChild($object_xscript_panel);
     }
 
-    $main_nav = $this->renderNav();
-    $main_nav->selectFilter('transcript');
-    $main_nav->appendChild($nav);
+    $crumbs = id($this->buildApplicationCrumbs())
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName(pht('Transcripts'))
+          ->setHref($this->getApplicationURI('/transcript/')))
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName($xscript->getID()));
+    $nav->setCrumbs($crumbs);
 
     return $this->buildStandardPageResponse(
-      $main_nav,
+      $nav,
       array(
         'title' => 'Transcript',
       ));
@@ -124,23 +113,15 @@ final class HeraldTranscriptController extends HeraldController {
   }
 
   private function buildSideNav() {
-    $nav = new AphrontSideNavView();
+    $nav = new AphrontSideNavFilterView();
+    $nav->setBaseURI(new PhutilURI('/herald/transcript/'.$this->id.'/'));
 
     $items = array();
     $filters = $this->getFilterMap();
     foreach ($filters as $key => $name) {
-      $nav->addNavItem(
-        phutil_render_tag(
-          'a',
-          array(
-            'href' => '/herald/transcript/'.$this->id.'/'.$key.'/',
-            'class' =>
-              ($key == $this->filter)
-                ? 'aphront-side-nav-selected'
-                : null,
-          ),
-          phutil_escape_html($name)));
+      $nav->addFilter($key, $name);
     }
+    $nav->selectFilter($this->filter, null);
 
     return $nav;
   }
@@ -348,8 +329,9 @@ final class HeraldTranscriptController extends HeraldController {
       ));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Actions Taken');
+    $panel->setHeader(pht('Actions Taken'));
     $panel->appendChild($table);
+    $panel->setNoBackground();
 
     return $panel;
   }
@@ -473,8 +455,7 @@ final class HeraldTranscriptController extends HeraldController {
     $data = array();
     if ($object_xscript) {
       $phid = $object_xscript->getPHID();
-      $handles = id(new PhabricatorObjectHandleData(array($phid)))
-        ->loadHandles();
+      $handles = $this->loadViewerHandles(array($phid));
 
       $data += array(
         'Object Name' => $object_xscript->getName(),

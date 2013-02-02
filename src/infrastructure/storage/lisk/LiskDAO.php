@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Simple object-authoritative data access object that makes it easy to build
  * stuff that you need to save to a database. Basically, it means that the
@@ -182,7 +166,6 @@
  */
 abstract class LiskDAO {
 
-  const CONFIG_OPTIMISTIC_LOCKS     = 'enable-locks';
   const CONFIG_IDS                  = 'id-mechanism';
   const CONFIG_TIMESTAMPS           = 'timestamps';
   const CONFIG_AUX_PHID             = 'auxiliary-phid';
@@ -194,20 +177,27 @@ abstract class LiskDAO {
   const SERIALIZATION_PHP           = 'php';
 
   const IDS_AUTOINCREMENT           = 'ids-auto';
+  const IDS_COUNTER                 = 'ids-counter';
   const IDS_PHID                    = 'ids-phid';
   const IDS_MANUAL                  = 'ids-manual';
+
+  const COUNTER_TABLE_NAME          = 'lisk_counter';
 
   private $__dirtyFields            = array();
   private $__missingFields          = array();
   private static $processIsolationLevel       = 0;
   private static $transactionIsolationLevel   = 0;
-  private static $__checkedClasses = array();
 
   private $__ephemeral = false;
 
   private static $connections       = array();
 
   private $inSet = null;
+
+  protected $id;
+  protected $phid;
+  protected $dateCreated;
+  protected $dateModified;
 
   /**
    *  Build an empty object.
@@ -222,30 +212,6 @@ abstract class LiskDAO {
 
     if ($this->getConfigOption(self::CONFIG_PARTIAL_OBJECTS)) {
       $this->resetDirtyFields();
-
-      $this_class = get_class($this);
-      if (empty(self::$__checkedClasses[$this_class])) {
-        self::$__checkedClasses = true;
-
-        if (PhabricatorEnv::getEnvConfig('lisk.check_property_methods')) {
-          $class = new ReflectionClass(get_class($this));
-          $methods = $class->getMethods();
-          $properties = $this->getProperties();
-          foreach ($methods as $method) {
-            $name = strtolower($method->getName());
-            if (!(strncmp($name, 'get', 3) && strncmp($name, 'set', 3))) {
-              $name = substr($name, 3);
-              $declaring_class_name = $method->getDeclaringClass()->getName();
-              if (isset($properties[$name]) &&
-                  $declaring_class_name !== 'LiskDAO') {
-                throw new Exception(
-                  "Cannot implement method {$method->getName()} in ".
-                  "{$declaring_class_name}.");
-              }
-            }
-          }
-        }
-      }
     }
   }
 
@@ -323,7 +289,7 @@ abstract class LiskDAO {
 
 
   /**
-   * Change Lisk behaviors, like optimistic locks and timestamps. If you want
+   * Change Lisk behaviors, like ID configuration and timestamps. If you want
    * to change these behaviors, you should override this method in your child
    * class and change the options you're interested in. For example:
    *
@@ -335,27 +301,27 @@ abstract class LiskDAO {
    *
    * The available options are:
    *
-   * CONFIG_OPTIMISTIC_LOCKS
-   * Lisk automatically performs optimistic locking on objects, which protects
-   * you from read-modify-write concurrency problems. Lock failures are
-   * detected at write time and arise when two users read an object, then both
-   * save it. In theory, you should detect these failures and accommodate them
-   * in some sensible way (for instance, by showing the user differences
-   * between the original record and the copy they are trying to update, and
-   * prompting them to merge them). In practice, most Lisk tools are quick
-   * and dirty and don't get to that level of sophistication, but optimistic
-   * locks can still protect you from yourself sometimes. If you don't want
-   * to use optimistic locks, you can disable them. The performance cost of
-   * doing this locking is very very small (optimistic locks were chosen
-   * because they're simple and cheap, and highly optimized for the case where
-   * collisions are rare). By default, this option is OFF.
-   *
    * CONFIG_IDS
    * Lisk objects need to have a unique identifying ID. The three mechanisms
    * available for generating this ID are IDS_AUTOINCREMENT (default, assumes
    * the ID column is an autoincrement primary key), IDS_PHID (to generate a
-   * unique PHID for each object) or IDS_MANUAL (you are taking full
-   * responsibility for ID management).
+   * unique PHID for each object), IDS_MANUAL (you are taking full
+   * responsibility for ID management), or IDS_COUNTER (see below).
+   *
+   * InnoDB does not persist the value of `auto_increment` across restarts,
+   * and instead initializes it to `MAX(id) + 1` during startup. This means it
+   * may reissue the same autoincrement ID more than once, if the row is deleted
+   * and then the database is restarted. To avoid this, you can set an object to
+   * use a counter table with IDS_COUNTER. This will generally behave like
+   * IDS_AUTOINCREMENT, except that the counter value will persist across
+   * restarts and inserts will be slightly slower. If a database stores any
+   * DAOs which use this mechanism, you must create a table there with this
+   * schema:
+   *
+   *   CREATE TABLE lisk_counter (
+   *     counterName VARCHAR(64) COLLATE utf8_bin PRIMARY KEY,
+   *     counterValue BIGINT UNSIGNED NOT NULL
+   *   ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
    *
    * CONFIG_TIMESTAMPS
    * Lisk can automatically handle keeping track of a `dateCreated' and
@@ -392,14 +358,12 @@ abstract class LiskDAO {
    * directly access or assign protected members of your class (use the getters
    * and setters).
    *
-   *
    * @return dictionary  Map of configuration options to values.
    *
    * @task   config
    */
   protected function getConfiguration() {
     return array(
-      self::CONFIG_OPTIMISTIC_LOCKS         => false,
       self::CONFIG_IDS                      => self::IDS_AUTOINCREMENT,
       self::CONFIG_TIMESTAMPS               => true,
       self::CONFIG_PARTIAL_OBJECTS          => false,
@@ -599,9 +563,8 @@ abstract class LiskDAO {
 
   /**
    * Reload an object from the database, discarding any changes to persistent
-   * properties. If the object uses optimistic locks and you are in a locking
-   * mode while transactional, this will effectively synchronize the locks.
-   * This is pretty heady. It is unlikely you need to use this method.
+   * properties. This is primarily useful after entering a transaction but
+   * before applying changes to an object.
    *
    * @return this
    *
@@ -613,24 +576,13 @@ abstract class LiskDAO {
       throw new Exception("Unable to reload object that hasn't been loaded!");
     }
 
-    $use_locks = $this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS);
-
-    if (!$use_locks) {
-      $result = $this->loadOneWhere(
-        '%C = %d',
-        $this->getIDKeyForUse(),
-        $this->getID());
-    } else {
-      $result = $this->loadOneWhere(
-        '%C = %d AND %C = %d',
-        $this->getIDKeyForUse(),
-        $this->getID(),
-        'version',
-        $this->getVersion());
-    }
+    $result = $this->loadOneWhere(
+      '%C = %d',
+      $this->getIDKeyForUse(),
+      $this->getID());
 
     if (!$result) {
-      throw new AphrontQueryObjectMissingException($use_locks);
+      throw new AphrontQueryObjectMissingException();
     }
 
     return $this;
@@ -650,11 +602,33 @@ abstract class LiskDAO {
    * @task   load
    */
   public function loadFromArray(array $row) {
-
-    // TODO: We should load only valid properties.
+    static $valid_properties = array();
 
     $map = array();
     foreach ($row as $k => $v) {
+      // We permit (but ignore) extra properties in the array because a
+      // common approach to building the array is to issue a raw SELECT query
+      // which may include extra explicit columns or joins.
+
+      // This pathway is very hot on some pages, so we're inlining a cache
+      // and doing some microoptimization to avoid a strtolower() call for each
+      // assignment. The common path (assigning a valid property which we've
+      // already seen) always incurs only one empty(). The second most common
+      // path (assigning an invalid property which we've already seen) costs
+      // an empty() plus an isset().
+
+      if (empty($valid_properties[$k])) {
+        if (isset($valid_properties[$k])) {
+          // The value is set but empty, which means it's false, so we've
+          // already determined it's not valid. We don't need to check again.
+          continue;
+        }
+        $valid_properties[$k] = $this->hasProperty($k);
+        if (!$valid_properties[$k]) {
+          continue;
+        }
+      }
+
       $map[$k] = $v;
     }
 
@@ -899,6 +873,18 @@ abstract class LiskDAO {
 
 
   /**
+   * Test if a property exists.
+   *
+   * @param   string    Property name.
+   * @return  bool      True if the property exists.
+   * @task info
+   */
+  public function hasProperty($property) {
+    return (bool)$this->checkProperty($property);
+  }
+
+
+  /**
    * Retrieve a list of all object properties. This list only includes
    * properties that are declared as protected, and it is expected that
    * all properties returned by this function should be persisted to the
@@ -920,24 +906,17 @@ abstract class LiskDAO {
       }
 
       $id_key = $this->getIDKey();
-      if ($id_key) {
-        if (!isset($properties[strtolower($id_key)])) {
-          $properties[strtolower($id_key)] = $id_key;
-        }
+      if ($id_key != 'id') {
+        unset($properties['id']);
       }
 
-      if ($this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS)) {
-        $properties['version'] = 'version';
+      if (!$this->getConfigOption(self::CONFIG_TIMESTAMPS)) {
+        unset($properties['datecreated']);
+        unset($properties['datemodified']);
       }
 
-      if ($this->getConfigOption(self::CONFIG_TIMESTAMPS)) {
-        $properties['datecreated'] = 'dateCreated';
-        $properties['datemodified'] = 'dateModified';
-      }
-
-      if (!$this->isPHIDPrimaryID() &&
-          $this->getConfigOption(self::CONFIG_AUX_PHID)) {
-        $properties['phid'] = 'phid';
+      if ($id_key != 'phid' && !$this->getConfigOption(self::CONFIG_AUX_PHID)) {
+        unset($properties['phid']);
       }
     }
     return $properties;
@@ -1130,7 +1109,6 @@ abstract class LiskDAO {
    */
   public function update() {
     $this->isEphemeralCheck();
-    $use_locks = $this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS);
 
     $this->willSaveObject();
     $data = $this->getPropertyValues();
@@ -1141,9 +1119,6 @@ abstract class LiskDAO {
 
     $map = array();
     foreach ($data as $k => $v) {
-      if ($use_locks && $k == 'version') {
-        continue;
-      }
       $map[$k] = $v;
     }
 
@@ -1154,31 +1129,16 @@ abstract class LiskDAO {
     }
     $map = implode(', ', $map);
 
-    if ($use_locks) {
-      $conn->query(
-        'UPDATE %T SET %Q, version = version + 1 WHERE %C = %d AND %C = %d',
-        $this->getTableName(),
-        $map,
-        $this->getIDKeyForUse(),
-        $this->getID(),
-        'version',
-        $this->getVersion());
-      if ($conn->getAffectedRows() !== 1) {
-        throw new AphrontQueryObjectMissingException($use_locks);
-      }
-      $this->setVersion($this->getVersion() + 1);
-    } else {
-      $id = $this->getID();
-      $conn->query(
-        'UPDATE %T SET %Q WHERE %C = '.(is_int($id) ? '%d' : '%s'),
-        $this->getTableName(),
-        $map,
-        $this->getIDKeyForUse(),
-        $id);
-      // We can't detect a missing object because updating an object without
-      // changing any values doesn't affect rows. We could jiggle timestamps
-      // to catch this for objects which track them if we wanted.
-    }
+    $id = $this->getID();
+    $conn->query(
+      'UPDATE %T SET %Q WHERE %C = '.(is_int($id) ? '%d' : '%s'),
+      $this->getTableName(),
+      $map,
+      $this->getIDKeyForUse(),
+      $id);
+    // We can't detect a missing object because updating an object without
+    // changing any values doesn't affect rows. We could jiggle timestamps
+    // to catch this for objects which track them if we wanted.
 
     $this->didWriteData();
 
@@ -1213,7 +1173,6 @@ abstract class LiskDAO {
     return $this;
   }
 
-
   /**
    * Internal implementation of INSERT and REPLACE.
    *
@@ -1225,6 +1184,8 @@ abstract class LiskDAO {
     $this->willSaveObject();
     $data = $this->getPropertyValues();
 
+    $conn = $this->establishConnection('w');
+
     $id_mechanism = $this->getConfigOption(self::CONFIG_IDS);
     switch ($id_mechanism) {
       case self::IDS_AUTOINCREMENT:
@@ -1234,6 +1195,17 @@ abstract class LiskDAO {
         $id_key = $this->getIDKeyForUse();
         if (empty($data[$id_key])) {
           unset($data[$id_key]);
+        }
+        break;
+      case self::IDS_COUNTER:
+        // If we are using counter IDs, assign a new ID if we don't already have
+        // one.
+        $id_key = $this->getIDKeyForUse();
+        if (empty($data[$id_key])) {
+          $counter_name = $this->getTableName();
+          $id = self::loadNextCounterID($conn, $counter_name);
+          $this->setID($id);
+          $data[$id_key] = $id;
         }
         break;
       case self::IDS_PHID:
@@ -1249,13 +1221,7 @@ abstract class LiskDAO {
         throw new Exception('Unknown CONFIG_IDs mechanism!');
     }
 
-    if ($this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS)) {
-      $data['version'] = 0;
-    }
-
     $this->willWriteData($data);
-
-    $conn = $this->establishConnection('w');
 
     $columns = array_keys($data);
 
@@ -1270,11 +1236,6 @@ abstract class LiskDAO {
       $this->getTableName(),
       $columns,
       $data);
-
-    // Update the object with the initial Version value
-    if ($this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS)) {
-      $this->setVersion(0);
-    }
 
     // Only use the insert id if this table is using auto-increment ids
     if ($id_mechanism === self::IDS_AUTOINCREMENT) {
@@ -1298,24 +1259,12 @@ abstract class LiskDAO {
    */
   protected function shouldInsertWhenSaved() {
     $key_type = $this->getConfigOption(self::CONFIG_IDS);
-    $use_locks = $this->getConfigOption(self::CONFIG_OPTIMISTIC_LOCKS);
 
     if ($key_type == self::IDS_MANUAL) {
-      if ($use_locks) {
-        // If we are manually keyed and the object has a version (which means
-        // that it has been saved to the DB before), do an update, otherwise
-        // perform an insert.
-        if ($this->getID() && $this->getVersion() !== null) {
-          return false;
-        } else {
-          return true;
-        }
-      } else {
-        throw new Exception(
-          'You are not using optimistic locks, but are using manual IDs. You '.
-          'must override the shouldInsertWhenSaved() method to properly '.
-          'detect when to insert a new record.');
-      }
+      throw new Exception(
+        'You are using manual IDs. You must override the '.
+        'shouldInsertWhenSaved() method to properly detect '.
+        'when to insert a new record.');
     } else {
       return !$this->getID();
     }
@@ -1732,6 +1681,16 @@ abstract class LiskDAO {
    */
   public function __call($method, $args) {
 
+    // NOTE: PHP has a bug that static variables defined in __call() are shared
+    // across all children classes. Call a different method to work around this
+    // bug.
+    return $this->call($method, $args);
+  }
+
+  /**
+   * @task   util
+   */
+  final protected function call($method, $args) {
     // NOTE: This method is very performance-sensitive (many thousands of calls
     // per page on some pages), and thus has some silliness in the name of
     // optimizations.
@@ -1793,4 +1752,48 @@ abstract class LiskDAO {
 
     throw new Exception("Unable to resolve method '{$method}'.");
   }
+
+  /**
+   * Warns against writing to undeclared property.
+   *
+   * @task   util
+   */
+  public function __set($name, $value) {
+    phlog('Wrote to undeclared property '.get_class($this).'::$'.$name.'.');
+    $this->$name = $value;
+  }
+
+  /**
+   * Increments a named counter and returns the next value.
+   *
+   * @param   AphrontDatabaseConnection   Database where the counter resides.
+   * @param   string                      Counter name to create or increment.
+   * @return  int                         Next counter value.
+   *
+   * @task util
+   */
+  public static function loadNextCounterID(
+    AphrontDatabaseConnection $conn_w,
+    $counter_name) {
+
+    // NOTE: If an insert does not touch an autoincrement row or call
+    // LAST_INSERT_ID(), MySQL normally does not change the value of
+    // LAST_INSERT_ID(). This can cause a counter's value to leak to a
+    // new counter if the second counter is created after the first one is
+    // updated. To avoid this, we insert LAST_INSERT_ID(1), to ensure the
+    // LAST_INSERT_ID() is always updated and always set correctly after the
+    // query completes.
+
+    queryfx(
+      $conn_w,
+      'INSERT INTO %T (counterName, counterValue) VALUES
+          (%s, LAST_INSERT_ID(1))
+        ON DUPLICATE KEY UPDATE
+          counterValue = LAST_INSERT_ID(counterValue + 1)',
+      self::COUNTER_TABLE_NAME,
+      $counter_name);
+
+    return $conn_w->getInsertID();
+  }
+
 }

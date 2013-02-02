@@ -1,31 +1,17 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @task uri Repository URI Management
  */
-final class PhabricatorRepository extends PhabricatorRepositoryDAO {
+final class PhabricatorRepository extends PhabricatorRepositoryDAO
+  implements PhabricatorPolicyInterface {
 
   const TABLE_PATH = 'repository_path';
   const TABLE_PATHCHANGE = 'repository_pathchange';
   const TABLE_FILESYSTEM = 'repository_filesystem';
   const TABLE_SUMMARY = 'repository_summary';
   const TABLE_BADCOMMIT = 'repository_badcommit';
+  const TABLE_LINTMESSAGE = 'repository_lintmessage';
 
   protected $phid;
   protected $name;
@@ -51,6 +37,19 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO {
       PhabricatorPHIDConstants::PHID_TYPE_REPO);
   }
 
+  public function toDictionary() {
+    return array(
+      'name'        => $this->getName(),
+      'phid'        => $this->getPHID(),
+      'callsign'    => $this->getCallsign(),
+      'vcs'         => $this->getVersionControlSystem(),
+      'uri'         => PhabricatorEnv::getProductionURI($this->getURI()),
+      'remoteURI'   => (string)$this->getPublicRemoteURI(),
+      'tracking'    => $this->getDetail('tracking-enabled'),
+      'description' => $this->getDetail('description'),
+    );
+  }
+
   public function getDetail($key, $default = null) {
     return idx($this->details, $key, $default);
   }
@@ -60,16 +59,20 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO {
     return $this;
   }
 
-  public function getDiffusionBrowseURIForPath($path) {
+  public function getDiffusionBrowseURIForPath($path,
+                                               $line = null,
+                                               $branch = null) {
     $drequest = DiffusionRequest::newFromDictionary(
       array(
         'repository' => $this,
         'path'       => $path,
+        'branch'     => $branch,
       ));
 
     return $drequest->generateURI(
       array(
         'action' => 'browse',
+        'line'   => $line,
       ));
   }
 
@@ -296,6 +299,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO {
     );
 
     return idx($default_branches, $this->getVersionControlSystem());
+  }
+
+  public function getDefaultArcanistBranch() {
+    return coalesce($this->getDefaultBranch(), 'svn');
   }
 
   private function isBranchInFilter($branch, $filter_key) {
@@ -545,6 +552,96 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO {
    */
   private function isSSHProtocol($protocol) {
     return ($protocol == 'ssh' || $protocol == 'svn+ssh');
+  }
+
+  public function delete() {
+    $this->openTransaction();
+
+      $paths = id(new PhabricatorOwnersPath())
+        ->loadAllWhere('repositoryPHID = %s', $this->getPHID());
+      foreach ($paths as $path) {
+        $path->delete();
+      }
+
+      $projects = id(new PhabricatorRepositoryArcanistProject())
+        ->loadAllWhere('repositoryID = %d', $this->getID());
+      foreach ($projects as $project) {
+        // note each project deletes its PhabricatorRepositorySymbols
+        $project->delete();
+      }
+
+      $commits = id(new PhabricatorRepositoryCommit())
+        ->loadAllWhere('repositoryID = %d', $this->getID());
+      foreach ($commits as $commit) {
+        // note PhabricatorRepositoryAuditRequests and
+        // PhabricatorRepositoryCommitData are deleted here too.
+        $commit->delete();
+      }
+
+      $conn_w = $this->establishConnection('w');
+
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE repositoryID = %d',
+        self::TABLE_FILESYSTEM,
+        $this->getID());
+
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE repositoryID = %d',
+        self::TABLE_PATHCHANGE,
+        $this->getID());
+
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE repositoryID = %d',
+        self::TABLE_SUMMARY,
+        $this->getID());
+
+      $result = parent::delete();
+
+    $this->saveTransaction();
+    return $result;
+  }
+
+  public function isGit() {
+    $vcs = $this->getVersionControlSystem();
+    return ($vcs == PhabricatorRepositoryType::REPOSITORY_TYPE_GIT);
+  }
+
+  public function isSVN() {
+    $vcs = $this->getVersionControlSystem();
+    return ($vcs == PhabricatorRepositoryType::REPOSITORY_TYPE_SVN);
+  }
+
+  public function isHg() {
+    $vcs = $this->getVersionControlSystem();
+    return ($vcs == PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL);
+  }
+
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
+    );
+  }
+
+  public function getPolicy($capability) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        return PhabricatorPolicies::POLICY_USER;
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return PhabricatorPolicies::POLICY_ADMIN;
+    }
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $user) {
+    return false;
   }
 
 }

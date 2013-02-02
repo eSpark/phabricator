@@ -1,26 +1,18 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class PhabricatorController extends AphrontController {
 
   private $handles;
 
   public function shouldRequireLogin() {
+
+    // If this install is configured to allow public resources and the
+    // controller works in public mode, allow the request through.
+    $is_public_allowed = PhabricatorEnv::getEnvConfig('policy.allow-public');
+    if ($is_public_allowed && $this->shouldAllowPublic()) {
+      return false;
+    }
+
     return true;
   }
 
@@ -30,6 +22,10 @@ abstract class PhabricatorController extends AphrontController {
 
   public function shouldRequireEnabledUser() {
     return true;
+  }
+
+  public function shouldAllowPublic() {
+    return false;
   }
 
   public function shouldRequireEmailVerification() {
@@ -48,7 +44,7 @@ abstract class PhabricatorController extends AphrontController {
     $phusr = $request->getCookie('phusr');
     $phsid = $request->getCookie('phsid');
 
-    if ($phusr && $phsid) {
+    if (strlen($phusr) && $phsid) {
       $info = queryfx_one(
         $user->establishConnection('r'),
         'SELECT u.* FROM %T u JOIN %T s ON u.phid = s.userPHID
@@ -79,9 +75,25 @@ abstract class PhabricatorController extends AphrontController {
       return $this->delegateToController($disabled_user_controller);
     }
 
+    $event = new PhabricatorEvent(
+      PhabricatorEventType::TYPE_CONTROLLER_CHECKREQUEST,
+      array(
+        'request' => $request,
+        'controller' => $this,
+      ));
+    $event->setUser($user);
+    PhutilEventEngine::dispatchEvent($event);
+    $checker_controller = $event->getValue('controller');
+    if ($checker_controller != $this) {
+      return $this->delegateToController($checker_controller);
+    }
+
+    $preferences = $user->loadPreferences();
+
     if (PhabricatorEnv::getEnvConfig('darkconsole.enabled')) {
-      if ($user->getConsoleEnabled() ||
-          PhabricatorEnv::getEnvConfig('darkconsole.always-on')) {
+      $dark_console = PhabricatorUserPreferences::PREFERENCE_DARK_CONSOLE;
+      if ($preferences->getPreference($dark_console) ||
+         PhabricatorEnv::getEnvConfig('darkconsole.always-on')) {
         $console = new DarkConsoleCore();
         $request->getApplicationConfiguration()->setConsole($console);
       }
@@ -114,11 +126,6 @@ abstract class PhabricatorController extends AphrontController {
     $view = new PhabricatorStandardPageView();
     $view->setRequest($this->getRequest());
     $view->setController($this);
-
-    if ($this->shouldRequireAdmin()) {
-      $view->setIsAdminInterface(true);
-    }
-
     return $view;
   }
 
@@ -155,19 +162,17 @@ abstract class PhabricatorController extends AphrontController {
       $view = $nav;
     }
 
-    if ($application) {
-      $view->setCurrentApplication($application);
-    }
-
     $view->setUser($this->getRequest()->getUser());
-    $view->setFlexNav(true);
-    $view->setShowApplicationMenu(true);
 
     $page->appendChild($view);
 
     if (idx($options, 'device')) {
       $page->setDeviceReady(true);
-      $view->appendChild($page->renderFooter());
+    }
+
+    $application_menu = $this->buildApplicationMenu();
+    if ($application_menu) {
+      $page->setApplicationMenu($application_menu);
     }
 
     $response = new AphrontWebpageResponse();
@@ -177,6 +182,22 @@ abstract class PhabricatorController extends AphrontController {
   public function didProcessRequest($response) {
     $request = $this->getRequest();
     $response->setRequest($request);
+
+    $seen = array();
+    while ($response instanceof AphrontProxyResponse) {
+
+      $hash = spl_object_hash($response);
+      if (isset($seen[$hash])) {
+        $seen[] = get_class($response);
+        throw new Exception(
+          "Cycle while reducing proxy responses: ".
+          implode(' -> ', $seen));
+      }
+      $seen[$hash] = get_class($response);
+
+      $response = $response->reduceProxyResponse();
+    }
+
     if ($response instanceof AphrontDialogResponse) {
       if (!$request->isAjax()) {
         $view = new PhabricatorStandardPageView();
@@ -217,18 +238,73 @@ abstract class PhabricatorController extends AphrontController {
 
   protected function loadHandles(array $phids) {
     $phids = array_filter($phids);
-    $this->handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($this->getRequest()->getUser())
-      ->loadHandles();
+    $this->handles = $this->loadViewerHandles($phids);
     return $this;
   }
 
-  protected function renderHandlesForPHIDs(array $phids) {
+  protected function getLoadedHandles() {
+    return $this->handles;
+  }
+
+  protected function loadViewerHandles(array $phids) {
+    return id(new PhabricatorObjectHandleData($phids))
+      ->setViewer($this->getRequest()->getUser())
+      ->loadHandles();
+  }
+
+
+  /**
+   * Render a list of links to handles, identified by PHIDs. The handles must
+   * already be loaded.
+   *
+   * @param   list<phid>  List of PHIDs to render links to.
+   * @param   string      Style, one of "\n" (to put each item on its own line)
+   *                      or "," (to list items inline, separated by commas).
+   * @return  string      Rendered list of handle links.
+   */
+  protected function renderHandlesForPHIDs(array $phids, $style = "\n") {
+    $style_map = array(
+      "\n"  => '<br />',
+      ','   => ', ',
+    );
+
+    if (empty($style_map[$style])) {
+      throw new Exception("Unknown handle list style '{$style}'!");
+    }
+
     $items = array();
     foreach ($phids as $phid) {
       $items[] = $this->getHandle($phid)->renderLink();
     }
-    return implode('<br />', $items);
+    return implode($style_map[$style], $items);
+  }
+
+  protected function buildApplicationMenu() {
+    return null;
+  }
+
+  protected function buildApplicationCrumbs() {
+
+    $crumbs = array();
+
+    $application = $this->getCurrentApplication();
+    if ($application) {
+      $sprite = $application->getIconName();
+      if (!$sprite) {
+        $sprite = 'application';
+      }
+
+      $crumbs[] = id(new PhabricatorCrumbView())
+        ->setHref($this->getApplicationURI())
+        ->setIcon($sprite);
+    }
+
+    $view = new PhabricatorCrumbsView();
+    foreach ($crumbs as $crumb) {
+      $view->addCrumb($crumb);
+    }
+
+    return $view;
   }
 
 }

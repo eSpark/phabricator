@@ -1,22 +1,18 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorImageTransformer {
+
+  public function executeMemeTransform(
+    PhabricatorFile $file,
+    $upper_text,
+    $lower_text) {
+    $image = $this->applyMemeTo($file, $upper_text, $lower_text);
+    return PhabricatorFile::newFromFileData(
+      $image,
+      array(
+        'name' => 'meme-'.$file->getName(),
+      ));
+  }
 
   public function executeThumbTransform(
     PhabricatorFile $file,
@@ -46,6 +42,20 @@ final class PhabricatorImageTransformer {
         'name' => 'profile-'.$file->getName(),
       ));
   }
+
+  public function executePreviewTransform(
+    PhabricatorFile $file,
+    $size) {
+
+    $image = $this->generatePreview($file, $size);
+
+    return PhabricatorFile::newFromFileData(
+      $image,
+      array(
+        'name' => 'preview-'.$file->getName(),
+      ));
+  }
+
 
   private function crudelyCropTo(PhabricatorFile $file, $x, $min_y, $max_y) {
     $data = $file->loadFileData();
@@ -86,25 +96,171 @@ final class PhabricatorImageTransformer {
     $x = imagesx($src);
     $y = imagesy($src);
 
-    $scale = min($x / $dx, $y / $dy);
+    $scale = min(($dx / $x), ($dy / $y), 1);
+
     $dst = imagecreatetruecolor($dx, $dy);
     imagesavealpha($dst, true);
-    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
 
-    // If we need to chop off some pixels, chop them off from the sides instead
-    // of scaling in on <0, 0>.
-    $sdx = $scale * $dx;
-    $sdy = $scale * $dy;
+    $sdx = $scale * $x;
+    $sdy = $scale * $y;
 
     imagecopyresampled(
       $dst,
       $src,
+      ($dx - $sdx) / 2,  ($dy - $sdy) / 2,
       0, 0,
-      ($x - $sdx) / 2,  ($y - $sdy) / 2,
-      $dx, $dy,
-      $sdx, $sdy);
+      $sdx, $sdy,
+      $x, $y);
 
     return $dst;
+  }
+
+  public static function getPreviewDimensions(PhabricatorFile $file, $size) {
+    $data = $file->loadFileData();
+    $src = imagecreatefromstring($data);
+
+    $x = imagesx($src);
+    $y = imagesy($src);
+
+    $scale = min($size / $x, $size / $y, 1);
+
+    $dx = max($size / 4, $scale * $x);
+    $dy = max($size / 4, $scale * $y);
+
+    $sdx = $scale * $x;
+    $sdy = $scale * $y;
+
+    return array(
+      'x' => $x,
+      'y' => $y,
+      'dx' => $dx,
+      'dy' => $dy,
+      'sdx' => $sdx,
+      'sdy' => $sdy
+    );
+  }
+
+  private function generatePreview(PhabricatorFile $file, $size) {
+    $data = $file->loadFileData();
+    $src = imagecreatefromstring($data);
+
+    $dimensions = self::getPreviewDimensions($file, $size);
+    $x = $dimensions['x'];
+    $y = $dimensions['y'];
+    $dx = $dimensions['dx'];
+    $dy = $dimensions['dy'];
+    $sdx = $dimensions['sdx'];
+    $sdy = $dimensions['sdy'];
+
+    $dst = imagecreatetruecolor($dx, $dy);
+    imagesavealpha($dst, true);
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
+
+    imagecopyresampled(
+      $dst,
+      $src,
+      ($dx - $sdx) / 2, ($dy - $sdy) / 2,
+      0, 0,
+      $sdx, $sdy,
+      $x, $y);
+
+    return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
+  }
+
+  private function applyMemeTo(
+    PhabricatorFile $file,
+    $upper_text,
+    $lower_text) {
+    $data = $file->loadFileData();
+    $img = imagecreatefromstring($data);
+    $phabricator_root = dirname(phutil_get_library_root('phabricator'));
+    $font_root = $phabricator_root.'/resources/font/';
+    $font_path = $font_root.'tuffy.ttf';
+    if (Filesystem::pathExists($font_root.'impact.ttf')) {
+      $font_path = $font_root.'impact.ttf';
+    }
+    $text_color = imagecolorallocate($img, 255, 255, 255);
+    $border_color = imagecolorallocatealpha($img, 0, 0, 0, 110);
+    $border_width = 4;
+    $font_max = 200;
+    $font_min = 5;
+    for ($i = $font_max; $i > $font_min; $i--) {
+      $fit = $this->doesTextBoundingBoxFitInImage(
+        $img,
+        $upper_text,
+        $i,
+        $font_path);
+      if ($fit['doesfit']) {
+        $x = ($fit['imgwidth'] - $fit['txtwidth']) / 2;
+        $y = $fit['txtheight'] + 10;
+        $this->makeImageWithTextBorder($img,
+          $i,
+          $x,
+          $y,
+          $text_color,
+          $border_color,
+          $border_width,
+          $font_path,
+          $upper_text);
+        break;
+      }
+    }
+    for ($i = $font_max; $i > $font_min; $i--) {
+      $fit = $this->doesTextBoundingBoxFitInImage($img,
+        $lower_text, $i, $font_path);
+      if ($fit['doesfit']) {
+        $x = ($fit['imgwidth'] - $fit['txtwidth']) / 2;
+        $y = $fit['imgheight'] - 10;
+        $this->makeImageWithTextBorder(
+          $img,
+          $i,
+          $x,
+          $y,
+          $text_color,
+          $border_color,
+          $border_width,
+          $font_path,
+          $lower_text);
+        break;
+      }
+    }
+    return $this->saveImageDataInAnyFormat($img, $file->getMimeType());
+  }
+
+  private function makeImageWithTextBorder($img, $font_size, $x, $y,
+    $color, $stroke_color, $bw, $font, $text) {
+    $angle = 0;
+    $bw = abs($bw);
+    for ($c1 = $x - $bw; $c1 <= $x + $bw; $c1++) {
+      for ($c2 = $y - $bw; $c2 <= $y + $bw; $c2++) {
+        if (!(($c1 == $x - $bw || $x + $bw) &&
+          $c2 == $y - $bw || $c2 == $y + $bw)) {
+          $bg = imagettftext($img, $font_size,
+            $angle, $c1, $c2, $stroke_color, $font, $text);
+          }
+        }
+      }
+    imagettftext($img, $font_size, $angle,
+            $x , $y, $color , $font, $text);
+  }
+
+  private function doesTextBoundingBoxFitInImage($img,
+    $text, $font_size, $font_path) {
+    // Default Angle = 0
+    $angle = 0;
+
+    $bbox = imagettfbbox($font_size, $angle, $font_path, $text);
+    $text_height = abs($bbox[3] - $bbox[5]);
+    $text_width = abs($bbox[0] - $bbox[2]);
+    return array(
+      "doesfit" => ($text_height * 1.05 <= imagesy($img) / 2
+        && $text_width * 1.05 <= imagesx($img)),
+      "txtwidth" => $text_width,
+      "txtheight" => $text_height,
+      "imgwidth" => imagesx($img),
+      "imgheight" => imagesy($img),
+    );
   }
 
   private function saveImageDataInAnyFormat($data, $preferred_mime = '') {

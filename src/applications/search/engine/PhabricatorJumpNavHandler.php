@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorJumpNavHandler {
   public static function jumpPostResponse($jump) {
     $jump = trim($jump);
@@ -35,6 +19,7 @@ final class PhabricatorJumpNavHandler {
       '/^r([A-Z]+)(\S+)$/'        => 'commit',
       '/^d(\d+)$/i'               => 'revision',
       '/^t(\d+)$/i'               => 'task',
+      '/^p(\d+)$/i'               => 'paste',
       '/^p\s+(.+)$/i'             => 'project',
       '/^u\s+(\S+)$/i'            => 'user',
       '/^task:\s*(.+)/i'          => 'create-task',
@@ -65,6 +50,9 @@ final class PhabricatorJumpNavHandler {
             case 'user':
               return id(new AphrontRedirectResponse())
                 ->setURI('/p/'.$matches[1].'/');
+            case 'paste':
+              return id(new AphrontRedirectResponse())
+                ->setURI('/P'.$matches[1]);
             case 'project':
               $project = self::findCloselyNamedProject($matches[1]);
               if ($project) {

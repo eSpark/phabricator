@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionStatsController extends DifferentialController {
   private $filter;
 
@@ -125,8 +109,7 @@ final class DifferentialRevisionStatsController extends DifferentialController {
                               DifferentialAction::ACTION_CLOSE);
 
     $panels = array();
-    $handles = id(new PhabricatorObjectHandleData(array($params['phid'])))
-                  ->loadHandles();
+    $handles = $this->loadViewerHandles(array($params['phid']));
 
     $filter_form = id(new AphrontFormView())
       ->setAction('/differential/stats/'.$this->filter.'/')
@@ -135,7 +118,7 @@ final class DifferentialRevisionStatsController extends DifferentialController {
     $filter_form->appendChild(
       $this->renderControl($params['phid'], $handles));
     $filter_form->appendChild(id(new AphrontFormSubmitControl())
-                              ->setValue('Filter Revisions'));
+                              ->setValue(pht('Filter Revisions')));
 
     $side_nav->appendChild($filter_form);
 
@@ -144,7 +127,7 @@ final class DifferentialRevisionStatsController extends DifferentialController {
     $diffs = $this->loadDiffs($revisions);
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Differential rate analysis');
+    $panel->setHeader(pht('Differential rate analysis'));
     $panel->appendChild(
       id(new DifferentialRevisionStatsView())
       ->setComments($comments)
@@ -161,7 +144,7 @@ final class DifferentialRevisionStatsController extends DifferentialController {
     return $this->buildStandardPageResponse(
       $side_nav,
       array(
-        'title' => 'Differential statistics',
+        'title' => pht('Differential Statistics'),
       ));
   }
 
@@ -174,7 +157,7 @@ final class DifferentialRevisionStatsController extends DifferentialController {
     }
     return id(new AphrontFormTokenizerControl())
       ->setDatasource('/typeahead/common/users/')
-      ->setLabel('View User')
+      ->setLabel(pht('View User'))
       ->setName('view_user')
       ->setValue($value)
       ->setLimit(1);

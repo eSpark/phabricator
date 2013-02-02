@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class AphrontDialogView extends AphrontView {
 
   private $title;
@@ -23,7 +7,6 @@ final class AphrontDialogView extends AphrontView {
   private $cancelURI;
   private $cancelText = 'Cancel';
   private $submitURI;
-  private $user;
   private $hidden = array();
   private $class;
   private $renderAsForm = true;
@@ -32,11 +15,7 @@ final class AphrontDialogView extends AphrontView {
   private $width      = 'default';
   const WIDTH_DEFAULT = 'default';
   const WIDTH_FORM    = 'form';
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
+  const WIDTH_FULL    = 'full';
 
   public function setSubmitURI($uri) {
     $this->submitURI = $uri;
@@ -131,6 +110,7 @@ final class AphrontDialogView extends AphrontView {
 
     switch ($this->width) {
       case self::WIDTH_FORM:
+      case self::WIDTH_FULL:
         $more .= ' aphront-dialog-view-width-'.$this->width;
         break;
       case self::WIDTH_DEFAULT:

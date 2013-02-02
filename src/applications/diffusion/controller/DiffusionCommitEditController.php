@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionCommitEditController extends DiffusionController {
 
   public function willProcessRequest(array $data) {
@@ -42,8 +26,7 @@ final class DiffusionCommitEditController extends DiffusionController {
       $commit_phid,
       $edge_type
     );
-    $handles = id(new PhabricatorObjectHandleData($current_proj_phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($current_proj_phids);
     $proj_t_values = mpull($handles, 'getFullName', 'getPHID');
 
     if ($request->isFormPost()) {
@@ -52,7 +35,7 @@ final class DiffusionCommitEditController extends DiffusionController {
       $rem_proj_phids = array_diff($current_proj_phids,
                                    $new_proj_phids);
       $editor         = id(new PhabricatorEdgeEditor());
-      $editor->setUser($user);
+      $editor->setActor($user);
       foreach ($rem_proj_phids as $phid) {
         $editor->removeEdge($commit_phid, $edge_type, $phid);
       }
@@ -61,7 +44,8 @@ final class DiffusionCommitEditController extends DiffusionController {
       }
       $editor->save();
 
-      PhabricatorSearchCommitIndexer::indexCommit($commit);
+      id(new PhabricatorSearchIndexer())
+        ->indexDocumentByPHID($commit->getPHID());
 
       return id(new AphrontRedirectResponse())
       ->setURI('/r'.$callsign.$commit->getCommitIdentifier());

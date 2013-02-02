@@ -1,77 +1,33 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
+/**
+ * This is a standard Phabricator page with menus, Javelin, DarkConsole, and
+ * basic styles.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
-
-final class PhabricatorStandardPageView extends AphrontPageView {
+final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
   private $baseURI;
   private $applicationName;
   private $glyph;
-  private $bodyContent;
   private $menuContent;
-  private $request;
-  private $isAdminInterface;
   private $showChrome = true;
-  private $isFrameable = false;
   private $disableConsole;
   private $searchDefaultScope;
   private $pageObjects = array();
-  private $controller;
-  private $deviceReady;
+  private $applicationMenu;
 
-  public function setDeviceReady($device_ready) {
-    $this->deviceReady = $device_ready;
+  public function setApplicationMenu(PhabricatorMenuView $application_menu) {
+    $this->applicationMenu = $application_menu;
     return $this;
   }
 
-  public function setController(AphrontController $controller) {
-    $this->controller = $controller;
-    return $this;
-  }
-
-  public function getController() {
-    return $this->controller;
-  }
-
-  public function setIsAdminInterface($is_admin_interface) {
-    $this->isAdminInterface = $is_admin_interface;
-    return $this;
-  }
-
-  public function getIsAdminInterface() {
-    return $this->isAdminInterface;
-  }
-
-  public function setRequest($request) {
-    $this->request = $request;
-    return $this;
-  }
-
-  public function getRequest() {
-    return $this->request;
+  public function getApplicationMenu() {
+    return $this->applicationMenu;
   }
 
   public function setApplicationName($application_name) {
     $this->applicationName = $application_name;
-    return $this;
-  }
-
-  public function setFrameable($frameable) {
-    $this->isFrameable = $frameable;
     return $this;
   }
 
@@ -135,6 +91,7 @@ final class PhabricatorStandardPageView extends AphrontPageView {
 
 
   protected function willRenderPage() {
+    parent::willRenderPage();
 
     if (!$this->getRequest()) {
       throw new Exception(
@@ -144,9 +101,12 @@ final class PhabricatorStandardPageView extends AphrontPageView {
     $console = $this->getConsole();
 
     require_celerity_resource('phabricator-core-css');
-    require_celerity_resource('autosprite-css');
+    require_celerity_resource('phabricator-zindex-css');
     require_celerity_resource('phabricator-core-buttons-css');
+    require_celerity_resource('sprite-gradient-css');
     require_celerity_resource('phabricator-standard-page-view');
+
+    Javelin::initBehavior('workflow', array());
 
     $current_token = null;
     $request = $this->getRequest();
@@ -154,10 +114,21 @@ final class PhabricatorStandardPageView extends AphrontPageView {
       $user = $request->getUser();
       if ($user) {
         $current_token = $user->getCSRFToken();
+        $download_form = phabricator_render_form_magic($user);
+        $default_img_uri =
+          PhabricatorEnv::getCDNURI(
+            '/rsrc/image/icon/fatcow/document_black.png'
+          );
+
+        Javelin::initBehavior(
+          'lightbox-attachments',
+          array(
+            'defaultImageUri' => $default_img_uri,
+            'downloadForm'    => $download_form,
+          ));
       }
     }
 
-    Javelin::initBehavior('workflow', array());
     Javelin::initBehavior('toggle-class', array());
     Javelin::initBehavior('konami', array());
     Javelin::initBehavior(
@@ -167,7 +138,7 @@ final class PhabricatorStandardPageView extends AphrontPageView {
         'header'    => AphrontRequest::getCSRFHeaderName(),
         'current'   => $current_token,
       ));
-    Javelin::initBehavior('device', array('id' => 'base-page'));
+    Javelin::initBehavior('device');
 
     if ($console) {
       require_celerity_resource('aphront-dark-console-css');
@@ -182,20 +153,23 @@ final class PhabricatorStandardPageView extends AphrontPageView {
       require_celerity_resource('javelin-behavior-error-log');
     }
 
-    $this->menuContent = $this->renderMainMenu();
-    $this->bodyContent = $this->renderChildren();
+    $menu = id(new PhabricatorMainMenuView())
+      ->setUser($request->getUser())
+      ->setDefaultSearchScope($this->getSearchDefaultScope());
+
+    if ($this->getController()) {
+      $menu->setController($this->getController());
+    }
+
+    if ($this->getApplicationMenu()) {
+      $menu->setApplicationMenu($this->getApplicationMenu());
+    }
+
+    $this->menuContent = $menu->render();
   }
 
 
   protected function getHead() {
-
-    $framebust = null;
-    if (!$this->isFrameable) {
-      $framebust = '(top != self) && top.location.replace(self.location.href);';
-    }
-
-    $response = CelerityAPI::getStaticResourceResponse();
-
     $monospaced = PhabricatorEnv::getEnvConfig('style.monospace');
 
     $request = $this->getRequest();
@@ -209,32 +183,17 @@ final class PhabricatorStandardPageView extends AphrontPageView {
       }
     }
 
-    $viewport_tag = null;
-    if (PhabricatorEnv::getEnvConfig('preview.viewport-meta-tag') ||
-        $this->deviceReady) {
-      $viewport_tag = phutil_render_tag(
-        'meta',
-        array(
-          'name' => 'viewport',
-          'content' => 'width=device-width, '.
-                       'initial-scale=1, '.
-                       'maximum-scale=1',
-        ));
-    }
+    $response = CelerityAPI::getStaticResourceResponse();
 
-    $head =
-      $viewport_tag.
-      '<script type="text/javascript">'.
-        $framebust.
-        'window.__DEV__=1;'.
-      '</script>'.
-      $response->renderResourcesOfType('css').
+    $head = array(
+      parent::getHead(),
       '<style type="text/css">'.
         '.PhabricatorMonospaced { font: '.$monospaced.'; }'.
-      '</style>'.
-      $response->renderSingleResource('javelin-magical-init');
+      '</style>',
+      $response->renderSingleResource('javelin-magical-init'),
+    );
 
-    return $head;
+    return implode("\n", $head);
   }
 
   public function setGlyph($glyph) {
@@ -247,6 +206,8 @@ final class PhabricatorStandardPageView extends AphrontPageView {
   }
 
   protected function willSendResponse($response) {
+    $response = parent::willSendResponse($response);
+
     $console = $this->getRequest()->getApplicationConfiguration()->getConsole();
     if ($console) {
       $response = str_replace(
@@ -254,113 +215,69 @@ final class PhabricatorStandardPageView extends AphrontPageView {
         $console->render($this->getRequest()),
         $response);
     }
+
     return $response;
   }
 
   protected function getBody() {
     $console = $this->getConsole();
 
-    $login_stuff = null;
-    $request = $this->getRequest();
     $user = null;
+    $request = $this->getRequest();
     if ($request) {
       $user = $request->getUser();
-      // NOTE: user may not be set here if we caught an exception early
-      // in the execution workflow.
-      if ($user && $user->getPHID()) {
-        $login_stuff =
-          phutil_render_tag(
-            'a',
-            array(
-              'href' => '/p/'.$user->getUsername().'/',
-            ),
-            phutil_escape_html($user->getUsername())).
-          ' &middot; '.
-          '<a href="/settings/">Settings</a>'.
-          ' &middot; '.
-          phabricator_render_form(
-            $user,
-            array(
-              'action' => '/search/',
-              'method' => 'post',
-              'style'  => 'display: inline',
-            ),
-            '<div class="menu-section menu-section-search">'.
-              '<div class="menu-search-container">'.
-                '<input type="text" name="query" id="standard-search-box" />'.
-                '<button id="standard-search-button">Search</button>'.
-              '</div>'.
-            '</div>'.
-            ' in '.
-            AphrontFormSelectControl::renderSelectTag(
-              $this->getSearchDefaultScope(),
-              PhabricatorSearchScope::getScopeOptions(),
-              array(
-                'name' => 'scope',
-              )).
-            ' '.
-            '<button>Search</button>');
-      }
-    }
-
-    $admin_class = null;
-    if ($this->getIsAdminInterface()) {
-      $admin_class = 'phabricator-admin-page-view';
     }
 
     $header_chrome = null;
-    $footer_chrome = null;
     if ($this->getShowChrome()) {
       $header_chrome = $this->menuContent;
-
-      if (!$this->deviceReady) {
-        $footer_chrome = $this->renderFooter();
-      }
     }
 
     $developer_warning = null;
-    if (PhabricatorEnv::getEnvConfig('phabricator.show-error-callout') &&
+    if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode') &&
         DarkConsoleErrorLogPluginAPI::getErrors()) {
       $developer_warning =
         '<div class="aphront-developer-error-callout">'.
-          'This page raised PHP errors. Find them in DarkConsole '.
-          'or the error log.'.
+          pht(
+            'This page raised PHP errors. Find them in DarkConsole '.
+            'or the error log.').
         '</div>';
     }
 
-    $agent = idx($_SERVER, 'HTTP_USER_AGENT');
-
-    // Try to guess the device resolution based on UA strings to avoid a flash
-    // of incorrectly-styled content.
-    $device_guess = 'device-desktop';
-    if (preg_match('/iPhone|iPod/', $agent)) {
-      $device_guess = 'device-phone';
-    } else if (preg_match('/iPad/', $agent)) {
-      $device_guess = 'device-tablet';
+    // Render the "you have unresolved setup issues..." warning.
+    $setup_warning = null;
+    if ($user && $user->getIsAdmin()) {
+      $open = PhabricatorSetupCheck::getOpenSetupIssueCount();
+      if ($open) {
+        $setup_warning = phutil_render_tag(
+          'div',
+          array(
+            'class' => 'setup-warning-callout',
+          ),
+          phutil_render_tag(
+            'a',
+            array(
+              'href' => '/config/issue/',
+            ),
+            pht('You have %d unresolved setup issue(s)...', $open)));
+      }
     }
-
-    $classes = array(
-      'phabricator-standard-page',
-      $admin_class,
-      $device_guess,
-    );
-    $classes = implode(' ', $classes);
 
     return
       phutil_render_tag(
         'div',
         array(
           'id' => 'base-page',
-          'class' => $classes,
+          'class' => 'phabricator-standard-page',
         ),
+        $developer_warning.
+        $setup_warning.
         $header_chrome.
         '<div class="phabricator-standard-page-body">'.
           ($console ? '<darkconsole />' : null).
-          $developer_warning.
-          $this->bodyContent.
+          parent::getBody().
           '<div style="clear: both;"></div>'.
-        '</div>').
-      $footer_chrome;
+        '</div>');
   }
 
   protected function getTail() {
@@ -368,8 +285,7 @@ final class PhabricatorStandardPageView extends AphrontPageView {
     $user = $request->getUser();
 
     $container = null;
-    if (PhabricatorEnv::getEnvConfig('notification.enabled') &&
-        $user->isLoggedIn()) {
+    if ($user->isLoggedIn()) {
 
       $aphlict_object_id = celerity_generate_unique_node_id();
       $aphlict_container_id = celerity_generate_unique_node_id();
@@ -403,10 +319,14 @@ final class PhabricatorStandardPageView extends AphrontPageView {
     }
 
     $response = CelerityAPI::getStaticResourceResponse();
-    return
-      $response->renderResourcesOfType('js').
-      $container.
-      $response->renderHTMLFooter();
+
+    $tail = array(
+      parent::getTail(),
+      $container,
+      $response->renderHTMLFooter(),
+    );
+
+    return implode("\n", $tail);
   }
 
   protected function getBodyClasses() {
@@ -416,6 +336,19 @@ final class PhabricatorStandardPageView extends AphrontPageView {
       $classes[] = 'phabricator-chromeless-page';
     }
 
+    $agent = idx($_SERVER, 'HTTP_USER_AGENT');
+
+    // Try to guess the device resolution based on UA strings to avoid a flash
+    // of incorrectly-styled content.
+    $device_guess = 'device-desktop';
+    if (preg_match('@iPhone|iPod|(Android.*Chrome/[.0-9]* Mobile)@', $agent)) {
+      $device_guess = 'device-phone device';
+    } else if (preg_match('@iPad|(Android.*Chrome/)@', $agent)) {
+      $device_guess = 'device-tablet device';
+    }
+
+    $classes[] = $device_guess;
+
     return implode(' ', $classes);
   }
 
@@ -424,91 +357,6 @@ final class PhabricatorStandardPageView extends AphrontPageView {
       return null;
     }
     return $this->getRequest()->getApplicationConfiguration()->getConsole();
-  }
-
-  private function renderMainMenu() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
-
-    $menu = new PhabricatorMainMenuView();
-    $menu->setUser($user);
-
-    $keyboard_config = array(
-      'helpURI' => '/help/keyboardshortcut/',
-    );
-
-    if ($user->isLoggedIn()) {
-      $search = new PhabricatorMainMenuSearchView();
-      $search->setUser($user);
-      $search->setScope($this->getSearchDefaultScope());
-      $menu->appendChild($search);
-
-      $pref_shortcut = PhabricatorUserPreferences::PREFERENCE_SEARCH_SHORTCUT;
-      if ($user->loadPreferences()->getPreference($pref_shortcut, true)) {
-        $keyboard_config['searchID'] = $search->getID();
-      }
-    }
-
-    Javelin::initBehavior('phabricator-keyboard-shortcuts', $keyboard_config);
-
-    $applications = PhabricatorApplication::getAllInstalledApplications();
-    $icon_views = array();
-    foreach ($applications as $application) {
-      $icon_views[] = $application->buildMainMenuItems(
-        $this->getRequest()->getUser(),
-        $this->getController());
-    }
-    $icon_views = array_mergev($icon_views);
-    $icon_views = msort($icon_views, 'getSortOrder');
-
-    $menu->appendChild($icon_views);
-
-    return $menu->render();
-  }
-
-  public function renderFooter() {
-    $console = $this->getConsole();
-
-    $foot_links = array();
-
-    $version = PhabricatorEnv::getEnvConfig('phabricator.version');
-    $foot_links[] =
-      '<a href="http://phabricator.org/">Phabricator</a> '.
-      phutil_escape_html($version);
-
-    $foot_links[] =
-      '<a href="https://secure.phabricator.com/maniphest/task/create/">'.
-        'Report a Bug'.
-      '</a>';
-
-    if (PhabricatorEnv::getEnvConfig('darkconsole.enabled') &&
-       !PhabricatorEnv::getEnvConfig('darkconsole.always-on')) {
-      if ($console) {
-        $link = javelin_render_tag(
-          'a',
-          array(
-            'href' => '/~/',
-            'sigil' => 'workflow',
-          ),
-          'Disable DarkConsole');
-      } else {
-        $link = javelin_render_tag(
-          'a',
-          array(
-            'href' => '/~/',
-            'sigil' => 'workflow',
-          ),
-          'Enable DarkConsole');
-      }
-      $foot_links[] = $link;
-    }
-
-    $foot_links = implode(' &middot; ', $foot_links);
-
-    return
-      '<div class="phabricator-page-foot">'.
-        $foot_links.
-      '</div>';
   }
 
 }

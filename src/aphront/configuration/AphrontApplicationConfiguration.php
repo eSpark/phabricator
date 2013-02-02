@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @task  routing URI Routing
  * @group aphront
@@ -91,9 +75,11 @@ abstract class AphrontApplicationConfiguration {
   /**
    * Using builtin and application routes, build the appropriate
    * @{class:AphrontController} class for the request. To route a request, we
-   * test the URI against all builtin routes from @{method:getURIMap}, then
-   * against all application routes from installed
-   * @{class:PhabricatorApplication}s.
+   * first test if the HTTP_HOST is configured as a valid Phabricator URI. If
+   * it isn't, we do a special check to see if it's a custom domain for a blog
+   * in the Phame application and if that fails we error. Otherwise, we test
+   * the URI against all builtin routes from @{method:getURIMap}, then against
+   * all application routes from installed @{class:PhabricatorApplication}s.
    *
    * If we match a route, we construct the controller it points at, build it,
    * and return it.
@@ -117,7 +103,57 @@ abstract class AphrontApplicationConfiguration {
    */
   final public function buildController() {
     $request = $this->getRequest();
-    $path = $request->getPath();
+
+    if (PhabricatorEnv::getEnvConfig('security.require-https')) {
+      if (!$request->isHTTPS()) {
+        $uri = $request->getRequestURI();
+        $uri->setDomain($request->getHost());
+        $uri->setProtocol('https');
+        return $this->buildRedirectController($uri);
+      }
+    }
+
+    $path     = $request->getPath();
+    $host     = $request->getHost();
+    $base_uri = PhabricatorEnv::getEnvConfig('phabricator.base-uri');
+    $prod_uri = PhabricatorEnv::getEnvConfig('phabricator.production-uri');
+    $file_uri = PhabricatorEnv::getEnvConfig('security.alternate-file-domain');
+
+    // NOTE: If the base URI isn't defined yet, don't activate alternate
+    // domains.
+    if ($base_uri &&
+        $host != id(new PhutilURI($base_uri))->getDomain() &&
+        $host != id(new PhutilURI($prod_uri))->getDomain() &&
+        $host != id(new PhutilURI($file_uri))->getDomain()) {
+
+      try {
+        $blog = id(new PhameBlogQuery())
+          ->setViewer(new PhabricatorUser())
+          ->withDomain($host)
+          ->executeOne();
+      } catch (PhabricatorPolicyException $ex) {
+        throw new Exception(
+          "This blog is not visible to logged out users, so it can not be ".
+          "visited from a custom domain.");
+      }
+
+      if (!$blog) {
+        if ($prod_uri && $prod_uri != $base_uri) {
+          $prod_str = ' or '.$prod_uri;
+        } else {
+          $prod_str = '';
+        }
+        throw new Exception(
+          'Specified domain '.$host.' is not configured for Phabricator '.
+          'requests. Please use '.$base_uri.$prod_str.' to visit this instance.'
+        );
+      }
+
+      // TODO: Make this more flexible and modular so any application can
+      // do crazy stuff here if it wants.
+
+      $path = '/phame/live/'.$blog->getID().'/'.$path;
+    }
 
     list($controller, $uri_data) = $this->buildControllerForPath($path);
     if (!$controller) {

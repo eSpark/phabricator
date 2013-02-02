@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorLoginValidateController
   extends PhabricatorAuthController {
 
@@ -28,7 +12,7 @@ final class PhabricatorLoginValidateController
 
     $failures = array();
 
-    if (!$request->getStr('phusr')) {
+    if (!strlen($request->getStr('phusr'))) {
       throw new Exception(
         "Login validation is missing expected parameters!");
     }
@@ -64,19 +48,19 @@ final class PhabricatorLoginValidateController
       $list = '<ul>'.implode("\n", $list).'</ul>';
 
       $view = new AphrontRequestFailureView();
-      $view->setHeader('Login Failed');
+      $view->setHeader(pht('Login Failed'));
       $view->appendChild(
-        '<p>Login failed:</p>'.
+        '<p>'.pht('Login failed:').'</p>'.
         $list.
-        '<p><strong>Clear your cookies</strong> and try again.</p>');
+        '<p>'.pht('<strong>Clear your cookies</strong> and try again.').'</p>');
       $view->appendChild(
         '<div class="aphront-failure-continue">'.
-          '<a class="button" href="/login/">Try Again</a>'.
+          '<a class="button" href="/login/">'.pht('Try Again').'</a>'.
         '</div>');
       return $this->buildStandardPageResponse(
         $view,
         array(
-          'title' => 'Login Failed',
+          'title' => pht('Login Failed'),
         ));
     }
 

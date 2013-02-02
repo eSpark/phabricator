@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group phriction
  */
@@ -130,11 +114,24 @@ final class PhrictionEditController
 
           return id(new AphrontDialogResponse())->setDialog($dialog);
         }
+      } else if (!strlen($request->getStr('content'))) {
+
+        // We trigger this only for new pages. For existing pages, deleting
+        // all the content counts as deleting the page.
+
+        $dialog = new AphrontDialogView();
+        $dialog->setUser($user);
+        $dialog->setTitle('Empty Page');
+        $dialog->appendChild(
+          '<p>You can not create an empty document.</p>');
+        $dialog->addCancelButton($request->getRequestURI());
+
+        return id(new AphrontDialogResponse())->setDialog($dialog);
       }
 
       if (!count($errors)) {
         $editor = id(PhrictionDocumentEditor::newForSlug($document->getSlug()))
-          ->setUser($user)
+          ->setActor($user)
           ->setTitle($title)
           ->setContent($request->getStr('content'))
           ->setDescription($notes);
@@ -160,31 +157,14 @@ final class PhrictionEditController
     if ($document->getID()) {
       $panel_header = 'Edit Phriction Document';
       $submit_button = 'Save Changes';
-      $delete_button = phutil_render_tag(
-        'a',
-        array(
-          'href' => '/phriction/delete/'.$document->getID().'/',
-          'class' => 'grey button',
-        ),
-        'Delete Document');
     } else {
       $panel_header = 'Create New Phriction Document';
       $submit_button = 'Create Document';
-      $delete_button = null;
     }
 
     $uri = $document->getSlug();
     $uri = PhrictionDocument::getSlugURI($uri);
     $uri = PhabricatorEnv::getProductionURI($uri);
-
-    $remarkup_reference = phutil_render_tag(
-      'a',
-      array(
-        'href' => PhabricatorEnv::getDoclink('article/Remarkup_Reference.html'),
-        'tabindex' => '-1',
-        'target' => '_blank',
-      ),
-      'Formatting Reference');
 
     $cancel_uri = PhrictionDocument::getSlugURI($document->getSlug());
 
@@ -227,14 +207,13 @@ final class PhrictionEditController
           ->setLabel('URI')
           ->setValue($uri))
       ->appendChild(
-        id(new AphrontFormTextAreaControl())
+        id(new PhabricatorRemarkupControl())
           ->setLabel('Content')
           ->setValue($content_text)
           ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
           ->setName('content')
           ->setID('document-textarea')
-          ->setEnableDragAndDropFileUploads(true)
-          ->setCaption($remarkup_reference))
+          ->setUser($user))
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel('Edit Notes')
@@ -250,10 +229,6 @@ final class PhrictionEditController
       ->setWidth(AphrontPanelView::WIDTH_WIDE)
       ->setHeader($panel_header)
       ->appendChild($form);
-
-    if ($delete_button) {
-      $panel->addButton($delete_button);
-    }
 
     $preview_panel =
       '<div class="aphront-panel-preview aphront-panel-preview-wide">

@@ -1,23 +1,9 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorTypeaheadCommonDatasourceController
   extends PhabricatorTypeaheadDatasourceController {
+
+  private $type;
 
   public function willProcessRequest(array $data) {
     $this->type = $data['type'];
@@ -170,7 +156,7 @@ final class PhabricatorTypeaheadCommonDatasourceController
 
       if ($need_rich_data) {
         $phids = mpull($users, 'getPHID');
-        $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+        $handles = $this->loadViewerHandles($phids);
       }
 
       foreach ($users as $user) {
@@ -293,7 +279,7 @@ final class PhabricatorTypeaheadCommonDatasourceController
           ->setName($name)
           ->setURI($symbol->getURI())
           ->setPHID(md5($symbol->getURI())) // Just needs to be unique.
-          ->setDisplayName($symbol->getName())
+          ->setDisplayName($name)
           ->setDisplayType(strtoupper($lang).' '.ucwords($type).' ('.$proj.')')
           ->setPriorityType('symb');
       }

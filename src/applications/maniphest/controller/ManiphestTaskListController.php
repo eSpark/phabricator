@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -47,17 +31,15 @@ final class ManiphestTaskListController extends ManiphestController {
       $task_ids   = nonempty($task_ids, null);
 
       $search_text = $request->getStr('set_search');
-      $search_text = nonempty($search_text, null);
 
       $min_priority = $request->getInt('set_lpriority');
-      $min_priority = nonempty($min_priority, null);
 
       $max_priority = $request->getInt('set_hpriority');
-      $max_priority = nonempty($max_priority, null);
 
       $uri = $request->getRequestURI()
         ->alter('users',      $this->getArrToStrList('set_users'))
         ->alter('projects',   $this->getArrToStrList('set_projects'))
+        ->alter('aprojects',  $this->getArrToStrList('set_aprojects'))
         ->alter('xprojects',  $this->getArrToStrList('set_xprojects'))
         ->alter('owners',     $this->getArrToStrList('set_owners'))
         ->alter('authors',    $this->getArrToStrList('set_authors'))
@@ -118,6 +100,9 @@ final class ManiphestTaskListController extends ManiphestController {
     $owner_phids    = $query->getParameter('ownerPHIDs', array());
     $author_phids   = $query->getParameter('authorPHIDs', array());
     $project_phids  = $query->getParameter('projectPHIDs', array());
+    $any_project_phids = $query->getParameter(
+      'anyProjectPHIDs',
+      array());
     $exclude_project_phids = $query->getParameter(
       'excludeProjectPHIDs',
       array());
@@ -201,15 +186,34 @@ final class ManiphestTaskListController extends ManiphestController {
       $tokens[$phid] = $handles[$phid]->getFullName();
     }
     if ($this->view != 'projectall' && $this->view != 'projecttriage') {
+
+      $caption = null;
+      if ($this->view == 'custom') {
+        $caption = 'Find tasks in ALL of these projects ("AND" query).';
+      }
+
       $form->appendChild(
         id(new AphrontFormTokenizerControl())
           ->setDatasource('/typeahead/common/searchproject/')
           ->setName('set_projects')
           ->setLabel('Projects')
+          ->setCaption($caption)
           ->setValue($tokens));
     }
 
     if ($this->view == 'custom') {
+      $atokens = array();
+      foreach ($any_project_phids as $phid) {
+        $atokens[$phid] = $handles[$phid]->getFullName();
+      }
+      $form->appendChild(
+        id(new AphrontFormTokenizerControl())
+          ->setDatasource('/typeahead/common/projects/')
+          ->setName('set_aprojects')
+          ->setLabel('Any Projects')
+          ->setCaption('Find tasks in ANY of these projects ("OR" query).')
+          ->setValue($atokens));
+
       $tokens = array();
       foreach ($exclude_project_phids as $phid) {
         $tokens[$phid] = $handles[$phid]->getFullName();
@@ -219,10 +223,11 @@ final class ManiphestTaskListController extends ManiphestController {
           ->setDatasource('/typeahead/common/projects/')
           ->setName('set_xprojects')
           ->setLabel('Exclude Projects')
+          ->setCaption('Find tasks NOT in any of these projects.')
           ->setValue($tokens));
 
       $priority = ManiphestTaskPriority::getLowestPriority();
-      if ($low_priority) {
+      if ($low_priority !== null) {
         $priority = $low_priority;
       }
 
@@ -235,7 +240,7 @@ final class ManiphestTaskListController extends ManiphestController {
                 ManiphestTaskPriority::getTaskPriorityMap(), true)));
 
       $priority = ManiphestTaskPriority::getHighestPriority();
-      if ($high_priority) {
+      if ($high_priority !== null) {
         $priority = $high_priority;
       }
 
@@ -276,15 +281,6 @@ final class ManiphestTaskListController extends ManiphestController {
     }
 
     $filter = new AphrontListFilterView();
-    $filter->addButton(
-      phutil_render_tag(
-        'a',
-        array(
-          'href'  => (string)$create_uri,
-          'class' => 'green button',
-        ),
-        'Create New Task'));
-
     if (empty($key)) {
       $filter->appendChild($form);
     }
@@ -351,7 +347,7 @@ final class ManiphestTaskListController extends ManiphestController {
 
         $count = number_format(count($list));
 
-        $lists->appendChild(
+        $header =
           javelin_render_tag(
             'h1',
             array(
@@ -361,9 +357,15 @@ final class ManiphestTaskListController extends ManiphestController {
                 'priority' => head($list)->getPriority(),
               ),
             ),
-            phutil_escape_html($group).' ('.$count.')'));
+            phutil_escape_html($group).' ('.$count.')');
 
-        $lists->appendChild($task_list);
+
+        $panel = new AphrontPanelView();
+        $panel->appendChild($header);
+        $panel->appendChild($task_list);
+        $panel->setNoBackground();
+
+        $lists->appendChild($panel);
       }
       $lists->appendChild('</div>');
       $selector->appendChild($lists);
@@ -395,10 +397,24 @@ final class ManiphestTaskListController extends ManiphestController {
     $list_container->appendChild('</div>');
     $nav->appendChild($list_container);
 
+    $title = pht('Task List');
+
+    $crumbs = $this->buildApplicationCrumbs()
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName($title))
+      ->addAction(
+        id(new PhabricatorMenuItemView())
+          ->setHref($this->getApplicationURI('/task/create/'))
+          ->setName(pht('Create Task'))
+          ->setIcon('create'));
+
+    $nav->setCrumbs($crumbs);
+
     return $this->buildStandardPageResponse(
       $nav,
       array(
-        'title' => 'Task List',
+        'title' => $title,
       ));
   }
 
@@ -406,8 +422,11 @@ final class ManiphestTaskListController extends ManiphestController {
     $any_project = false;
     $search_text = $search_query->getParameter('fullTextSearch');
     $user_phids = $search_query->getParameter('userPHIDs', array());
-    $project_phids = $search_query->getParameter('projectPHIDs', array());
     $task_ids = $search_query->getParameter('taskIDs', array());
+    $project_phids = $search_query->getParameter('projectPHIDs', array());
+    $any_project_phids = $search_query->getParameter(
+      'anyProjectPHIDs',
+      array());
     $xproject_phids = $search_query->getParameter(
       'excludeProjectPHIDs',
       array());
@@ -415,18 +434,25 @@ final class ManiphestTaskListController extends ManiphestController {
     $author_phids = $search_query->getParameter('authorPHIDs', array());
 
     $low_priority = $search_query->getParameter('lowPriority');
-    $low_priority = nonempty($low_priority,
+    $low_priority = coalesce($low_priority,
         ManiphestTaskPriority::getLowestPriority());
     $high_priority = $search_query->getParameter('highPriority');
-    $high_priority = nonempty($high_priority,
+    $high_priority = coalesce($high_priority,
       ManiphestTaskPriority::getHighestPriority());
 
     $query = new ManiphestTaskQuery();
-    $query->withProjects($project_phids);
     $query->withTaskIDs($task_ids);
+
+    if ($project_phids) {
+      $query->withAllProjects($project_phids);
+    }
 
     if ($xproject_phids) {
       $query->withoutProjects($xproject_phids);
+    }
+
+    if ($any_project_phids) {
+      $query->withAnyProjects($any_project_phids);
     }
 
     if ($owner_phids) {
@@ -467,17 +493,13 @@ final class ManiphestTaskListController extends ManiphestController {
         break;
       case 'projecttriage':
         $query->withPriority(ManiphestTaskPriority::PRIORITY_TRIAGE);
-        $any_project = true;
         break;
       case 'projectall':
-        $any_project = true;
         break;
       case 'custom':
         $query->withPrioritiesBetween($low_priority, $high_priority);
         break;
     }
-
-    $query->withAnyProject($any_project);
 
     $query->withFullTextSearch($search_text);
 
@@ -529,6 +551,7 @@ final class ManiphestTaskListController extends ManiphestController {
       $owner_phids,
       $author_phids,
       $project_group_phids,
+      $any_project_phids,
       array_mergev(mpull($data, 'getProjectPHIDs')));
     $handles = id(new PhabricatorObjectHandleData($handle_phids))
       ->loadHandles();
@@ -689,15 +712,16 @@ final class ManiphestTaskListController extends ManiphestController {
       array($user->getPHID()));
 
     if ($this->view == 'projecttriage' || $this->view == 'projectall') {
-      $project_query = new PhabricatorProjectQuery();
-      $project_query->setViewer($user);
-      $project_query->withMemberPHIDs($user_phids);
-      $projects = $project_query->execute();
-      $project_phids = mpull($projects, 'getPHID');
+      $projects = id(new PhabricatorProjectQuery())
+        ->setViewer($user)
+        ->withMemberPHIDs($user_phids)
+        ->execute();
+      $any_project_phids = mpull($projects, 'getPHID');
     } else {
-      $project_phids = $request->getStrList('projects');
+      $any_project_phids = $request->getStrList('aprojects');
     }
 
+    $project_phids = $request->getStrList('projects');
     $exclude_project_phids = $request->getStrList('xprojects');
     $task_ids = $request->getStrList('tasks');
 
@@ -739,6 +763,7 @@ final class ManiphestTaskListController extends ManiphestController {
         'view'                => $this->view,
         'userPHIDs'           => $user_phids,
         'projectPHIDs'        => $project_phids,
+        'anyProjectPHIDs'     => $any_project_phids,
         'excludeProjectPHIDs' => $exclude_project_phids,
         'ownerPHIDs'          => $owner_phids,
         'authorPHIDs'         => $author_phids,

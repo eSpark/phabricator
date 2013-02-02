@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorSettingsPanelDisplayPreferences
   extends PhabricatorSettingsPanel {
 
@@ -35,10 +19,15 @@ final class PhabricatorSettingsPanelDisplayPreferences
     $user = $request->getUser();
     $preferences = $user->loadPreferences();
 
-    $pref_monospaced = PhabricatorUserPreferences::PREFERENCE_MONOSPACED;
-    $pref_editor     = PhabricatorUserPreferences::PREFERENCE_EDITOR;
-    $pref_titles     = PhabricatorUserPreferences::PREFERENCE_TITLES;
-    $pref_symbols    = PhabricatorUserPreferences::PREFERENCE_DIFFUSION_SYMBOLS;
+    $pref_monospaced   = PhabricatorUserPreferences::PREFERENCE_MONOSPACED;
+    $pref_dark_console = PhabricatorUserPreferences::PREFERENCE_DARK_CONSOLE;
+    $pref_editor       = PhabricatorUserPreferences::PREFERENCE_EDITOR;
+    $pref_multiedit    = PhabricatorUserPreferences::PREFERENCE_MULTIEDIT;
+    $pref_titles       = PhabricatorUserPreferences::PREFERENCE_TITLES;
+    $pref_symbols      =
+      PhabricatorUserPreferences::PREFERENCE_DIFFUSION_SYMBOLS;
+    $pref_monospaced_textareas =
+      PhabricatorUserPreferences::PREFERENCE_MONOSPACED_TEXTAREAS;
 
     if ($request->isFormPost()) {
       $monospaced = $request->getStr($pref_monospaced);
@@ -48,9 +37,19 @@ final class PhabricatorSettingsPanelDisplayPreferences
 
       $preferences->setPreference($pref_titles, $request->getStr($pref_titles));
       $preferences->setPreference($pref_editor, $request->getStr($pref_editor));
-      $preferences->setPreference($pref_symbols,
+      $preferences->setPreference(
+        $pref_multiedit,
+        $request->getStr($pref_multiedit));
+      $preferences->setPreference(
+        $pref_symbols,
         $request->getStr($pref_symbols));
       $preferences->setPreference($pref_monospaced, $monospaced);
+      $preferences->setPreference(
+        $pref_monospaced_textareas,
+        $request->getStr($pref_monospaced_textareas));
+      $preferences->setPreference(
+        $pref_dark_console,
+        $request->getBool($pref_dark_console));
 
       $preferences->save();
       return id(new AphrontRedirectResponse())
@@ -74,6 +73,17 @@ EXAMPLE;
 
     $font_default = PhabricatorEnv::getEnvConfig('style.monospace');
     $font_default = phutil_escape_html($font_default);
+
+    $pref_symbols_value = $preferences->getPreference($pref_symbols);
+    $pref_monospaced_textareas_value = $preferences
+      ->getPreference($pref_monospaced_textareas);
+    if (!$pref_monospaced_textareas_value) {
+      $pref_monospaced_textareas_value = 'disabled';
+    }
+    $pref_dark_console_value = $preferences->getPreference($pref_dark_console);
+    if (!$pref_dark_console_value) {
+        $pref_dark_console_value = 0;
+    }
 
     $form = id(new AphrontFormView())
       ->setUser($user)
@@ -100,6 +110,15 @@ EXAMPLE;
           "For documentation, see {$editor_doc_link}.")
         ->setValue($preferences->getPreference($pref_editor)))
       ->appendChild(
+        id(new AphrontFormSelectControl())
+        ->setLabel('Edit Multiple Files')
+        ->setName($pref_multiedit)
+        ->setOptions(array(
+          '' => 'Supported (paths separated by spaces)',
+          'disable' => 'Not Supported',
+        ))
+        ->setValue($preferences->getPreference($pref_multiedit)))
+      ->appendChild(
         id(new AphrontFormTextControl())
         ->setLabel('Monospaced Font')
         ->setName($pref_monospaced)
@@ -117,19 +136,37 @@ EXAMPLE;
         id(new AphrontFormRadioButtonControl())
         ->setLabel('Symbol Links')
         ->setName($pref_symbols)
-        ->setValue($preferences->getPreference($pref_symbols) ?: 'enabled')
+        ->setValue($pref_symbols_value ? $pref_symbols_value : 'enabled')
         ->addButton('enabled', 'Enabled (default)',
           'Use this setting to disable linking symbol names in Differential '.
           'and Diffusion to their definitions. This is enabled by default.')
         ->addButton('disabled', 'Disabled', null))
       ->appendChild(
+        id(new AphrontFormRadioButtonControl())
+        ->setLabel('Monospaced Textareas')
+        ->setName($pref_monospaced_textareas)
+        ->setValue($pref_monospaced_textareas_value)
+        ->addButton('enabled', 'Enabled',
+          'Show all textareas using the monospaced font defined above.')
+        ->addButton('disabled', 'Disabled', null))
+      ->appendChild(
+        id(new AphrontFormRadioButtonControl())
+        ->setLabel('Dark Console')
+        ->setName($pref_dark_console)
+        ->setValue($pref_dark_console_value ?
+            $pref_dark_console_value : 0)
+        ->addButton(1, 'Enabled',
+          'Enabling and using the built-in debugging console.')
+        ->addButton(0, 'Disabled', null))
+      ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue('Save Preferences'));
 
+
     $panel = new AphrontPanelView();
-    $panel->setWidth(AphrontPanelView::WIDTH_WIDE);
     $panel->setHeader('Display Preferences');
     $panel->appendChild($form);
+    $panel->setNoBackground();
 
     $error_view = null;
     if ($request->getStr('saved') === 'true') {

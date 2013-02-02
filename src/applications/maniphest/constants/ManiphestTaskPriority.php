@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -93,6 +77,15 @@ final class ManiphestTaskPriority extends ManiphestConstants {
   public static function getHighestPriority() {
     return self::PRIORITY_UNBREAK_NOW;
   }
+  /**
+   * Return the default priority for this instance of Phabricator.
+   *
+   * @return int The value of the default priority constant.
+   */
+  public static function getDefaultPriority() {
+    return PhabricatorEnv::getEnvConfig(
+      'maniphest.default-priority');
+  }
 
   /**
    * Retrieve the full name of the priority level provided.
@@ -104,4 +97,5 @@ final class ManiphestTaskPriority extends ManiphestConstants {
   public static function getTaskPriorityName($priority) {
     return idx(self::getTaskPriorityMap(), $priority, '???');
   }
+
 }

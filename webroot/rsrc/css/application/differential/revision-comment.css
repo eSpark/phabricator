@@ -3,11 +3,11 @@
  */
 
 .differential-comment-list {
-  max-width: 1162px;
+  margin: 0 2em 3.6em 2em;
 }
 
-.differential-add-comment-panel {
-  max-width: 1162px;
+.differential-comment-list .phabricator-transaction-content {
+  background: #ffffff;
 }
 
 /*  Spooky haunted panel which floats on the bottom of the screen.
@@ -18,20 +18,18 @@
 */
 .differential-haunt-mode-1 .differential-add-comment-panel,
 .differential-haunt-mode-2 .differential-add-comment-panel {
+  background-color: #fff;
   position: fixed;
   width: 100%;
   bottom: 0;
   right: 0;
   left: 0;
-  z-index: 8;
   overflow: auto;
   max-height: 375px;
-  max-width: none;
 
   box-shadow: 0 0 4px #000;
   -webkit-box-shadow: 0 0 4px #000;
   -moz-box-shadow: 0 0 4px #000;
-
 }
 
 .differential-haunt-mode-2 .differential-add-comment-panel {
@@ -58,11 +56,6 @@
 
 .differential-inline-comment-content {
   overflow: auto;
-}
-
-.differential-comment-core .phabricator-remarkup .remarkup-code-block {
-   width: 88ex;
-   width: 81ch;
 }
 
 .phabricator-transaction-view .differential-comment-action-testplan {

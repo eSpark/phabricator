@@ -1,36 +1,12 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PonderUserProfileView extends AphrontView {
-  private $user;
   private $questionoffset;
   private $answeroffset;
-  private $questions;
   private $answers;
   private $pagesize;
   private $uri;
-  private $qparam;
   private $aparam;
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
 
   public function setQuestionOffset($offset) {
     $this->questionoffset = $offset;
@@ -39,11 +15,6 @@ final class PonderUserProfileView extends AphrontView {
 
   public function setAnswerOffset($offset) {
     $this->answeroffset = $offset;
-    return $this;
-  }
-
-  public function setQuestions($data) {
-    $this->questions = $data;
     return $this;
   }
 
@@ -57,14 +28,8 @@ final class PonderUserProfileView extends AphrontView {
     return $this;
   }
 
-  public function setHandles($handles) {
-    $this->handles = $handles;
-    return $this;
-  }
-
-  public function setURI($uri, $qparam, $aparam) {
+  public function setURI($uri, $aparam) {
     $this->uri = $uri;
-    $this->qparam = $qparam;
     $this->aparam = $aparam;
     return $this;
   }
@@ -73,87 +38,63 @@ final class PonderUserProfileView extends AphrontView {
     require_celerity_resource('ponder-core-view-css');
     require_celerity_resource('ponder-feed-view-css');
 
-    $user = $this->user;
-    $qoffset = $this->questionoffset;
-    $aoffset = $this->answeroffset;
-    $questions = $this->questions;
-    $answers = $this->answers;
-    $handles = $this->handles;
-    $uri = $this->uri;
-    $qparam = $this->qparam;
-    $aparam = $this->aparam;
+    $user     = $this->user;
+    $aoffset  = $this->answeroffset;
+    $answers  = $this->answers;
+    $uri      = $this->uri;
+    $aparam   = $this->aparam;
     $pagesize = $this->pagesize;
-
-
-    // display questions
-    $question_panel = id(new AphrontPanelView())
-      ->setHeader("Your Questions")
-      ->addClass("ponder-panel");
-
-    $question_panel->addButton(
-      phutil_render_tag(
-        'a',
-        array(
-          'href' => "/ponder/question/ask/",
-          'class' => 'green button',
-        ),
-        "Ask a question"));
-
-    $qpagebuttons = id(new AphrontPagerView())
-      ->setPageSize($pagesize)
-      ->setOffset($qoffset)
-      ->setURI(
-        $uri->alter(
-          $aparam,
-          $aoffset),
-        $qparam);
-
-    $questions = $qpagebuttons->sliceResults($questions);
-
-    foreach ($questions as $question) {
-      $cur = id(new PonderQuestionSummaryView())
-        ->setUser($user)
-        ->setQuestion($question)
-        ->setHandles($handles);
-      $question_panel->appendChild($cur);
-    }
-
-    $question_panel->appendChild($qpagebuttons);
-
-    // display answers
-    $answer_panel = id(new AphrontPanelView())
-      ->setHeader("Your Answers")
-      ->addClass("ponder-panel")
-      ->appendChild(
-        phutil_render_tag(
-          'a',
-          array('id' => 'answers'),
-          "")
-      );
 
     $apagebuttons = id(new AphrontPagerView())
       ->setPageSize($pagesize)
       ->setOffset($aoffset)
       ->setURI(
         $uri
-          ->alter(
-            $qparam,
-            $qoffset)
-          ->setFragment("answers"),
+          ->setFragment('answers'),
         $aparam);
-
     $answers = $apagebuttons->sliceResults($answers);
 
+    $view = new PhabricatorObjectItemListView();
+    $view->setUser($user);
+    $view->setNoDataString(pht('No matching answers.'));
+
     foreach ($answers as $answer) {
-      $cur = id(new PonderAnswerSummaryView())
-        ->setUser($user)
-        ->setAnswer($answer)
-        ->setHandles($handles);
-      $answer_panel->appendChild($cur);
+      $question    = $answer->getQuestion();
+      $author_phid = $question->getAuthorPHID();
+
+      $item = new PhabricatorObjectItemView();
+      $item->setObject($answer);
+      $href = id(new PhutilURI('/Q' . $question->getID()))
+        ->setFragment('A' . $answer->getID());
+      $item->setHeader(
+        'A'.$answer->getID().' '.self::abbreviate($answer->getContent())
+      );
+      $item->setHref($href);
+
+      $item->addAttribute(
+        pht('Created %s', phabricator_date($answer->getDateCreated(), $user)));
+
+      $item->addAttribute(pht('%d Vote(s)', $answer->getVoteCount()));
+
+      $item->addAttribute(
+        pht(
+          'Answer to %s',
+          phutil_render_tag(
+            'a',
+            array(
+              'href' => '/Q'.$question->getID(),
+            ),
+            phutil_escape_html(self::abbreviate($question->getTitle())))));
+
+      $view->addItem($item);
     }
 
-    $answer_panel->appendChild($apagebuttons);
+    $view->appendChild($apagebuttons);
 
-    return $question_panel->render() . $answer_panel->render();
+    return $view->render();
+  }
+
+  private function abbreviate($w) {
+    return phutil_utf8_shorten($w, 60);
   }
 }

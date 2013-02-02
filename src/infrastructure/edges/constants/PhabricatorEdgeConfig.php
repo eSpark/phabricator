@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
 
   const TABLE_NAME_EDGE       = 'edge';
@@ -48,6 +32,15 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
   const TYPE_VOTING_USER_HAS_QUESTION   = 18;
   const TYPE_ANSWER_HAS_VOTING_USER     = 19;
   const TYPE_VOTING_USER_HAS_ANSWER     = 20;
+
+  const TYPE_OBJECT_HAS_SUBSCRIBER      = 21;
+  const TYPE_SUBSCRIBED_TO_OBJECT       = 22;
+
+  const TYPE_OBJECT_HAS_UNSUBSCRIBER    = 23;
+  const TYPE_UNSUBSCRIBED_FROM_OBJECT   = 24;
+
+  const TYPE_OBJECT_HAS_FILE            = 25;
+  const TYPE_FILE_HAS_OBJECT            = 26;
 
   const TYPE_TEST_NO_CYCLE              = 9000;
 
@@ -82,6 +75,15 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
         self::TYPE_QUESTION_HAS_VOTING_USER,
       self::TYPE_ANSWER_HAS_VOTING_USER => self::TYPE_VOTING_USER_HAS_ANSWER,
       self::TYPE_VOTING_USER_HAS_ANSWER => self::TYPE_ANSWER_HAS_VOTING_USER,
+
+      self::TYPE_OBJECT_HAS_SUBSCRIBER => self::TYPE_SUBSCRIBED_TO_OBJECT,
+      self::TYPE_SUBSCRIBED_TO_OBJECT => self::TYPE_OBJECT_HAS_SUBSCRIBER,
+
+      self::TYPE_OBJECT_HAS_UNSUBSCRIBER => self::TYPE_UNSUBSCRIBED_FROM_OBJECT,
+      self::TYPE_UNSUBSCRIBED_FROM_OBJECT => self::TYPE_OBJECT_HAS_UNSUBSCRIBER,
+
+      self::TYPE_OBJECT_HAS_FILE => self::TYPE_FILE_HAS_OBJECT,
+      self::TYPE_FILE_HAS_OBJECT => self::TYPE_OBJECT_HAS_FILE,
     );
 
     return idx($map, $edge_type);
@@ -111,6 +113,10 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
       PhabricatorPHIDConstants::PHID_TYPE_POST  => 'PhamePost',
       PhabricatorPHIDConstants::PHID_TYPE_QUES  => 'PonderQuestion',
       PhabricatorPHIDConstants::PHID_TYPE_ANSW  => 'PonderAnswer',
+      PhabricatorPHIDConstants::PHID_TYPE_MOCK  => 'PholioMock',
+      PhabricatorPHIDConstants::PHID_TYPE_MCRO  => 'PhabricatorFileImageMacro',
+      PhabricatorPHIDConstants::PHID_TYPE_CONP  => 'ConpherenceThread',
+
     );
 
     $class = idx($class_map, $phid_type);

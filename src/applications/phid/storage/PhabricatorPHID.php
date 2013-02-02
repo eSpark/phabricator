@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPHID {
 
   protected $phid;
@@ -23,13 +7,21 @@ final class PhabricatorPHID {
   protected $ownerPHID;
   protected $parentPHID;
 
-  public static function generateNewPHID($type) {
+  public static function generateNewPHID($type, $subtype = null) {
     if (!$type) {
       throw new Exception("Can not generate PHID with no type.");
     }
 
-    $uniq = Filesystem::readRandomCharacters(20);
-    return 'PHID-'.$type.'-'.$uniq;
+    if ($subtype === null) {
+      $uniq_len = 20;
+      $type_str = "{$type}";
+    } else {
+      $uniq_len = 15;
+      $type_str = "{$type}-{$subtype}";
+    }
+
+    $uniq = Filesystem::readRandomCharacters($uniq_len);
+    return "PHID-{$type_str}-{$uniq}";
   }
 
   public static function fromObjectName($name) {

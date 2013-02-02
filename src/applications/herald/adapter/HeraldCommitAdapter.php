@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class HeraldCommitAdapter extends HeraldObjectAdapter {
 
   protected $diff;
@@ -119,6 +103,25 @@ final class HeraldCommitAdapter extends HeraldObjectAdapter {
     return $this->affectedRevision;
   }
 
+  private function loadCommitDiff() {
+    $drequest = DiffusionRequest::newFromDictionary(
+      array(
+        'repository' => $this->repository,
+        'commit' => $this->commit->getCommitIdentifier(),
+      ));
+
+    $raw = DiffusionRawDiffQuery::newFromDiffusionRequest($drequest)
+      ->setTimeout(60 * 60 * 15)
+      ->setLinesOfContext(0)
+      ->loadRawDiff();
+
+    $parser = new ArcanistDiffParser();
+    $changes = $parser->parseDiff($raw);
+
+    $diff = DifferentialDiff::newFromRawChanges($changes);
+    return $diff;
+  }
+
   public function getHeraldField($field) {
     $data = $this->commitData;
     switch ($field) {
@@ -133,30 +136,24 @@ final class HeraldCommitAdapter extends HeraldObjectAdapter {
       case HeraldFieldConfig::FIELD_REPOSITORY:
         return $this->repository->getPHID();
       case HeraldFieldConfig::FIELD_DIFF_CONTENT:
-        // TODO!
-        return null;
-/*
         try {
-          $diff = $this->loadDiff();
+          $diff = $this->loadCommitDiff();
         } catch (Exception $ex) {
-          // See rE280053 for an example.
           return array(
-            '<<< Failed to load diff, this usually means the change committed '.
-            'a binary file as text. >>>',
-          );
+            '<<< Failed to load diff, this may mean the change was '.
+            'unimaginably enormous. >>>');
         }
         $dict = array();
-        $changes = $diff->getChangesets();
         $lines = array();
+        $changes = $diff->getChangesets();
         foreach ($changes as $change) {
           $lines = array();
           foreach ($change->getHunks() as $hunk) {
             $lines[] = $hunk->makeChanges();
           }
-          $dict[$change->getTrueFilename()] = implode("\n", $lines);
+          $dict[$change->getFilename()] = implode("\n", $lines);
         }
         return $dict;
-*/
       case HeraldFieldConfig::FIELD_AFFECTED_PACKAGE:
         $packages = $this->loadAffectedPackages();
         return mpull($packages, 'getPHID');

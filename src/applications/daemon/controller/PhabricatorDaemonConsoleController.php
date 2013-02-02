@@ -1,40 +1,76 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorDaemonConsoleController
   extends PhabricatorDaemonController {
 
   public function processRequest() {
-    $logs = id(new PhabricatorDaemonLog())->loadAllWhere(
-      '`status` != %s ORDER BY id DESC LIMIT 15', 'exit');
-
     $request = $this->getRequest();
     $user = $request->getUser();
+
+    $completed = id(new PhabricatorWorkerArchiveTask())->loadAllWhere(
+      'dateModified > %d',
+      time() - (60 * 15));
+
+    $completed_info = array();
+    foreach ($completed as $completed_task) {
+      $class = $completed_task->getTaskClass();
+      if (empty($completed_info[$class])) {
+        $completed_info[$class] = array(
+          'n' => 0,
+          'duration' => 0,
+        );
+      }
+      $completed_info[$class]['n']++;
+      $duration = $completed_task->getDuration();
+      $completed_info[$class]['duration'] += $duration;
+    }
+
+    $completed_info = isort($completed_info, 'n');
+
+    $rows = array();
+    foreach ($completed_info as $class => $info) {
+      $rows[] = array(
+        phutil_escape_html($class),
+        number_format($info['n']),
+        number_format((int)($info['duration'] / $info['n'])).' us',
+      );
+    }
+
+    $completed_table = new AphrontTableView($rows);
+    $completed_table->setNoDataString(
+      pht('No tasks have completed in the last 15 minutes.'));
+    $completed_table->setHeaders(
+      array(
+        pht('Class'),
+        pht('Count'),
+        pht('Avg'),
+      ));
+    $completed_table->setColumnClasses(
+      array(
+        'wide',
+        'n',
+        'n',
+      ));
+
+    $completed_panel = new AphrontPanelView();
+    $completed_panel->setHeader(pht('Recently Completed Tasks (15m)'));
+    $completed_panel->appendChild($completed_table);
+    $completed_panel->setNoBackground();
+
+    $logs = id(new PhabricatorDaemonLog())->loadAllWhere(
+      '`status` = %s ORDER BY id DESC',
+      'run');
 
     $daemon_table = new PhabricatorDaemonLogListView();
     $daemon_table->setUser($user);
     $daemon_table->setDaemonLogs($logs);
 
     $daemon_panel = new AphrontPanelView();
-    $daemon_panel->setHeader('Recently Launched Daemons');
+    $daemon_panel->setHeader('Active Daemons');
     $daemon_panel->appendChild($daemon_table);
+    $daemon_panel->setNoBackground();
 
-    $tasks = id(new PhabricatorWorkerTask())->loadAllWhere(
+    $tasks = id(new PhabricatorWorkerActiveTask())->loadAllWhere(
       'leaseOwner IS NOT NULL');
 
     $rows = array();
@@ -79,8 +115,9 @@ final class PhabricatorDaemonConsoleController
     $leased_panel = new AphrontPanelView();
     $leased_panel->setHeader('Leased Tasks');
     $leased_panel->appendChild($leased_table);
+    $leased_panel->setNoBackground();
 
-    $task_table = new PhabricatorWorkerTask();
+    $task_table = new PhabricatorWorkerActiveTask();
     $queued = queryfx_all(
       $task_table->establishConnection('r'),
       'SELECT taskClass, count(*) N FROM %T GROUP BY taskClass
@@ -111,41 +148,14 @@ final class PhabricatorDaemonConsoleController
     $queued_panel = new AphrontPanelView();
     $queued_panel->setHeader('Queued Tasks');
     $queued_panel->appendChild($queued_table);
-
-    $cursors = id(new PhabricatorTimelineCursor())
-      ->loadAll();
-
-    $rows = array();
-    foreach ($cursors as $cursor) {
-      $rows[] = array(
-        phutil_escape_html($cursor->getName()),
-        number_format($cursor->getPosition()),
-      );
-    }
-
-    $cursor_table = new AphrontTableView($rows);
-    $cursor_table->setHeaders(
-      array(
-        'Name',
-        'Position',
-      ));
-    $cursor_table->setColumnClasses(
-      array(
-        'wide',
-        'n',
-      ));
-    $cursor_table->setNoDataString('No timeline cursors exist.');
-
-    $cursor_panel = new AphrontPanelView();
-    $cursor_panel->setHeader('Timeline Cursors');
-    $cursor_panel->appendChild($cursor_table);
+    $queued_panel->setNoBackground();
 
     $nav = $this->buildSideNavView();
-    $nav->selectFilter('');
+    $nav->selectFilter('/');
     $nav->appendChild(
       array(
+        $completed_panel,
         $daemon_panel,
-        $cursor_panel,
         $queued_panel,
         $leased_panel,
       ));

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group conduit
  */
@@ -47,7 +31,7 @@ final class PhabricatorConduitAPIController
 
     try {
 
-      $params = $this->decodeConduitParams($request);
+      $params = $this->decodeConduitParams($request, $method);
       $metadata = idx($params, '__conduit__', array());
       unset($params['__conduit__']);
 
@@ -124,7 +108,9 @@ final class PhabricatorConduitAPIController
     } catch (Exception $ex) {
       phlog($ex);
       $result = null;
-      $error_code = 'ERR-CONDUIT-CORE';
+      $error_code = ($ex instanceof ConduitException
+        ? 'ERR-CONDUIT-CALL'
+        : 'ERR-CONDUIT-CORE');
       $error_info = $ex->getMessage();
     }
 
@@ -420,7 +406,9 @@ final class PhabricatorConduitAPIController
     return $value;
   }
 
-  private function decodeConduitParams(AphrontRequest $request) {
+  private function decodeConduitParams(
+    AphrontRequest $request,
+    $method) {
 
     // Look for parameters from the Conduit API Console, which are encoded
     // as HTTP POST parameters in an array, e.g.:
@@ -465,13 +453,25 @@ final class PhabricatorConduitAPIController
 
     $params_json = $request->getStr('params');
     if (!strlen($params_json)) {
-      $params = array();
+      if ($request->getBool('allowEmptyParams')) {
+        // TODO: This is a bit messy, but otherwise you can't call
+        // "conduit.ping" from the web console.
+        $params = array();
+      } else {
+        throw new Exception(
+          "Request has no 'params' key. This may mean that an extension like ".
+          "Suhosin has dropped data from the request. Check the PHP ".
+          "configuration on your server. If you are developing a Conduit ".
+          "client, you MUST provide a 'params' parameter when making a ".
+          "Conduit request, even if the value is empty (e.g., provide '{}').");
+      }
     } else {
       $params = json_decode($params_json, true);
       if (!is_array($params)) {
         throw new Exception(
           "Invalid parameter information was passed to method ".
-          "'{$method}', could not decode JSON serialization.");
+          "'{$method}', could not decode JSON serialization. Data: ".
+          $params_json);
       }
     }
 

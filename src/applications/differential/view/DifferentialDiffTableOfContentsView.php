@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialDiffTableOfContentsView extends AphrontView {
 
   private $changesets = array();
@@ -23,7 +7,6 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
   private $references = array();
   private $repository;
   private $diff;
-  private $user;
   private $renderURI = '/differential/changeset/';
   private $revisionID;
   private $whitespace;
@@ -56,11 +39,6 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
 
   public function setUnitTestData($unit_test_data) {
     $this->unitTestData = $unit_test_data;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -111,9 +89,9 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
         if (count($away) > 1) {
           $meta = array();
           if ($type == DifferentialChangeType::TYPE_MULTICOPY) {
-            $meta[] = 'Deleted after being copied to multiple locations:';
+            $meta[] = pht('Deleted after being copied to multiple locations:');
           } else {
-            $meta[] = 'Copied to multiple locations:';
+            $meta[] = pht('Copied to multiple locations:');
           }
           foreach ($away as $path) {
             $meta[] = phutil_escape_html($path);
@@ -121,15 +99,17 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
           $meta = implode('<br />', $meta);
         } else {
           if ($type == DifferentialChangeType::TYPE_MOVE_AWAY) {
-            $meta = 'Moved to '.phutil_escape_html(reset($away));
+            $meta = pht('Moved to %s', phutil_escape_html(reset($away)));
           } else {
-            $meta = 'Copied to '.phutil_escape_html(reset($away));
+            $meta = pht('Copied to %s', phutil_escape_html(reset($away)));
           }
         }
       } else if ($type == DifferentialChangeType::TYPE_MOVE_HERE) {
-        $meta = 'Moved from '.phutil_escape_html($changeset->getOldFile());
+        $meta = pht('Moved from %s',
+          phutil_escape_html($changeset->getOldFile()));
       } else if ($type == DifferentialChangeType::TYPE_COPY_HERE) {
-        $meta = 'Copied from '.phutil_escape_html($changeset->getOldFile());
+        $meta = pht('Copied from %s',
+          phutil_escape_html($changeset->getOldFile()));
       } else {
         $meta = null;
       }
@@ -150,7 +130,7 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
       $pchar =
         ($changeset->getOldProperties() === $changeset->getNewProperties())
           ? null
-          : '<span title="Properties Changed">M</span>';
+          : '<span title="'.pht('Properties Changed').'">M</span>';
 
       $fname = $changeset->getFilename();
       $cov  = $this->renderCoverage($coverage, $fname);
@@ -197,49 +177,61 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
     $editor_link = null;
     if ($paths && $this->user) {
       $editor_link = $this->user->loadEditorLink(
-        implode(' ', $paths),
+        $paths,
         1, // line number
         $this->repository->getCallsign());
       if ($editor_link) {
-        $editor_link = phutil_render_tag(
-          'a',
-          array(
-            'href' => $editor_link,
-            'class' => 'button differential-toc-edit-all',
-          ),
-          'Open All in Editor');
+        $editor_link =
+          phutil_render_tag(
+            'a',
+            array(
+              'href' => $editor_link,
+              'class' => 'button differential-toc-edit-all',
+            ),
+            pht('Open All in Editor'));
       }
     }
 
-    $reveal_link = javelin_render_tag(
-      'a',
-      array(
-        'sigil' => 'differential-reveal-all',
-        'mustcapture' => true,
-        'class' => 'button differential-toc-reveal-all',
-      ),
-      'Show All Context'
-    );
+    $reveal_link =
+      javelin_render_tag(
+        'a',
+        array(
+          'sigil' => 'differential-reveal-all',
+          'mustcapture' => true,
+          'class' => 'button differential-toc-reveal-all',
+        ),
+        pht('Show All Context')
+      );
+
+    $buttons =
+      '<tr><td colspan="7">'.
+        $editor_link.$reveal_link.
+      '</td></tr>';
 
     return
       id(new PhabricatorAnchorView())
         ->setAnchorName('toc')
         ->setNavigationMarker(true)
         ->render().
+      id(new PhabricatorHeaderView())
+        ->setHeader(pht('Table of Contents'))
+        ->render().
       '<div class="differential-toc differential-panel">'.
-        $editor_link.
-        $reveal_link.
-        '<h1>Table of Contents</h1>'.
         '<table>'.
           '<tr>'.
             '<th></th>'.
             '<th></th>'.
             '<th></th>'.
             '<th>Path</th>'.
-            '<th class="differential-toc-cov">Coverage (All)</th>'.
-            '<th class="differential-toc-mcov">Coverage (Touched)</th>'.
+            '<th class="differential-toc-cov">'.
+              pht('Coverage (All)').
+            '</th>'.
+            '<th class="differential-toc-mcov">'.
+              pht('Coverage (Touched)').
+            '</th>'.
           '</tr>'.
           implode("\n", $rows).
+          $buttons.
         '</table>'.
       '</div>';
   }

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Render some distracting statistics on revisions
  */
@@ -23,7 +7,6 @@ final class DifferentialRevisionStatsView extends AphrontView {
   private $comments;
   private $revisions;
   private $diffs;
-  private $user;
   private $filter;
 
   public function setRevisions(array $revisions) {
@@ -46,11 +29,6 @@ final class DifferentialRevisionStatsView extends AphrontView {
 
   public function setFilter($filter) {
     $this->filter = $filter;
-    return $this;
-  }
-
-  public function setUser($user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -146,15 +124,15 @@ final class DifferentialRevisionStatsView extends AphrontView {
       $old_count = $counts[$age];
 
       $row_array[$age] = array(
-        'Revisions per week' => number_format($counts[$age] / $weeks, 2),
-        'Lines per week' => number_format($lines[$age] / $weeks, 1),
-        'Active days per week' =>
+        pht('Revisions per week') => number_format($counts[$age] / $weeks, 2),
+        pht('Lines per week') => number_format($lines[$age] / $weeks, 1),
+        pht('Active days per week') =>
           number_format($count_active[$age] / $weeks, 1),
-        'Revisions' => number_format($counts[$age]),
-        'Lines' => number_format($lines[$age]),
-        'Lines per diff' => number_format($lines[$age] /
+        pht('Revisions') => number_format($counts[$age]),
+        pht('Lines') => number_format($lines[$age]),
+        pht('Lines per diff') => number_format($lines[$age] /
                                           ($counts[$age] + 0.0001)),
-        'Active days' => number_format($count_active[$age]),
+        pht('Active days') => number_format($count_active[$age]),
       );
 
       switch ($this->filter) {

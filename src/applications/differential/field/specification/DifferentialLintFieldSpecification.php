@@ -1,34 +1,25 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialLintFieldSpecification
   extends DifferentialFieldSpecification {
 
+  public function shouldAppearOnDiffView() {
+      return true;
+  }
+
+  public function renderLabelForDiffView() {
+    return $this->renderLabelForRevisionView();
+  }
+
+  public function renderValueForDiffView() {
+    return $this->renderValueForRevisionView();
+  }
   public function shouldAppearOnRevisionView() {
     return true;
   }
 
   public function renderLabelForRevisionView() {
     return 'Lint:';
-  }
-
-  public function getRequiredDiffProperties() {
-    return array('arc:lint', 'arc:lint-excuse', 'arc:lint-postponed');
   }
 
   private function getLintExcuse() {
@@ -124,6 +115,17 @@ final class DifferentialLintFieldSpecification
               $name),
             'show'  => $show,
           );
+
+          if (isset($message['locations'])) {
+            $locations = array();
+            foreach ($message['locations'] as $location) {
+              $other_line = idx($location, 'line');
+              $locations[] =
+                idx($location, 'path', $path).
+                ($other_line ? ":{$other_line}" : "");
+            }
+            $description .= "\nOther locations: ".implode(", ", $locations);
+          }
 
           if (strlen($description)) {
             $rows[] = array(
@@ -227,31 +229,40 @@ final class DifferentialLintFieldSpecification
   }
 
   public function renderWarningBoxForRevisionAccept() {
-    $diff = $this->getDiff();
-    $lint_warning = null;
-    if ($diff->getLintStatus() >= DifferentialLintStatus::LINT_WARN) {
-      $titles =
-        array(
-          DifferentialLintStatus::LINT_WARN => 'Lint Warning',
-          DifferentialLintStatus::LINT_FAIL => 'Lint Failure',
-          DifferentialLintStatus::LINT_SKIP => 'Lint Skipped'
-        );
-      if ($diff->getLintStatus() == DifferentialLintStatus::LINT_SKIP) {
-        $content =
-          "<p>This diff was created without running lint. Make sure you are ".
-          "OK with that before you accept this diff.</p>";
-      } else {
-        $content =
-          "<p>This diff has Lint Problems. Make sure you are OK with them ".
-          "before you accept this diff.</p>";
-      }
-      $lint_warning = id(new AphrontErrorView())
-        ->setSeverity(AphrontErrorView::SEVERITY_ERROR)
-        ->setWidth(AphrontErrorView::WIDTH_WIDE)
-        ->appendChild($content)
-        ->setTitle(idx($titles, $diff->getLintStatus(), 'Warning'));
+    $status = $this->getDiff()->getLintStatus();
+    if ($status < DifferentialLintStatus::LINT_WARN) {
+      return null;
     }
-    return $lint_warning;
+
+    $severity = AphrontErrorView::SEVERITY_ERROR;
+    $titles = array(
+      DifferentialLintStatus::LINT_WARN => 'Lint Warning',
+      DifferentialLintStatus::LINT_FAIL => 'Lint Failure',
+      DifferentialLintStatus::LINT_SKIP => 'Lint Skipped',
+      DifferentialLintStatus::LINT_POSTPONED => 'Lint Postponed',
+    );
+
+    if ($status == DifferentialLintStatus::LINT_SKIP) {
+      $content =
+        "<p>This diff was created without running lint. Make sure you are ".
+        "OK with that before you accept this diff.</p>";
+
+    } else if ($status == DifferentialLintStatus::LINT_POSTPONED) {
+      $severity = AphrontErrorView::SEVERITY_WARNING;
+      $content =
+        "<p>Postponed linters didn't finish yet. Make sure you are OK with ".
+        "that before you accept this diff.</p>";
+
+    } else {
+      $content =
+        "<p>This diff has Lint Problems. Make sure you are OK with them ".
+        "before you accept this diff.</p>";
+    }
+
+    return id(new AphrontErrorView())
+      ->setSeverity($severity)
+      ->appendChild($content)
+      ->setTitle(idx($titles, $status, 'Warning'));
   }
 
 }

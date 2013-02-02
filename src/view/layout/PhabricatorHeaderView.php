@@ -1,25 +1,10 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorHeaderView extends AphrontView {
 
   private $objectName;
   private $header;
+  private $tags = array();
 
   public function setHeader($header) {
     $this->header = $header;
@@ -28,6 +13,11 @@ final class PhabricatorHeaderView extends AphrontView {
 
   public function setObjectName($object_name) {
     $this->objectName = $object_name;
+    return $this;
+  }
+
+  public function addTag(PhabricatorTagView $tag) {
+    $this->tags[] = $tag;
     return $this;
   }
 
@@ -45,12 +35,26 @@ final class PhabricatorHeaderView extends AphrontView {
         phutil_escape_html($this->objectName)).' '.$header;
     }
 
+    if ($this->tags) {
+      $header .= phutil_render_tag(
+        'span',
+        array(
+          'class' => 'phabricator-header-tags',
+        ),
+        self::renderSingleView($this->tags));
+    }
+
     return phutil_render_tag(
-      'h1',
+      'div',
       array(
-        'class' => 'phabricator-header-view',
+        'class' => 'phabricator-header-shell',
       ),
-      $header);
+      phutil_render_tag(
+        'h1',
+        array(
+          'class' => 'phabricator-header-view',
+        ),
+        $header));
   }
 
 

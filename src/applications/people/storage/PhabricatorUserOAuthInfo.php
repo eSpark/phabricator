@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorUserOAuthInfo extends PhabricatorUserDAO {
 
   const TOKEN_STATUS_NONE     = 'none';
@@ -55,6 +39,16 @@ final class PhabricatorUserOAuthInfo extends PhabricatorUserDAO {
       self::TOKEN_STATUS_EXPIRED  => 'Token Expired',
     );
     return idx($map, $status, 'Unknown');
+  }
+
+  public static function getRappableTokenStatus($status) {
+    static $map = array(
+      self::TOKEN_STATUS_NONE     => 'There is no token',
+      self::TOKEN_STATUS_GOOD     => 'Your token is good',
+      self::TOKEN_STATUS_FAIL     => 'Your token has failed',
+      self::TOKEN_STATUS_EXPIRED  => 'Your token is old',
+    );
+    return idx($map, $status, 'This code\'s got bugs');
   }
 
 }

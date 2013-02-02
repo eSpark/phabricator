@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -53,7 +37,6 @@ final class ManiphestReportController extends ManiphestController {
     $nav->addLabel('Open Tasks');
     $nav->addFilter('user',           'By User');
     $nav->addFilter('project',        'By Project');
-    $nav->addSpacer();
     $nav->addLabel('Burnup');
     $nav->addFilter('burn',           'Burnup Rate');
 
@@ -92,7 +75,7 @@ final class ManiphestReportController extends ManiphestController {
     $project_phid = $request->getStr('project');
     if ($project_phid) {
       $phids = array($project_phid);
-      $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+      $handles = $this->loadViewerHandles($phids);
       $handle = $handles[$project_phid];
     }
 
@@ -403,10 +386,10 @@ final class ManiphestReportController extends ManiphestController {
     $project_handle = null;
     if ($project_phid) {
       $phids = array($project_phid);
-      $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+      $handles = $this->loadViewerHandles($phids);
       $project_handle = $handles[$project_phid];
 
-      $query->withProjects($phids);
+      $query->withAnyProjects($phids);
     }
 
     $tasks = $query->execute();
@@ -475,7 +458,7 @@ final class ManiphestReportController extends ManiphestController {
     }
 
     $phids = array_keys($result);
-    $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
     $handles = msort($handles, 'getName');
 
     $order = $request->getStr('order', 'name');

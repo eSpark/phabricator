@@ -1,21 +1,8 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * @group search
  */
-
 final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
   private $uri;
   private $timeout;
@@ -104,8 +91,7 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
     return $doc;
   }
 
-  public function executeSearch(PhabricatorSearchQuery $query) {
-
+  private function buildSpec(PhabricatorSearchQuery $query) {
     $spec = array();
     $filter = array();
 
@@ -128,21 +114,11 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
       );
     }
 
-    $type = $query->getParameter('type');
-    if ($type) {
-      $uri = "/phabricator/{$type}/_search";
-    } else {
-      // Don't use '/phabricator/_search' for the case that there is something
-      // else in the index (for example if 'phabricator' is only an alias to
-      // some bigger index).
-      $types = PhabricatorSearchAbstractDocument::getSupportedTypes();
-      $uri = '/phabricator/' . implode(',', array_keys($types)) . '/_search';
-    }
-
     $rel_mapping = array(
       'author' => PhabricatorSearchRelationship::RELATIONSHIP_AUTHOR,
       'open' => PhabricatorSearchRelationship::RELATIONSHIP_OPEN,
       'owner' => PhabricatorSearchRelationship::RELATIONSHIP_OWNER,
+      'subscribers' => PhabricatorSearchRelationship::RELATIONSHIP_SUBSCRIBER,
       'project' => PhabricatorSearchRelationship::RELATIONSHIP_PROJECT,
       'repository' => PhabricatorSearchRelationship::RELATIONSHIP_REPOSITORY,
     );
@@ -189,9 +165,43 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
       }
     }
 
+    if (!$query->getQuery()) {
+      $spec['sort'] = array(
+        array('dateCreated' => 'desc'),
+      );
+    }
+
     $spec['from'] = (int)$query->getParameter('offset', 0);
     $spec['size'] = (int)$query->getParameter('limit', 25);
-    $response = $this->executeRequest($uri, $spec);
+
+    return $spec;
+  }
+
+  public function executeSearch(PhabricatorSearchQuery $query) {
+    $type = $query->getParameter('type');
+    if ($type) {
+      $uri = "/phabricator/{$type}/_search";
+    } else {
+      // Don't use '/phabricator/_search' for the case that there is something
+      // else in the index (for example if 'phabricator' is only an alias to
+      // some bigger index).
+      $types = PhabricatorSearchAbstractDocument::getSupportedTypes();
+      $uri = '/phabricator/' . implode(',', array_keys($types)) . '/_search';
+    }
+
+    try {
+      $response = $this->executeRequest($uri, $this->buildSpec($query));
+    } catch (HTTPFutureResponseStatusHTTP $ex) {
+      // elasticsearch probably uses Lucene query syntax:
+      // http://lucene.apache.org/core/3_6_1/queryparsersyntax.html
+      // Try literal search if operator search fails.
+      if (!$query->getQuery()) {
+        throw $ex;
+      }
+      $query = clone $query;
+      $query->setQuery(addcslashes($query->getQuery(), '+-&|!(){}[]^"~*?:\\'));
+      $response = $this->executeRequest($uri, $this->buildSpec($query));
+    }
 
     $phids = ipull($response['hits']['hits'], '_id');
     return $phids;

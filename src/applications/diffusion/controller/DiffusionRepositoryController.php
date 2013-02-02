@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionRepositoryController extends DiffusionController {
 
   public function processRequest() {
@@ -64,9 +48,10 @@ final class DiffusionRepositoryController extends DiffusionController {
     }
 
     $phids = array_keys($phids);
-    $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $history_table = new DiffusionHistoryTableView();
+    $history_table->setUser($this->getRequest()->getUser());
     $history_table->setDiffusionRequest($drequest);
     $history_table->setHandles($handles);
     $history_table->setHistory($history);
@@ -85,6 +70,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $panel = new AphrontPanelView();
     $panel->setHeader("Recent Commits &middot; {$all}");
     $panel->appendChild($history_table);
+    $panel->setNoBackground();
 
     $content[] = $panel;
 
@@ -98,6 +84,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $browse_panel = new AphrontPanelView();
     $browse_panel->setHeader('Browse Repository');
     $browse_panel->appendChild($browse_table);
+    $browse_panel->setNoBackground();
 
     $content[] = $browse_panel;
 
@@ -153,6 +140,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $panel = new AphrontPanelView();
     $panel->setHeader('Repository Properties');
     $panel->appendChild($table);
+    $panel->setNoBackground();
 
     return $panel;
   }
@@ -187,6 +175,7 @@ final class DiffusionRepositoryController extends DiffusionController {
 
       $panel = new AphrontPanelView();
       $panel->setHeader('Branches');
+      $panel->setNoBackground();
 
       if ($more_branches) {
         $panel->setCaption('Showing ' . $limit . ' branches.');
@@ -240,7 +229,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $view->setCommits($commits);
 
     $phids = $view->getRequiredHandlePHIDs();
-    $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
     $view->setHandles($handles);
 
     $panel = new AphrontPanelView();

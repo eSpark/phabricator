@@ -1,23 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PonderQuestion extends PonderDAO
-  implements PhabricatorMarkupInterface, PonderVotableInterface {
+  implements
+    PhabricatorMarkupInterface,
+    PonderVotableInterface,
+    PhabricatorSubscribableInterface,
+    PhabricatorPolicyInterface {
 
   const MARKUP_FIELD_CONTENT = 'markup:content';
 
@@ -31,9 +19,11 @@ final class PonderQuestion extends PonderDAO
   protected $voteCount;
   protected $answerCount;
   protected $heat;
+  protected $mailKey;
 
   private $answers;
   private $vote;
+  private $comments;
 
   public function getConfiguration() {
     return array(
@@ -55,8 +45,28 @@ final class PonderQuestion extends PonderDAO
     return PhabricatorContentSource::newFromSerialized($this->contentSource);
   }
 
-  public function attachRelated($user_phid) {
+  public function attachRelated() {
     $this->answers = $this->loadRelatives(new PonderAnswer(), "questionID");
+    $qa_phids = mpull($this->answers, 'getPHID') + array($this->getPHID());
+
+    if ($qa_phids) {
+      $comments = id(new PonderCommentQuery())
+        ->withTargetPHIDs($qa_phids)
+        ->execute();
+
+      $comments = mgroup($comments, 'getTargetPHID');
+    } else {
+      $comments = array();
+    }
+
+    $this->setComments(idx($comments, $this->getPHID(), array()));
+    foreach ($this->answers as $answer) {
+      $answer->setQuestion($this);
+      $answer->setComments(idx($comments, $answer->getPHID(), array()));
+    }
+  }
+
+  public function attachVotes($user_phid) {
     $qa_phids = mpull($this->answers, 'getPHID') + array($this->getPHID());
 
     $edges = id(new PhabricatorEdgeQuery())
@@ -78,7 +88,6 @@ final class PonderQuestion extends PonderDAO
 
     $this->setUserVote(idx($question_edge, $this->getPHID()));
     foreach ($this->answers as $answer) {
-      $answer->setQuestion($this);
       $answer->setUserVote(idx($answer_edges, $answer->getPHID()));
     }
   }
@@ -93,6 +102,15 @@ final class PonderQuestion extends PonderDAO
 
   public function getUserVote() {
     return $this->vote;
+  }
+
+  public function setComments($comments) {
+    $this->comments = $comments;
+    return $this;
+  }
+
+  public function getComments() {
+    return $this->comments;
   }
 
   public function getAnswers() {
@@ -138,4 +156,38 @@ final class PonderQuestion extends PonderDAO
   public function getVotablePHID() {
     return $this->getPHID();
   }
+
+  public function isAutomaticallySubscribed($phid) {
+    return false;
+  }
+
+  public function save() {
+    if (!$this->getMailKey()) {
+      $this->setMailKey(Filesystem::readRandomCharacters(20));
+    }
+    return parent::save();
+  }
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+    );
+  }
+
+  public function getPolicy($capability) {
+    $policy = PhabricatorPolicies::POLICY_NOONE;
+
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        $policy = PhabricatorPolicies::POLICY_USER;
+        break;
+    }
+
+    return $policy;
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    return false;
+  }
+
 }

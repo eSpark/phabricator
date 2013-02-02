@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Describes and implements the behavior for a custom field on Differential
  * revisions. Along with other configuration, you can extend this class to add
@@ -179,6 +163,20 @@ abstract class DifferentialFieldSpecification {
    */
   public function validateField() {
     return;
+  }
+
+  /**
+   * Determine if user mentions should be extracted from the value and added to
+   * CC when creating revision. Mentions are then extracted from the string
+   * returned by @{method:renderValueForCommitMessage}.
+   *
+   * By default, mentions are not extracted.
+   *
+   * @return bool
+   * @task edit
+   */
+  public function shouldExtractMentions() {
+    return false;
   }
 
   /**
@@ -354,6 +352,63 @@ abstract class DifferentialFieldSpecification {
   }
 
 
+/* -(  Extending the Diff View Interface  )------------------------------ */
+
+
+  /**
+   * Determine if this field should appear on the diff detail view
+   * interface. One use of this interface is to add purely informational
+   * fields to the diff view, without any sort of backing storage.
+   *
+   * NOTE: These diffs are not necessarily attached yet to a revision.
+   * As such, a field on the diff view can not rely on the existence of a
+   * revision or use storage attached to the revision.
+   *
+   * If you return true from this method, you must implement the methods
+   * @{method:renderLabelForDiffView} and
+   * @{method:renderValueForDiffView}.
+   *
+   * @return bool True if this field should appear when viewing a diff.
+   * @task view
+   */
+  public function shouldAppearOnDiffView() {
+    return false;
+  }
+
+
+  /**
+   * Return a string field label which will appear in the diff detail
+   * table.
+   *
+   * You must implement this method if you return true from
+   * @{method:shouldAppearOnDiffView}.
+   *
+   * @return string Label for field in revision detail view.
+   * @task view
+   */
+  public function renderLabelForDiffView() {
+    throw new DifferentialFieldSpecificationIncompleteException($this);
+  }
+
+
+  /**
+   * Return a markup block representing the field for the diff detail
+   * view. Note that you can return null to suppress display (for instance,
+   * if the field shows related objects of some type and the revision doesn't
+   * have any related objects).
+   *
+   * You must implement this method if you return true from
+   * @{method:shouldAppearOnDiffView}.
+   *
+   * @return string|null Display markup for field value, or null to suppress
+   *                     field rendering.
+   * @task view
+   */
+  public function renderValueForDiffView() {
+    throw new DifferentialFieldSpecificationIncompleteException($this);
+  }
+
+
 /* -(  Extending the E-mail Interface  )------------------------------------- */
 
 
@@ -399,6 +454,31 @@ abstract class DifferentialFieldSpecification {
     return $key;
   }
 
+/* -(  Extending the Search Interface  )------------------------------------ */
+
+  /**
+   * @task search
+   */
+  public function shouldAddToSearchIndex() {
+    return false;
+  }
+
+  /**
+   * @task search
+   */
+  public function getValueForSearchIndex() {
+    throw new DifferentialFieldSpecificationIncompleteException($this);
+  }
+
+  /**
+   * NOTE: Keys *must be* 4 characters for
+   * @{class:PhabricatorSearchEngineMySQL}.
+   *
+   * @task search
+   */
+  public function getKeyForSearchIndex() {
+    throw new DifferentialFieldSpecificationIncompleteException($this);
+  }
 
 /* -(  Extending Commit Messages  )------------------------------------------ */
 
@@ -569,6 +649,25 @@ abstract class DifferentialFieldSpecification {
   }
 
 
+  /**
+   * This method allows you to take action when a commit appears in a tracked
+   * branch (for example, by closing tasks associated with the commit).
+   *
+   * @param PhabricatorRepository The repository the commit appeared in.
+   * @param PhabricatorRepositoryCommit The commit itself.
+   * @param PhabricatorRepostioryCommitData Commit data.
+   * @return void
+   *
+   * @task commit
+   */
+  public function didParseCommit(
+    PhabricatorRepository $repo,
+    PhabricatorRepositoryCommit $commit,
+    PhabricatorRepositoryCommitData $data) {
+    return;
+  }
+
+
 /* -(  Loading Additional Data  )-------------------------------------------- */
 
 
@@ -655,16 +754,6 @@ abstract class DifferentialFieldSpecification {
    */
   public function getRequiredHandlePHIDsForCommitMessage() {
     return $this->getRequiredHandlePHIDs();
-  }
-
-  /**
-   * Specify which diff properties this field needs to load.
-   *
-   * @return list List of diff property keys this field requires.
-   * @task load
-   */
-  public function getRequiredDiffProperties() {
-    return array();
   }
 
   /**
@@ -832,6 +921,17 @@ abstract class DifferentialFieldSpecification {
     return $this->revision;
   }
 
+
+  /**
+   * Determine if revision context is currently available.
+   *
+   * @task context
+   */
+  final protected function hasRevision() {
+    return (bool)$this->revision;
+  }
+
+
   /**
    * @task context
    */
@@ -885,29 +985,31 @@ abstract class DifferentialFieldSpecification {
   }
 
   /**
-   * Get a diff property which this field previously requested by returning
-   * the key from @{method:getRequiredDiffProperties}.
+   * Get the list of properties for a diff set by @{method:setManualDiff}.
    *
-   * @param  string      Diff property key.
-   * @return string|null Diff property, or null if the property does not have
-   *                     a value.
+   * @return array Array of all Diff properties.
    * @task context
    */
-  final public function getDiffProperty($key) {
+  final public function getDiffProperties() {
     if ($this->diffProperties === null) {
       // This will be set to some (possibly empty) array if we've loaded
       // properties, so null means diff properties aren't available in this
       // context.
       throw new DifferentialFieldDataNotAvailableException($this);
     }
-    if (!array_key_exists($key, $this->diffProperties)) {
-      $class = get_class($this);
-      throw new Exception(
-        "A differential field (of class '{$class}') is attempting to retrieve ".
-        "a diff property ('{$key}') which it did not request. Return all ".
-        "diff property keys you need from getRequiredDiffProperties().");
-    }
-    return $this->diffProperties[$key];
+    return $this->diffProperties;
+  }
+
+  /**
+   * Get a property of a diff set by @{method:setManualDiff}.
+   *
+   * @param  string      Diff property key.
+   * @return mixed|null  Diff property, or null if the property does not have
+   *                     a value.
+   * @task context
+   */
+  final public function getDiffProperty($key) {
+    return idx($this->getDiffProperties(), $key);
   }
 
 }

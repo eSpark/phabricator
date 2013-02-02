@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorApplicationManiphest extends PhabricatorApplication {
 
   public function getShortDescription() {
@@ -30,11 +14,15 @@ final class PhabricatorApplicationManiphest extends PhabricatorApplication {
     return PhabricatorEnv::getEnvConfig('maniphest.enabled');
   }
 
-  public function getAutospriteName() {
+  public function getIconName() {
     return 'maniphest';
   }
 
-  public function getCoreApplicationOrder() {
+  public function getApplicationGroup() {
+    return self::GROUP_CORE;
+  }
+
+  public function getApplicationOrder() {
     return 0.110;
   }
 
@@ -44,9 +32,13 @@ final class PhabricatorApplicationManiphest extends PhabricatorApplication {
     );
   }
 
+  public function getQuickCreateURI() {
+    return $this->getBaseURI().'task/create/';
+  }
+
   public function getRoutes() {
     return array(
-      '/T(?P<id>\d+)' => 'ManiphestTaskDetailController',
+      '/T(?P<id>[1-9]\d*)' => 'ManiphestTaskDetailController',
       '/maniphest/' => array(
         '' => 'ManiphestTaskListController',
         'view/(?P<view>\w+)/' => 'ManiphestTaskListController',
@@ -54,22 +46,23 @@ final class PhabricatorApplicationManiphest extends PhabricatorApplication {
         'batch/' => 'ManiphestBatchEditController',
         'task/' => array(
           'create/' => 'ManiphestTaskEditController',
-          'edit/(?P<id>\d+)/' => 'ManiphestTaskEditController',
-          'descriptionchange/(?:(?P<id>\d+)/)?' =>
+          'edit/(?P<id>[1-9]\d*)/' => 'ManiphestTaskEditController',
+          'descriptionchange/(?:(?P<id>[1-9]\d*)/)?' =>
             'ManiphestTaskDescriptionChangeController',
           'descriptionpreview/' =>
             'ManiphestTaskDescriptionPreviewController',
         ),
         'transaction/' => array(
           'save/' => 'ManiphestTransactionSaveController',
-          'preview/(?P<id>\d+)/' => 'ManiphestTransactionPreviewController',
+          'preview/(?P<id>[1-9]\d*)/'
+            => 'ManiphestTransactionPreviewController',
         ),
         'export/(?P<key>[^/]+)/' => 'ManiphestExportController',
         'subpriority/' => 'ManiphestSubpriorityController',
         'custom/' => array(
           '' => 'ManiphestSavedQueryListController',
-          'edit/(?:(?P<id>\d+)/)?' => 'ManiphestSavedQueryEditController',
-          'delete/(?P<id>\d+)/'   => 'ManiphestSavedQueryDeleteController',
+          'edit/(?:(?P<id>[1-9]\d*)/)?' => 'ManiphestSavedQueryEditController',
+          'delete/(?P<id>[1-9]\d*)/'   => 'ManiphestSavedQueryDeleteController',
         ),
       ),
     );

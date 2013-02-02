@@ -1,35 +1,13 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PonderAddAnswerView extends AphrontView {
 
   private $question;
-  private $user;
   private $actionURI;
   private $draft;
 
   public function setQuestion($question) {
     $this->question = $question;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -45,43 +23,35 @@ final class PonderAddAnswerView extends AphrontView {
 
     $question = $this->question;
 
-    $panel = id(new AphrontPanelView())
-      ->addClass("ponder-panel")
-      ->setHeader("Your Answer:");
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader('Add Answer');
 
     $form = new AphrontFormView();
     $form
+      ->setFlexible(true)
       ->setUser($this->user)
       ->setAction($this->actionURI)
+      ->setWorkflow(true)
       ->addHiddenInput('question_id', $question->getID())
       ->appendChild(
-        id(new AphrontFormTextAreaControl())
+        id(new PhabricatorRemarkupControl())
           ->setName('answer')
+          ->setLabel('Answer')
+          ->setError(true)
           ->setID('answer-content')
-          ->setEnableDragAndDropFileUploads(true)
-          ->setCaption(phutil_render_tag(
-            'a',
-            array(
-              'href' => PhabricatorEnv::getDoclink(
-                'article/Remarkup_Reference.html'),
-              'tabindex' => '-1',
-              'target' => '_blank',
-            ),
-            'Formatting Reference')))
+          ->setUser($this->user))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue($is_serious ? 'Submit' : 'Make it so.'));
+          ->setValue($is_serious ? 'Submit' : 'Make it so'));
 
-    $panel->appendChild($form);
-    $panel->appendChild(
+    $preview =
       '<div class="aphront-panel-flush">'.
         '<div id="answer-preview">'.
           '<span class="aphront-panel-preview-loading-text">'.
             'Loading answer preview...'.
           '</span>'.
         '</div>'.
-      '</div>'
-    );
+      '</div>';
 
     Javelin::initBehavior(
       'ponder-feedback-preview',
@@ -92,6 +62,13 @@ final class PonderAddAnswerView extends AphrontView {
         'question_id' => $question->getID()
       ));
 
-    return $panel->render();
+    return id(new AphrontNullView())
+      ->appendChild(
+        array(
+          $header,
+          $form,
+          $preview,
+        ))
+      ->render();
   }
 }

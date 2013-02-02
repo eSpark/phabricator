@@ -1,37 +1,11 @@
 #!/usr/bin/env php
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root.'/scripts/__init_script__.php';
 
 // http://www.opm.gov/operating_status_schedules/fedhol/
 $holidays = array(
-  '2012-01-02' => "New Year's Day",
-  '2012-01-16' => "Birthday of Martin Luther King, Jr.",
-  '2012-02-20' => "Washington's Birthday",
-  '2012-05-28' => "Memorial Day",
-  '2012-07-04' => "Independence Day",
-  '2012-09-03' => "Labor Day",
-  '2012-10-08' => "Columbus Day",
-  '2012-11-12' => "Veterans Day",
-  '2012-11-22' => "Thanksgiving Day",
-  '2012-12-25' => "Christmas Day",
   '2013-01-01' => "New Year's Day",
   '2013-01-21' => "Birthday of Martin Luther King, Jr.",
   '2013-02-18' => "Washington's Birthday",
@@ -62,6 +36,16 @@ $holidays = array(
   '2015-11-11' => "Veterans Day",
   '2015-11-26' => "Thanksgiving Day",
   '2015-12-25' => "Christmas Day",
+  '2016-01-01' => "New Year's Day",
+  '2016-01-18' => "Birthday of Martin Luther King, Jr.",
+  '2016-02-15' => "Washington's Birthday",
+  '2016-05-30' => "Memorial Day",
+  '2016-07-04' => "Independence Day",
+  '2016-09-05' => "Labor Day",
+  '2016-10-10' => "Columbus Day",
+  '2016-11-11' => "Veterans Day",
+  '2016-11-24' => "Thanksgiving Day",
+  '2016-12-26' => "Christmas Day",
 );
 
 $table = new PhabricatorCalendarHoliday();

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group markup
  */
@@ -26,7 +10,7 @@ final class PhabricatorRemarkupRuleImageMacro
 
   public function apply($text) {
     return preg_replace_callback(
-      '@^([a-zA-Z0-9_\-]+)$@m',
+      '@^([a-zA-Z0-9:_\-]+)$@m',
       array($this, 'markupImageMacro'),
       $text);
   }
@@ -34,7 +18,8 @@ final class PhabricatorRemarkupRuleImageMacro
   public function markupImageMacro($matches) {
     if ($this->images === null) {
       $this->images = array();
-      $rows = id(new PhabricatorFileImageMacro())->loadAll();
+      $rows = id(new PhabricatorFileImageMacro())->loadAllWhere(
+        'isDisabled = 0');
       foreach ($rows as $row) {
         $this->images[$row->getName()] = $row->getFilePHID();
       }
@@ -44,10 +29,20 @@ final class PhabricatorRemarkupRuleImageMacro
       $phid = $this->images[$matches[1]];
 
       $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $phid);
+      $style = null;
+      $src_uri = null;
       if ($file) {
         $src_uri = $file->getBestURI();
-      } else {
-        $src_uri = null;
+        $file_data = $file->getMetadata();
+        $height = idx($file_data,PhabricatorFile::METADATA_IMAGE_HEIGHT);
+        $width = idx($file_data, PhabricatorFile::METADATA_IMAGE_WIDTH);
+        if ($height && $width) {
+          $style = sprintf(
+            'height: %dpx; width: %dpx;',
+            $height,
+            $width
+          );
+        }
       }
 
       $img = phutil_render_tag(
@@ -55,7 +50,8 @@ final class PhabricatorRemarkupRuleImageMacro
         array(
           'src'   => $src_uri,
           'alt'   => $matches[1],
-          'title' => $matches[1]),
+          'title' => $matches[1],
+          'style' => $style),
         null);
       return $this->getEngine()->storeText($img);
     } else {

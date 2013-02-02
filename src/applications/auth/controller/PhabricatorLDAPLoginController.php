@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorLDAPLoginController extends PhabricatorAuthController {
   private $provider;
 
@@ -58,11 +42,12 @@ final class PhabricatorLDAPLoginController extends PhabricatorAuthController {
                 $existing_ldap) {
               $dialog = new AphrontDialogView();
               $dialog->setUser($current_user);
-              $dialog->setTitle('Already Linked to Another Account');
+              $dialog->setTitle(pht('Already Linked to Another Account'));
               $dialog->appendChild(
-                '<p>The LDAP account you just authorized is already linked to '.
-                'another Phabricator account. Before you can link it to a '.
-                'different LDAP account, you must unlink the old account.</p>'
+                '<p>'.pht('The LDAP account you just authorized is already '.
+                'linked toanother Phabricator account. Before you can link it '.
+                'to a different LDAP account, you must unlink the old '.
+                'account.').'</p>'
               );
               $dialog->addCancelButton('/settings/panel/ldap/');
 
@@ -76,12 +61,14 @@ final class PhabricatorLDAPLoginController extends PhabricatorAuthController {
           if (!$request->isDialogFormPost()) {
             $dialog = new AphrontDialogView();
             $dialog->setUser($current_user);
-            $dialog->setTitle('Link LDAP Account');
+            $dialog->setTitle(pht('Link LDAP Account'));
             $dialog->appendChild(
-              '<p>Link your LDAP account to your Phabricator account?</p>');
+              '<p>'.
+                pht('Link your LDAP account to your Phabricator account?').
+              '</p>');
             $dialog->addHiddenInput('username', $request->getStr('username'));
             $dialog->addHiddenInput('password', $request->getStr('password'));
-            $dialog->addSubmitButton('Link Accounts');
+            $dialog->addSubmitButton(pht('Link Accounts'));
             $dialog->addCancelButton('/settings/panel/ldap/');
 
             return id(new AphrontDialogResponse())->setDialog($dialog);
@@ -132,27 +119,27 @@ final class PhabricatorLDAPLoginController extends PhabricatorAuthController {
       ->setAction('/ldap/login/')
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('LDAP username')
+        ->setLabel(pht('LDAP username'))
         ->setName('username')
         ->setValue($ldap_username))
       ->appendChild(
         id(new AphrontFormPasswordControl())
-        ->setLabel('Password')
+        ->setLabel(pht('Password'))
         ->setName('password'));
 
     $ldap_form
       ->appendChild(
         id(new AphrontFormSubmitControl())
-        ->setValue('Login'));
+        ->setValue(pht('Login')));
 
     $panel = new AphrontPanelView();
     $panel->setWidth(AphrontPanelView::WIDTH_FORM);
-    $panel->appendChild('<h1>LDAP login</h1>');
+    $panel->appendChild('<h1>'.pht('LDAP login').'</h1>');
     $panel->appendChild($ldap_form);
 
     if (isset($errors) && count($errors) > 0) {
       $error_view = new AphrontErrorView();
-      $error_view->setTitle('Login Failed');
+      $error_view->setTitle(pht('Login Failed'));
       $error_view->setErrors($errors);
     }
 
@@ -162,7 +149,7 @@ final class PhabricatorLDAPLoginController extends PhabricatorAuthController {
         $panel,
       ),
       array(
-        'title' => 'Login',
+        'title' => pht('Login'),
       ));
   }
 

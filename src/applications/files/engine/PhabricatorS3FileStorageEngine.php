@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Amazon S3 file storage engine. This engine scales well but is relatively
  * high-latency since data has to be pulled off S3.
@@ -47,7 +31,17 @@ final class PhabricatorS3FileStorageEngine
   public function writeFile($data, array $params) {
     $s3 = $this->newS3API();
 
-    $name = 'phabricator/'.Filesystem::readRandomCharacters(20);
+    // Generate a random name for this file. We add some directories to it
+    // (e.g. 'abcdef123456' becomes 'ab/cd/ef123456') to make large numbers of
+    // files more browsable with web/debugging tools like the S3 administration
+    // tool.
+    $seed = Filesystem::readRandomCharacters(20);
+    $parts = array(
+      substr($seed, 0, 2),
+      substr($seed, 2, 2),
+      substr($seed, 4),
+    );
+    $name = 'phabricator/'.implode('/', $parts);
 
     AphrontWriteGuard::willWrite();
     $s3->putObject(
@@ -68,7 +62,14 @@ final class PhabricatorS3FileStorageEngine
     $result = $this->newS3API()->getObject(
       $this->getBucketName(),
       $handle);
-    return $result->body;
+
+    // NOTE: The implementation of the API that we're using may respond with
+    // a successful result that has length 0 and no body property.
+    if (isset($result->body)) {
+      return $result->body;
+    } else {
+      return '';
+    }
   }
 
 
@@ -77,7 +78,6 @@ final class PhabricatorS3FileStorageEngine
    * @task impl
    */
   public function deleteFile($handle) {
-
     AphrontWriteGuard::willWrite();
     $this->newS3API()->deleteObject(
       $this->getBucketName(),
@@ -114,13 +114,18 @@ final class PhabricatorS3FileStorageEngine
 
     $access_key = PhabricatorEnv::getEnvConfig('amazon-s3.access-key');
     $secret_key = PhabricatorEnv::getEnvConfig('amazon-s3.secret-key');
+    $endpoint = PhabricatorEnv::getEnvConfig('amazon-s3.endpoint');
 
     if (!$access_key || !$secret_key) {
       throw new PhabricatorFileStorageConfigurationException(
         "Specify 'amazon-s3.access-key' and 'amazon-s3.secret-key'!");
     }
 
-    $s3 = new S3($access_key, $secret_key, $use_ssl = true);
+    if ($endpoint !== null) {
+      $s3 = new S3($access_key, $secret_key, $use_ssl = true, $endpoint);
+    } else {
+      $s3 = new S3($access_key, $secret_key, $use_ssl = true);
+    }
 
     $s3->setExceptions(true);
 

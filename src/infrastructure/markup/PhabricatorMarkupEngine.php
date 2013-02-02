@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Manages markup engine selection, configuration, application, caching and
  * pipelining.
@@ -56,6 +40,8 @@
 final class PhabricatorMarkupEngine {
 
   private $objects = array();
+  private $viewer;
+  private $version = 2;
 
 
 /* -(  Markup Pipeline  )---------------------------------------------------- */
@@ -67,13 +53,16 @@ final class PhabricatorMarkupEngine {
    *
    * @param PhabricatorMarkupInterface  The object to render.
    * @param string                      The field to render.
+   * @param PhabricatorUser             User viewing the markup.
    * @return string                     Marked up output.
    * @task markup
    */
   public static function renderOneObject(
     PhabricatorMarkupInterface $object,
-    $field) {
+    $field,
+    PhabricatorUser $viewer) {
     return id(new PhabricatorMarkupEngine())
+      ->setViewer($viewer)
       ->addObject($object, $field)
       ->process()
       ->getOutput($object, $field);
@@ -126,6 +115,7 @@ final class PhabricatorMarkupEngine {
     $engines = array();
     foreach ($objects as $key => $info) {
       $engines[$key] = $info['object']->newMarkupEngine($info['field']);
+      $engines[$key]->setConfig('viewer', $this->viewer);
     }
 
     // Load or build the preprocessor caches.
@@ -180,7 +170,7 @@ final class PhabricatorMarkupEngine {
   private function getMarkupFieldKey(
     PhabricatorMarkupInterface $object,
     $field) {
-    return $object->getMarkupFieldKey($field);
+    return $object->getMarkupFieldKey($field).'@'.$this->version;
   }
 
 
@@ -198,10 +188,14 @@ final class PhabricatorMarkupEngine {
     }
 
     if ($use_cache) {
-      $blocks = id(new PhabricatorMarkupCache())->loadAllWhere(
-        'cacheKey IN (%Ls)',
-        array_keys($use_cache));
-      $blocks = mpull($blocks, null, 'getCacheKey');
+      try {
+        $blocks = id(new PhabricatorMarkupCache())->loadAllWhere(
+          'cacheKey IN (%Ls)',
+          array_keys($use_cache));
+        $blocks = mpull($blocks, null, 'getCacheKey');
+      } catch (Exception $ex) {
+        phlog($ex);
+      }
     }
 
     foreach ($objects as $key => $info) {
@@ -230,11 +224,7 @@ final class PhabricatorMarkupEngine {
       if (isset($use_cache[$key])) {
         // This is just filling a cache and always safe, even on a read pathway.
         $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-          try {
-            $blocks[$key]->save();
-          } catch (AphrontQueryDuplicateKeyException $ex) {
-            // Ignore this, we just raced to write the cache.
-          }
+          $blocks[$key]->replace();
         unset($unguarded);
       }
     }
@@ -243,7 +233,21 @@ final class PhabricatorMarkupEngine {
   }
 
 
+  /**
+   * Set the viewing user. Used to implement object permissions.
+   *
+   * @param PhabricatorUser The viewing user.
+   * @return this
+   * @task markup
+   */
+  public function setViewer(PhabricatorUser $viewer) {
+    $this->viewer = $viewer;
+    return $this;
+  }
+
+
 /* -(  Engine Construction  )------------------------------------------------ */
+
 
 
   /**
@@ -282,7 +286,6 @@ final class PhabricatorMarkupEngine {
     return self::newMarkupEngine(
       array(
         'macros'      => false,
-        'fileproxy'   => false,
         'youtube'     => false,
 
       ));
@@ -341,7 +344,6 @@ final class PhabricatorMarkupEngine {
   private static function getMarkupEngineDefaultConfiguration() {
     return array(
       'pygments'      => PhabricatorEnv::getEnvConfig('pygments.enabled'),
-      'fileproxy'     => PhabricatorEnv::getEnvConfig('files.enable-proxy'),
       'youtube'       => PhabricatorEnv::getEnvConfig(
         'remarkup.enable-embedded-youtube'),
       'custom-inline' => array(),
@@ -360,7 +362,7 @@ final class PhabricatorMarkupEngine {
   /**
    * @task engine
    */
-  private static function newMarkupEngine(array $options) {
+  public static function newMarkupEngine(array $options) {
 
     $options += self::getMarkupEngineDefaultConfiguration();
 
@@ -390,10 +392,6 @@ final class PhabricatorMarkupEngine {
 
     $rules[] = new PhutilRemarkupRuleDocumentLink();
 
-    if ($options['fileproxy']) {
-      $rules[] = new PhabricatorRemarkupRuleProxyImage();
-    }
-
     if ($options['youtube']) {
       $rules[] = new PhabricatorRemarkupRuleYoutube();
     }
@@ -402,13 +400,17 @@ final class PhabricatorMarkupEngine {
     $rules[] = new PhabricatorRemarkupRulePhriction();
 
     $rules[] = new PhabricatorRemarkupRuleDifferentialHandle();
-    $rules[] = new PhabricatorRemarkupRuleManiphestHandle();
+    if (PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
+      $rules[] = new PhabricatorRemarkupRuleManiphestHandle();
+    }
 
     $rules[] = new PhabricatorRemarkupRuleEmbedFile();
 
     $rules[] = new PhabricatorRemarkupRuleDifferential();
     $rules[] = new PhabricatorRemarkupRuleDiffusion();
-    $rules[] = new PhabricatorRemarkupRuleManiphest();
+    if (PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
+      $rules[] = new PhabricatorRemarkupRuleManiphest();
+    }
     $rules[] = new PhabricatorRemarkupRulePaste();
 
     $rules[] = new PhabricatorRemarkupRuleCountdown();
@@ -417,6 +419,7 @@ final class PhabricatorMarkupEngine {
 
     if ($options['macros']) {
       $rules[] = new PhabricatorRemarkupRuleImageMacro();
+      $rules[] = new PhabricatorRemarkupRuleMeme();
     }
 
     $rules[] = new PhabricatorRemarkupRuleMention();
@@ -434,6 +437,7 @@ final class PhabricatorMarkupEngine {
     $blocks[] = new PhutilRemarkupEngineRemarkupCodeBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupNoteBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupTableBlockRule();
+    $blocks[] = new PhutilRemarkupEngineRemarkupSimpleTableBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupDefaultBlockRule();
 
     $custom_block_rule_classes = $options['custom-block'];
@@ -474,6 +478,72 @@ final class PhabricatorMarkupEngine {
     }
 
     return $mentions;
+  }
+
+  public static function extractFilePHIDsFromEmbeddedFiles(
+    array $content_blocks) {
+    $files = array();
+
+    $engine = self::newDifferentialMarkupEngine();
+
+    foreach ($content_blocks as $content_block) {
+      $engine->markupText($content_block);
+      $ids = $engine->getTextMetadata(
+        PhabricatorRemarkupRuleEmbedFile::KEY_EMBED_FILE_PHIDS,
+        array());
+      $files += $ids;
+    }
+
+    return $files;
+  }
+
+  /**
+   * Produce a corpus summary, in a way that shortens the underlying text
+   * without truncating it somewhere awkward.
+   *
+   * TODO: We could do a better job of this.
+   *
+   * @param string  Remarkup corpus to summarize.
+   * @return string Summarized corpus.
+   */
+  public static function summarize($corpus) {
+
+    // Major goals here are:
+    //  - Don't split in the middle of a character (utf-8).
+    //  - Don't split in the middle of, e.g., **bold** text, since
+    //    we end up with hanging '**' in the summary.
+    //  - Try not to pick an image macro, header, embedded file, etc.
+    //  - Hopefully don't return too much text. We don't explicitly limit
+    //    this right now.
+
+    $blocks = preg_split("/\n *\n\s*/", trim($corpus));
+
+    $best = null;
+    foreach ($blocks as $block) {
+      // This is a test for normal spaces in the block, i.e. a heuristic to
+      // distinguish standard paragraphs from things like image macros. It may
+      // not work well for non-latin text. We prefer to summarize with a
+      // paragraph of normal words over an image macro, if possible.
+      $has_space = preg_match('/\w\s\w/', $block);
+
+      // This is a test to find embedded images and headers. We prefer to
+      // summarize with a normal paragraph over a header or an embedded object,
+      // if possible.
+      $has_embed = preg_match('/^[{=]/', $block);
+
+      if ($has_space && !$has_embed) {
+        // This seems like a good summary, so return it.
+        return $block;
+      }
+
+      if (!$best) {
+        // This is the first block we found; if everything is garbage just
+        // use the first block.
+        $best = $block;
+      }
+    }
+
+    return $best;
   }
 
 }

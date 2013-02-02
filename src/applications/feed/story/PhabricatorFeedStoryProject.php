@@ -1,34 +1,9 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorFeedStoryProject extends PhabricatorFeedStory {
 
-  public function getRequiredHandlePHIDs() {
-    return array(
-      $this->getStoryData()->getAuthorPHID(),
-      $this->getStoryData()->getValue('projectPHID'),
-    );
-  }
-
-  public function getRequiredObjectPHIDs() {
-    return array(
-      $this->getStoryData()->getAuthorPHID(),
-    );
+  public function getPrimaryObjectPHID() {
+    return $this->getValue('projectPHID');
   }
 
   public function renderView() {
@@ -105,6 +80,72 @@ final class PhabricatorFeedStoryProject extends PhabricatorFeedStory {
     $view->setOneLineStory(true);
 
     return $view;
+  }
+
+  public function renderText() {
+    $type = $this->getValue('type');
+    $old = $this->getValue('old');
+    $new = $this->getValue('new');
+
+    $proj_handle = $this->getHandle($this->getPrimaryObjectPHID());
+    $proj_name = $proj_handle->getLinkName();
+    $proj_uri = PhabricatorEnv::getURI($proj_handle->getURI());
+
+    $author_phid = $this->getAuthorPHID();
+    $author_name = $this->getHandle($author_phid)->getLinkName();
+
+    switch ($type) {
+      case PhabricatorProjectTransactionType::TYPE_NAME:
+        if (strlen($old)) {
+          $action = 'renamed project '.
+            $proj_name.
+            ' from '.
+            $old.
+            ' to '.
+            $new;
+        } else {
+          $action = 'created project '.
+            $proj_name.
+            ' (as '.
+            $new.
+            ')';
+        }
+        break;
+      case PhabricatorProjectTransactionType::TYPE_STATUS:
+        $action = 'changed project '.
+                  $proj_name.
+                  ' status from '.
+                  $old.
+                  ' to '.
+                  $new;
+        break;
+      case PhabricatorProjectTransactionType::TYPE_MEMBERS:
+        $add = array_diff($new, $old);
+        $rem = array_diff($old, $new);
+
+        if ((count($add) == 1) && (count($rem) == 0) &&
+            (head($add) == $author_phid)) {
+          $action = 'joined project';
+        } else if ((count($add) == 0) && (count($rem) == 1) &&
+                   (head($rem) == $author_phid)) {
+          $action = 'left project';
+        } else if (empty($rem)) {
+          $action = 'added members to project';
+        } else if (empty($add)) {
+          $action = 'removed members from project';
+        } else {
+          $action = 'changed members of project';
+        }
+        $action .= " {$proj_name}";
+        break;
+      default:
+        $action = "updated project {$proj_name}";
+        break;
+    }
+
+    $text = "{$author_name} {$action} {$proj_uri}";
+
+    return $text;
   }
 
 }

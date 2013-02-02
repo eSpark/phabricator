@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorRepositoryListController
   extends PhabricatorRepositoryController {
 
@@ -30,6 +14,7 @@ final class PhabricatorRepositoryListController
     $is_admin = $user->getIsAdmin();
 
     $repos = id(new PhabricatorRepository())->loadAll();
+    $repos = msort($repos, 'getName');
 
     $rows = array();
     foreach ($repos as $repo) {
@@ -105,6 +90,7 @@ final class PhabricatorRepositoryListController
       $panel->setCreateButton('Create New Repository', '/repository/create/');
     }
     $panel->appendChild($table);
+    $panel->setNoBackground();
 
     $projects = id(new PhabricatorRepositoryArcanistProject())->loadAll();
 
@@ -123,11 +109,20 @@ final class PhabricatorRepositoryListController
         phutil_render_tag(
           'a',
           array(
-            'href' => '/repository/project/'.$project->getID().'/',
+            'href' => '/repository/project/edit/'.$project->getID().'/',
             'class' => 'button grey small',
           ),
           'Edit'),
+        javelin_render_tag(
+          'a',
+          array(
+            'href' => '/repository/project/delete/'.$project->getID().'/',
+            'class' => 'button grey small',
+            'sigil' => 'workflow',
+          ),
+          'Delete'),
       );
+
     }
 
     $project_table = new AphrontTableView($rows);
@@ -136,11 +131,13 @@ final class PhabricatorRepositoryListController
         'Project ID',
         'Repository',
         '',
+        '',
       ));
     $project_table->setColumnClasses(
       array(
         '',
         'wide',
+        'action',
         'action',
       ));
 
@@ -149,11 +146,13 @@ final class PhabricatorRepositoryListController
         true,
         true,
         $is_admin,
+        $is_admin,
       ));
 
     $project_panel = new AphrontPanelView();
     $project_panel->setHeader('Arcanist Projects');
     $project_panel->appendChild($project_table);
+    $project_panel->setNoBackground();
 
     return $this->buildStandardPageResponse(
       array(

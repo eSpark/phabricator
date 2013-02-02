@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Tracks and resolves dependencies the page declares with
  * @{function:require_celerity_resource}, and then builds appropriate HTML or
@@ -115,18 +99,28 @@ final class CelerityStaticResourceResponse {
 
       $output[] = $this->renderResource($resource);
     }
-    return implode("\n", $output);
+    return implode("\n", $output)."\n";
   }
 
   private function renderResource(array $resource) {
+    $uri = PhabricatorEnv::getCDNURI($resource['uri']);
     switch ($resource['type']) {
       case 'css':
-        $path = phutil_escape_html($resource['uri']);
-        return '<link rel="stylesheet" type="text/css" href="'.$path.'" />';
+        return phutil_render_tag(
+          'link',
+          array(
+            'rel'   => 'stylesheet',
+            'type'  => 'text/css',
+            'href'  => $uri,
+          ));
       case 'js':
-        $path = phutil_escape_html($resource['uri']);
-        return '<script type="text/javascript" src="'.$path.'">'.
-               '</script>';
+        return phutil_render_tag(
+          'script',
+          array(
+            'type'  => 'text/javascript',
+            'src'   => $uri,
+          ),
+          '');
     }
     throw new Exception("Unable to render resource.");
   }
@@ -203,6 +197,15 @@ final class CelerityStaticResourceResponse {
     if ($this->behaviors) {
       $response['javelin_behaviors'] = $this->behaviors;
       $this->behaviors = array();
+    }
+
+    $this->resolveResources();
+    $resources = array();
+    foreach ($this->packaged as $resource) {
+      $resources[] = PhabricatorEnv::getCDNURI($resource['uri']);
+    }
+    if ($resources) {
+      $response['javelin_resources'] = $resources;
     }
 
     return $response;

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DrydockLogController extends DrydockController {
 
   public function processRequest() {
@@ -43,43 +27,33 @@ final class DrydockLogController extends DrydockController {
 
     $logs = $query->executeWithOffsetPager($pager);
 
-    $rows = array();
-    foreach ($logs as $log) {
-      $rows[] = array(
-        $log->getResourceID(),
-        $log->getLeaseID(),
-        phutil_escape_html($log->getMessage()),
-        phabricator_datetime($log->getEpoch(), $user),
-      );
-    }
+    $title = pht('Logs');
 
-    $table = new AphrontTableView($rows);
-    $table->setHeaders(
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader($title);
+
+    $table = $this->buildLogTableView($logs);
+    $table->appendChild($pager);
+
+    $nav->appendChild(
       array(
-        'Resource',
-        'Lease',
-        'Message',
-        'Date',
-      ));
-    $table->setColumnClasses(
-      array(
-        '',
-        '',
-        'wide',
-        '',
+        $header,
+        $table,
+        $pager,
       ));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader('Drydock Logs');
-    $panel->appendChild($table);
-    $panel->appendChild($pager);
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI('/logs/')));
+    $nav->setCrumbs($crumbs);
 
-    $nav->appendChild($panel);
-
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'Logs',
+        'title' => $title,
+        'device' => true,
       ));
 
   }

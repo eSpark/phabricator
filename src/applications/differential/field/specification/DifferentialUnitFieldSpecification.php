@@ -1,23 +1,19 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialUnitFieldSpecification
   extends DifferentialFieldSpecification {
+
+  public function shouldAppearOnDiffView() {
+      return true;
+  }
+
+  public function renderLabelForDiffView() {
+    return $this->renderLabelForRevisionView();
+  }
+
+  public function renderValueForDiffView() {
+    return $this->renderValueForRevisionView();
+  }
 
   public function shouldAppearOnRevisionView() {
     return true;
@@ -25,10 +21,6 @@ final class DifferentialUnitFieldSpecification
 
   public function renderLabelForRevisionView() {
     return 'Unit:';
-  }
-
-  public function getRequiredDiffProperties() {
-    return array('arc:unit', 'arc:unit-excuse');
   }
 
   private function getUnitExcuse() {
@@ -101,10 +93,20 @@ final class DifferentialUnitFieldSpecification
           $hidden[$result]++;
         }
 
+        $value = phutil_escape_html(idx($test, 'name'));
+        if (!empty($test['link'])) {
+          $value = phutil_render_tag(
+            'a',
+            array(
+              'href' => $test['link'],
+              'target' => '_blank',
+            ),
+            $value);
+        }
         $rows[] = array(
           'style' => $this->getResultStyle($result),
           'name'  => phutil_escape_html(ucwords($result)),
-          'value' => phutil_escape_html(idx($test, 'name')),
+          'value' => $value,
           'show'  => $show,
         );
 
@@ -212,7 +214,6 @@ final class DifferentialUnitFieldSpecification
       }
       $unit_warning = id(new AphrontErrorView())
         ->setSeverity(AphrontErrorView::SEVERITY_ERROR)
-        ->setWidth(AphrontErrorView::WIDTH_WIDE)
         ->appendChild($content)
         ->setTitle(idx($titles, $diff->getUnitStatus(), 'Warning'));
     }

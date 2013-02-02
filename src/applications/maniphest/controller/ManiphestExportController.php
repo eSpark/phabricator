@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -32,6 +16,7 @@ final class ManiphestExportController extends ManiphestController {
    * @phutil-external-symbol class PHPExcel
    * @phutil-external-symbol class PHPExcel_IOFactory
    * @phutil-external-symbol class PHPExcel_Style_NumberFormat
+   * @phutil-external-symbol class PHPExcel_Cell_DataType
    */
   public function processRequest() {
     $request = $this->getRequest();
@@ -58,6 +43,9 @@ final class ManiphestExportController extends ManiphestController {
       $dialog->addCancelButton('/maniphest/');
       return id(new AphrontDialogResponse())->setDialog($dialog);
     }
+
+    // TODO: PHPExcel has a dependency on the PHP zip extension. We should test
+    // for that here, since it fatals if we don't have the ZipArchive class.
 
     $query = id(new PhabricatorSearchQuery())->loadOneWhere(
       'queryKey = %s',
@@ -90,12 +78,10 @@ final class ManiphestExportController extends ManiphestController {
     $tasks = array_mergev($tasks);
 
     $all_projects = array_mergev(mpull($tasks, 'getProjectPHIDs'));
-    $project_handles = id(new PhabricatorObjectHandleData($all_projects))
-      ->loadHandles();
+    $project_handles = $this->loadViewerHandles($all_projects);
     $handles += $project_handles;
 
     $workbook = new PHPExcel();
-
     $sheet = $workbook->setActiveSheetIndex(0);
     $sheet->setTitle('Tasks');
 
@@ -185,7 +171,9 @@ final class ManiphestExportController extends ManiphestController {
     foreach ($rows as $row => $cols) {
       foreach ($cols as $col => $spec) {
         $cell_name = $this->col($col).($row + 1);
-        $sheet->setCellValue($cell_name, $spec);
+        $sheet
+          ->setCellValue($cell_name, $spec, $return_cell = true)
+          ->setDataType(PHPExcel_Cell_DataType::TYPE_STRING);
 
         if ($row == 0) {
           $sheet->getStyle($cell_name)->applyFromArray($header_format);

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -31,7 +15,6 @@ final class ManiphestTransactionDetailView extends ManiphestView {
 
   private $renderSummaryOnly;
   private $renderFullSummary;
-  private $user;
 
   private $auxiliaryFields;
 
@@ -87,11 +70,6 @@ final class ManiphestTransactionDetailView extends ManiphestView {
 
   public function setCommentNumber($comment_number) {
     $this->commentNumber = $comment_number;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -228,7 +206,9 @@ final class ManiphestTransactionDetailView extends ManiphestView {
       $xaction_view->setEpoch($any_transaction->getDateCreated());
       if ($this->commentNumber) {
         $anchor_name = 'comment-'.$this->commentNumber;
-        $anchor_text = 'T'.$any_transaction->getTaskID().'#'.$anchor_name;
+        $anchor_text =
+          'T'.$any_transaction->getTaskID().
+          '#'.$this->commentNumber;
 
         $xaction_view->setAnchor($anchor_name, $anchor_text);
       }
@@ -591,6 +571,7 @@ final class ManiphestTransactionDetailView extends ManiphestView {
         $parser = new DifferentialChangesetParser();
         $parser->setChangeset($changeset);
         $parser->setRenderingReference($id);
+        $parser->setMarkupEngine($this->markupEngine);
         $parser->setWhitespaceMode($whitespace_mode);
 
         $spec = $this->getRangeSpecification();

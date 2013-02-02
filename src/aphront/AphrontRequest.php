@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  *
  * @task data Accessing Request Data
@@ -33,6 +17,8 @@ final class AphrontRequest {
   const TYPE_FORM = '__form__';
   const TYPE_CONDUIT = '__conduit__';
   const TYPE_WORKFLOW = '__wflow__';
+  const TYPE_CONTINUE = '__continue__';
+  const TYPE_PREVIEW = '__preview__';
 
   private $host;
   private $path;
@@ -55,12 +41,24 @@ final class AphrontRequest {
     return $this->applicationConfiguration;
   }
 
+  final public function setPath($path) {
+    $this->path = $path;
+    return $this;
+  }
+
   final public function getPath() {
     return $this->path;
   }
 
   final public function getHost() {
-    return $this->host;
+    // The "Host" header may include a port number, or may be a malicious
+    // header in the form "realdomain.com:ignored@evil.com". Invoke the full
+    // parser to extract the real domain correctly. See here for coverage of
+    // a similar issue in Django:
+    //
+    //  https://www.djangoproject.com/weblog/2012/oct/17/security/
+    $uri = new PhutilURI('http://'.$this->host);
+    return $uri->getDomain();
   }
 
 
@@ -153,10 +151,7 @@ final class AphrontRequest {
       return $default;
     }
     $list = $this->getStr($name);
-    $list = preg_split('/[\s,]/', $list);
-    $list = array_map('trim', $list);
-    $list = array_filter($list, 'strlen');
-    $list = array_values($list);
+    $list = preg_split('/[\s,]+/', $list, $limit = -1, PREG_SPLIT_NO_EMPTY);
     return $list;
   }
 
@@ -166,6 +161,11 @@ final class AphrontRequest {
    */
   final public function getExists($name) {
     return array_key_exists($name, $this->requestData);
+  }
+
+  final public function getFileExists($name) {
+    return isset($_FILES[$name]) &&
+           (idx($_FILES[$name], 'error') !== UPLOAD_ERR_NO_FILE);
   }
 
   final public function isHTTPPost() {
@@ -228,6 +228,26 @@ final class AphrontRequest {
         $more_info = "(This was a web request, {$token_info}.)";
       }
 
+      // Give a more detailed explanation of how to avoid the exception
+      // in developer mode.
+      if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')) {
+        $more_info = $more_info .
+          "To avoid this error, use phabricator_form() to construct forms. " .
+          "If you are already using phabricator_form(), make sure the form " .
+          "'action' uses a relative URI (i.e., begins with a '/'). Forms " .
+          "using absolute URIs do not include CSRF tokens, to prevent " .
+          "leaking tokens to external sites.\n\n" .
+          "If this page performs writes which do not require CSRF " .
+          "protection (usually, filling caches or logging), you can use " .
+          "AphrontWriteGuard::beginScopedUnguardedWrites() to temporarily " .
+          "bypass CSRF protection while writing. You should use this only " .
+          "for writes which can not be protected with normal CSRF " .
+          "mechanisms.\n\n" .
+          "Some UI elements (like PhabricatorActionListView) also have " .
+          "methods which will allow you to render links as forms (like " .
+          "setRenderAsForm(true)).";
+      }
+
       // This should only be able to happen if you load a form, pull your
       // internet for 6 hours, and then reconnect and immediately submit,
       // but give the user some indication of what happened since the workflow
@@ -267,29 +287,35 @@ final class AphrontRequest {
 
   final public function setCookie($name, $value, $expire = null) {
 
-    // Ensure cookies are only set on the configured domain.
+    $is_secure = false;
 
+    // If a base URI has been configured, ensure cookies are only set on that
+    // domain. Also, use the URI protocol to control SSL-only cookies.
     $base_uri = PhabricatorEnv::getEnvConfig('phabricator.base-uri');
-    $base_uri = new PhutilURI($base_uri);
+    if ($base_uri) {
+      $base_uri = new PhutilURI($base_uri);
 
-    $base_domain = $base_uri->getDomain();
-    $base_protocol = $base_uri->getProtocol();
+      $base_domain = $base_uri->getDomain();
+      $base_protocol = $base_uri->getProtocol();
 
-    // The "Host" header may include a port number; if so, ignore it. We can't
-    // use PhutilURI since there's no URI scheme.
-    list($actual_host) = explode(':', $this->getHost(), 2);
-    if ($base_domain != $actual_host) {
-      throw new Exception(
-        "This install of Phabricator is configured as '{$base_domain}' but ".
-        "you are accessing it via '{$actual_host}'. Access Phabricator via ".
-        "the primary configured domain.");
+      $host = $this->getHost();
+
+      if ($base_domain != $host) {
+        throw new Exception(
+          "This install of Phabricator is configured as '{$base_domain}' but ".
+          "you are accessing it via '{$host}'. Access Phabricator via ".
+          "the primary configured domain.");
+      }
+
+      $is_secure = ($base_protocol == 'https');
+    } else {
+      $base_uri = new PhutilURI(PhabricatorEnv::getRequestBaseURI());
+      $base_domain = $base_uri->getDomain();
     }
 
     if ($expire === null) {
       $expire = time() + (60 * 60 * 24 * 365 * 5);
     }
-
-    $is_secure = ($base_protocol == 'https');
 
     setcookie(
       $name,
@@ -326,5 +352,82 @@ final class AphrontRequest {
   final public function getRemoteAddr() {
     return $_SERVER['REMOTE_ADDR'];
   }
+
+  public function isHTTPS() {
+    if (empty($_SERVER['HTTPS'])) {
+      return false;
+    }
+    if (!strcasecmp($_SERVER["HTTPS"], "off")) {
+      return false;
+    }
+    return true;
+  }
+
+  public function isContinueRequest() {
+    return $this->isFormPost() && $this->getStr('__continue__');
+  }
+
+  public function isPreviewRequest() {
+    return $this->isFormPost() && $this->getStr('__preview__');
+  }
+
+  /**
+   * Get application request parameters in a flattened form suitable for
+   * inclusion in an HTTP request, excluding parameters with special meanings.
+   * This is primarily useful if you want to ask the user for more input and
+   * then resubmit their request.
+   *
+   * @return  dict<string, string>  Original request parameters.
+   */
+  public function getPassthroughRequestParameters() {
+    return self::flattenData($this->getPassthruRequestData());
+  }
+
+  /**
+   * Get request data other than "magic" parameters.
+   *
+   * @return dict<string, wild> Request data, with magic filtered out.
+   */
+  public function getPassthroughRequestData() {
+    $data = $this->getRequestData();
+
+    // Remove magic parameters like __dialog__ and __ajax__.
+    foreach ($data as $key => $value) {
+      if (strncmp($key, '__', 2)) {
+        unset($data[$key]);
+      }
+    }
+
+    return $data;
+  }
+
+
+  /**
+   * Flatten an array of key-value pairs (possibly including arrays as values)
+   * into a list of key-value pairs suitable for submitting via HTTP request
+   * (with arrays flattened).
+   *
+   * @param   dict<string, wild>    Data to flatten.
+   * @return  dict<string, string>  Flat data suitable for inclusion in an HTTP
+   *                                request.
+   */
+  public static function flattenData(array $data) {
+    $result = array();
+    foreach ($data as $key => $value) {
+      if (is_array($value)) {
+        foreach (self::flattenData($value) as $fkey => $fvalue) {
+          $fkey = '['.preg_replace('/(?=\[)|$/', ']', $fkey, $limit = 1);
+          $result[$key.$fkey] = $fvalue;
+        }
+      } else {
+        $result[$key] = (string)$value;
+      }
+    }
+
+    ksort($result);
+
+    return $result;
+  }
+
 
 }

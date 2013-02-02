@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Add and remove edges between objects. You can use
  * @{class:PhabricatorEdgeQuery} to load object edges. For more information
@@ -28,25 +12,19 @@
  *
  *    id(new PhabricatorEdgeEditor())
  *      ->addEdge($src, $type, $dst)
- *      ->setUser($user)
+ *      ->setActor($user)
  *      ->save();
  *
  * @task edit     Editing Edges
  * @task cycles   Cycle Prevention
  * @task internal Internals
  */
-final class PhabricatorEdgeEditor {
+final class PhabricatorEdgeEditor extends PhabricatorEditor {
 
   private $addEdges = array();
   private $remEdges = array();
   private $openTransactions = array();
-  private $user;
   private $suppressEvents;
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
-    return $this;
-  }
 
 
 /* -(  Editing Edges  )------------------------------------------------------ */
@@ -398,7 +376,7 @@ final class PhabricatorEdgeEditor {
         'add'   => $this->addEdges,
         'rem'   => $this->remEdges,
       ));
-    $event->setUser($this->user);
+    $event->setUser($this->getActor());
     PhutilEventEngine::dispatchEvent($event);
   }
 

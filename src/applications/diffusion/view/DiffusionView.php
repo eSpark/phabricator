@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class DiffusionView extends AphrontView {
 
   private $diffusionRequest;
@@ -111,7 +95,9 @@ abstract class DiffusionView extends AphrontView {
       $text);
   }
 
-  final public static function linkCommit($repository, $commit) {
+  final public static function nameCommit(
+    PhabricatorRepository $repository,
+    $commit) {
 
     switch ($repository->getVersionControlSystem()) {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
@@ -124,7 +110,15 @@ abstract class DiffusionView extends AphrontView {
     }
 
     $callsign = $repository->getCallsign();
-    $commit_name = "r{$callsign}{$commit_name}";
+    return "r{$callsign}{$commit_name}";
+  }
+
+  final public static function linkCommit(
+    PhabricatorRepository $repository,
+    $commit) {
+
+    $commit_name = self::nameCommit($repository, $commit);
+    $callsign = $repository->getCallsign();
 
     return phutil_render_tag(
       'a',
@@ -149,7 +143,7 @@ abstract class DiffusionView extends AphrontView {
 
   final protected static function renderName($name) {
     $email = new PhutilEmailAddress($name);
-    if ($email->getDisplayName() || $email->getDomainName()) {
+    if ($email->getDisplayName() && $email->getDomainName()) {
       Javelin::initBehavior('phabricator-tooltips', array());
       require_celerity_resource('aphront-tooltip-css');
       return javelin_render_tag(

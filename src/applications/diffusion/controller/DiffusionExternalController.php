@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionExternalController extends DiffusionController {
 
   public function willProcessRequest(array $data) {
@@ -60,6 +44,7 @@ final class DiffusionExternalController extends DiffusionController {
           array(
             'action'    => 'browse',
             'callsign'  => $repository->getCallsign(),
+            'branch'    => $repository->getDefaultBranch(),
             'commit'    => $id,
           ));
         return id(new AphrontRedirectResponse())->setURI($redirect);
@@ -88,11 +73,12 @@ final class DiffusionExternalController extends DiffusionController {
           "Diffusion does not know about.</p>");
     } else if (count($commits) == 1) {
       $commit = head($commits);
+      $repo = $repositories[$commit->getRepositoryID()];
       $redirect = DiffusionRequest::generateDiffusionURI(
         array(
           'action'    => 'browse',
-          'callsign'  => $repositories[$commit->getRepositoryID()]
-                          ->getCallsign(),
+          'callsign'  => $repo->getCallsign(),
+          'branch'    => $repo->getDefaultBranch(),
           'commit'    => $commit->getCommitIdentifier(),
         ));
       return id(new AphrontRedirectResponse())->setURI($redirect);
@@ -105,6 +91,7 @@ final class DiffusionExternalController extends DiffusionController {
           array(
             'action'    => 'browse',
             'callsign'  => $repo->getCallsign(),
+            'branch'    => $repo->getDefaultBranch(),
             'commit'    => $commit->getCommitIdentifier(),
           ));
         $rows[] = array(

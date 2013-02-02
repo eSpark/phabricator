@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialInlineCommentView extends AphrontView {
 
   private $inlineComment;
@@ -48,7 +32,7 @@ final class DifferentialInlineCommentView extends AphrontView {
     return $this;
   }
 
-  public function setMarkupEngine(PhutilMarkupEngine $engine) {
+  public function setMarkupEngine(PhabricatorMarkupEngine $engine) {
     $this->markupEngine = $engine;
     return $this;
   }
@@ -106,7 +90,7 @@ final class DifferentialInlineCommentView extends AphrontView {
 
     $is_draft = false;
     if ($inline->isDraft() && !$is_synthetic) {
-      $links[] = 'Not Submitted Yet';
+      $links[] = pht('Not Submitted Yet');
       $is_draft = true;
     }
 
@@ -118,7 +102,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           'mustcapture' => true,
           'sigil' => 'differential-inline-prev',
         ),
-        'Previous');
+        pht('Previous'));
 
       $links[] = javelin_render_tag(
         'a',
@@ -127,7 +111,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           'mustcapture' => true,
           'sigil' => 'differential-inline-next',
         ),
-        'Next');
+        pht('Next'));
 
       if ($this->allowReply) {
 
@@ -145,7 +129,7 @@ final class DifferentialInlineCommentView extends AphrontView {
               'mustcapture' => true,
               'sigil'       => 'differential-inline-reply',
             ),
-            'Reply');
+            pht('Reply'));
         }
 
       }
@@ -161,7 +145,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           'mustcapture' => true,
           'sigil'       => 'differential-inline-edit',
         ),
-        'Edit');
+        pht('Edit'));
       $links[] = javelin_render_tag(
         'a',
         array(
@@ -169,7 +153,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           'mustcapture' => true,
           'sigil'       => 'differential-inline-delete',
         ),
-        'Delete');
+        pht('Delete'));
     } else if ($this->preview) {
       $links[] = javelin_render_tag(
         'a',
@@ -179,7 +163,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           ),
           'sigil'       => 'differential-inline-preview-jump',
         ),
-        'Not Visible');
+        pht('Not Visible'));
       $links[] = javelin_render_tag(
         'a',
         array(
@@ -187,7 +171,7 @@ final class DifferentialInlineCommentView extends AphrontView {
           'mustcapture' => true,
           'sigil'       => 'differential-inline-delete',
         ),
-        'Delete');
+        pht('Delete'));
     }
 
     if ($links) {
@@ -199,19 +183,9 @@ final class DifferentialInlineCommentView extends AphrontView {
       $links = null;
     }
 
-    $cache = $inline->getCache();
-    if (strlen($cache)) {
-      $content = $cache;
-    } else {
-      $content = $this->markupEngine->markupText($content);
-      if ($inline->getID()) {
-        $inline->setCache($content);
-
-        $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-        $inline->save();
-        unset($unguarded);
-      }
-    }
+    $content = $this->markupEngine->getOutput(
+      $inline,
+      PhabricatorInlineCommentInterface::MARKUP_FIELD_BODY);
 
     if ($this->preview) {
       $anchor = null;
@@ -277,9 +251,9 @@ final class DifferentialInlineCommentView extends AphrontView {
       '<table>'.
         '<tr class="inline">'.
           '<th></th>'.
-          '<td>'.$left_markup.'</td>'.
+          '<td class="left">'.$left_markup.'</td>'.
           '<th></th>'.
-          '<td colspan="2">'.$right_markup.'</td>'.
+          '<td class="right3" colspan="3">'.$right_markup.'</td>'.
         '</tr>'.
       '</table>';
   }

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorLDAPProvider {
   // http://www.php.net/manual/en/function.ldap-errno.php#20665 states
   // that the number could be 31 or 49, in testing it has always been 49
@@ -66,6 +50,22 @@ final class PhabricatorLDAPProvider {
     return PhabricatorEnv::getEnvConfig('ldap.referrals');
   }
 
+  public function getLDAPStartTLS() {
+    return PhabricatorEnv::getEnvConfig('ldap.start-tls');
+  }
+
+  public function bindAnonymousUserEnabled() {
+    return strlen(trim($this->getAnonymousUserName())) > 0;
+  }
+
+  public function getAnonymousUserName() {
+    return PhabricatorEnv::getEnvConfig('ldap.anonymous-user-name');
+  }
+
+  public function getAnonymousUserPassword() {
+    return PhabricatorEnv::getEnvConfig('ldap.anonymous-user-password');
+  }
+
   public function retrieveUserEmail() {
     return $this->userData['mail'][0];
   }
@@ -99,7 +99,10 @@ final class PhabricatorLDAPProvider {
   }
 
   public function retrieveUsername() {
-    return $this->userData[$this->getUsernameAttribute()][0];
+    $key = nonempty(
+      $this->getUsernameAttribute(),
+      $this->getSearchAttribute());
+    return $this->userData[$key][0];
   }
 
   public function getConnection() {
@@ -115,6 +118,13 @@ final class PhabricatorLDAPProvider {
         $this->getLDAPVersion());
       ldap_set_option($this->connection, LDAP_OPT_REFERRALS,
        $this->getLDAPReferrals());
+
+      if ($this->getLDAPStartTLS()) {
+        if (!ldap_start_tls($this->getConnection())) {
+          throw new Exception('Unabled to initialize STARTTLS for LDAP host at '.
+            $this->getHostname().':'.$this->getPort());
+        }
+      }
     }
 
     return $this->connection;
@@ -156,11 +166,15 @@ final class PhabricatorLDAPProvider {
     if ($activeDirectoryDomain) {
       $dn = $username.'@'.$activeDirectoryDomain;
     } else {
-      $dn = ldap_sprintf(
-        '%Q=%s,%Q',
-        $this->getSearchAttribute(),
-        $username,
-        $this->getBaseDN());
+      if (isset($user)) {
+        $dn = $user['dn'];
+      } else {
+        $dn = ldap_sprintf(
+          '%Q=%s,%Q',
+          $this->getSearchAttribute(),
+          $username,
+          $this->getBaseDN());
+      }
     }
 
     // NOTE: It is very important we suppress any messages that occur here,
@@ -183,6 +197,24 @@ final class PhabricatorLDAPProvider {
   private function getUser($attribute, $username) {
     $conn = $this->getConnection();
 
+    if ($this->bindAnonymousUserEnabled()) {
+      // NOTE: It is very important we suppress any messages that occur here,
+      // because it logs passwords if it reaches an error log of any sort.
+      DarkConsoleErrorLogPluginAPI::enableDiscardMode();
+      $result = ldap_bind(
+        $conn,
+        $this->getAnonymousUserName(),
+        $this->getAnonymousUserPassword());
+      DarkConsoleErrorLogPluginAPI::disableDiscardMode();
+
+      if (!$result) {
+        throw new Exception('Bind anonymous account failed. '.
+          $this->invalidLDAPUserErrorMessage(
+            ldap_errno($conn),
+            ldap_error($conn)));
+      }
+    }
+
     $query = ldap_sprintf(
       '%Q=%S',
       $attribute,
@@ -191,8 +223,10 @@ final class PhabricatorLDAPProvider {
     $result = ldap_search($conn, $this->getBaseDN(), $query);
 
     if (!$result) {
-      throw new Exception('Search failed. Please check your LDAP and HTTP '.
-        'logs for more information.');
+      throw new Exception('Search failed. '.
+        $this->invalidLDAPUserErrorMessage(
+          ldap_errno($conn),
+          ldap_error($conn)));
     }
 
     $entries = ldap_get_entries($conn, $result);

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorPeopleProfileController
   extends PhabricatorPeopleController {
 
@@ -55,15 +39,21 @@ final class PhabricatorPeopleProfileController
     }
     $username = phutil_escape_uri($user->getUserName());
 
+    $external_arrow = "\xE2\x86\x97";
+
+    $conpherence_uri =
+      new PhutilURI('/conpherence/new/?participant='.$user->getPHID());
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI(new PhutilURI('/p/'.$username.'/'));
     $nav->addFilter('feed', 'Feed');
+    $nav->addMenuItem(
+      id(new PhabricatorMenuItemView())
+      ->setName(pht('Conpherence').' '.$external_arrow)
+      ->setHref($conpherence_uri)
+    );
     $nav->addFilter('about', 'About');
-
-    $nav->addSpacer();
     $nav->addLabel('Activity');
 
-    $external_arrow = "\xE2\x86\x97";
     $nav->addFilter(
       null,
       "Revisions {$external_arrow}",
@@ -79,13 +69,18 @@ final class PhabricatorPeopleProfileController
       "Commits {$external_arrow}",
       '/audit/view/author/'.$username.'/');
 
+    $nav->addFilter(
+      null,
+      "Lint Messages {$external_arrow}",
+      '/diffusion/lint/?owner[0]='.$user->getPHID());
+
     $oauths = id(new PhabricatorUserOAuthInfo())->loadAllWhere(
       'userID = %d',
       $user->getID());
     $oauths = mpull($oauths, null, 'getOAuthProvider');
 
     $providers = PhabricatorOAuthProvider::getAllProviders();
-    $added_spacer = false;
+    $added_label = false;
     foreach ($providers as $provider) {
       if (!$provider->isProviderEnabled()) {
         continue;
@@ -101,10 +96,9 @@ final class PhabricatorPeopleProfileController
       $href = $oauths[$provider_key]->getAccountURI();
 
       if ($href) {
-        if (!$added_spacer) {
-          $nav->addSpacer();
+        if (!$added_label) {
           $nav->addLabel('Linked Accounts');
-          $added_spacer = true;
+          $added_label = true;
         }
         $nav->addFilter(null, $name.' '.$external_arrow, $href);
       }
@@ -137,21 +131,20 @@ final class PhabricatorPeopleProfileController
       $statuses = id(new PhabricatorUserStatus())->loadCurrentStatuses(
         array($user->getPHID()));
       if ($statuses) {
-        $header->setStatus(reset($statuses)->getStatusDescription($viewer));
+        $header->setStatus(reset($statuses)->getTerseSummary($viewer));
       }
     }
 
-    $header->appendChild($nav);
-    $nav->appendChild(
-      '<div style="padding: 1em;">'.$content.'</div>');
+    $nav->appendChild($header);
+
+    $content = '<div style="padding: 1em;">'.$content.'</div>';
+    $header->appendChild($content);
 
     if ($user->getPHID() == $viewer->getPHID()) {
-      $nav->addSpacer();
       $nav->addFilter(null, 'Edit Profile...', '/settings/panel/profile/');
     }
 
     if ($viewer->getIsAdmin()) {
-      $nav->addSpacer();
       $nav->addFilter(
         null,
         'Administrate User...',
@@ -159,7 +152,7 @@ final class PhabricatorPeopleProfileController
     }
 
     return $this->buildApplicationPage(
-      $header,
+      $nav,
       array(
         'title' => $user->getUsername(),
       ));

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorProjectCreateController
   extends PhabricatorProjectController {
 
@@ -49,7 +33,7 @@ final class PhabricatorProjectCreateController
         $xactions[] = $xaction;
 
         $editor = new PhabricatorProjectEditor($project);
-        $editor->setUser($user);
+        $editor->setActor($user);
         $editor->applyTransactions($xactions);
       } catch (PhabricatorProjectNameCollisionException $ex) {
         $e_name = 'Not Unique';
@@ -105,11 +89,6 @@ final class PhabricatorProjectCreateController
           ->setValue($profile->getBlurb()));
 
     if ($request->isAjax()) {
-
-      if ($error_view) {
-        $error_view->setWidth(AphrontErrorView::WIDTH_DIALOG);
-      }
-
       $dialog = id(new AphrontDialogView())
         ->setUser($user)
         ->setWidth(AphrontDialogView::WIDTH_FORM)

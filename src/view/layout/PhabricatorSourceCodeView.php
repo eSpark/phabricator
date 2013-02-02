@@ -1,24 +1,14 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorSourceCodeView extends AphrontView {
 
   private $lines;
+  private $limit;
+
+  public function setLimit($limit) {
+    $this->limit = $limit;
+    return $this;
+  }
 
   public function setLines(array $lines) {
     $this->lines = $lines;
@@ -35,19 +25,38 @@ final class PhabricatorSourceCodeView extends AphrontView {
 
     $rows = array();
     foreach ($this->lines as $line) {
+      $hit_limit = $this->limit &&
+                   ($line_number == $this->limit) &&
+                   (count($this->lines) != $this->limit);
+
+      if ($hit_limit) {
+        $content_number = '';
+        $content_line = phutil_render_tag(
+          'span',
+          array(
+            'class' => 'c',
+          ),
+          pht('...'));
+      } else {
+        $content_number = phutil_escape_html($line_number);
+        $content_line = "\xE2\x80\x8B".$line;
+      }
 
       // TODO: Provide nice links.
 
       $rows[] =
         '<tr>'.
           '<th class="phabricator-source-line">'.
-            phutil_escape_html($line_number).
+            $content_number.
           '</th>'.
           '<td class="phabricator-source-code">'.
-            "\xE2\x80\x8B".
-            $line.
+            $content_line.
           '</td>'.
         '</tr>';
+
+      if ($hit_limit) {
+        break;
+      }
 
       $line_number++;
     }
@@ -58,11 +67,16 @@ final class PhabricatorSourceCodeView extends AphrontView {
     $classes[] = 'PhabricatorMonospaced';
 
     return phutil_render_tag(
-      'table',
+      'div',
       array(
-        'class' => implode(' ', $classes),
+        'class' => 'phabricator-source-code-container',
       ),
-      implode('', $rows));
+      phutil_render_tag(
+        'table',
+        array(
+          'class' => implode(' ', $classes),
+        ),
+        implode('', $rows)));
   }
 
 }

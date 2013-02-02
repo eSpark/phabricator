@@ -1,32 +1,15 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorFeedStoryCommit extends PhabricatorFeedStory {
 
-  public function getRequiredHandlePHIDs() {
-    $data = $this->getStoryData();
+  public function getPrimaryObjectPHID() {
+    return $this->getValue('commitPHID');
+  }
 
-    return array_filter(
-      array(
-        $data->getValue('commitPHID'),
-        $data->getValue('authorPHID'),
-        $data->getValue('committerPHID'),
-      ));
+  public function getRequiredHandlePHIDs() {
+    return array(
+      $this->getValue('committerPHID'),
+    );
   }
 
   public function renderView() {
@@ -72,6 +55,41 @@ final class PhabricatorFeedStoryCommit extends PhabricatorFeedStory {
     $view->appendChild($content);
 
     return $view;
+  }
+
+  public function renderText() {
+    $author = null;
+    if ($this->getAuthorPHID()) {
+      $author = $this->getHandle($this->getAuthorPHID())->getLinkName();
+    } else {
+      $author = $this->getValue('authorName');
+    }
+
+    $committer = null;
+    if ($this->getValue('committerPHID')) {
+      $committer_handle = $this->getHandle($this->getValue('committerPHID'));
+      $committer = $committer_handle->getLinkName();
+    } else if ($this->getValue('committerName')) {
+      $committer = $this->getValue('committerName');
+    }
+
+    $commit_handle = $this->getHandle($this->getPrimaryObjectPHID());
+    $commit_uri = PhabricatorEnv::getURI($commit_handle->getURI());
+    $commit_name = $commit_handle->getLinkName();
+
+    if (!$committer) {
+      $committer = $author;
+      $author = null;
+    }
+
+    if ($author) {
+      $text = "{$committer} (authored by {$author})".
+              "committed {$commit_name} {$commit_uri}";
+    } else {
+      $text = "{$committer} committed {$commit_name} {$commit_uri}";
+    }
+
+    return $text;
   }
 
 }

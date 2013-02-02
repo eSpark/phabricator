@@ -9,7 +9,6 @@
   font-family:    "Verdana";
   font-size:      11px;
   position:       relative;
-  z-index:        5;
 }
 
 .dark-console a:link {
@@ -155,6 +154,11 @@ a.dark-console-tab-selected {
 
 .dark-console-request-log {
   border-bottom:  2px solid #000000;
+}
+
+.dark-console-panel-RequestLog {
+  max-height: 10em;
+  overflow: auto;
 }
 
 .dark-console-panel-request-log-separator {

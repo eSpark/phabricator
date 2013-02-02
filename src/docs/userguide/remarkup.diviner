@@ -7,7 +7,7 @@ arguments.
 = Overview =
 
 Phabricator uses a lightweight markup language called "Remarkup", similar to
-other lightweight markup langauges like Markdown and Wiki markup.
+other lightweight markup languages like Markdown and Wiki markup.
 
 This document describes how to format text using Remarkup.
 
@@ -38,7 +38,7 @@ empty lines:
   Use "- " or "* " for bulleted lists, and "# " for numbered lists.
   Use ``` or indent two spaces for code.
   Use %%% for a literal block.
-  Use <table>...</table> for tables.
+  Use | ... | ... for tables.
 
 = Basic Styling =
 
@@ -307,20 +307,18 @@ Valid options are:
 
 = Embedding Media =
 
-If you set configuration flags, you can embed media directly in text:
+If you set a configuration flag, you can embed media directly in text:
 
-  - **files.enable-proxy**: allows you to paste in image URLs and have them
-    render inline.
   - **remarkup.enable-embedded-youtube**: allows you to paste in YouTube videos
     and have them render inline.
 
-These options are disabled by default because they have security and/or
-silliness implications, read their descriptions in ##default.conf.php## before
-enabling them.
+This option is disabled by default because it has security and/or
+silliness implications. Read the description in ##default.conf.php## before
+enabling it.
 
 = Image Macros =
 
-You can upload image macros (Files -> Image Macros) which will replace text
+You can upload image macros (More Stuff -> Macro) which will replace text
 strings with the image you specify. For instance, you could upload an image of a
 dancing banana to create a macro named "peanutbutterjellytime", and then any
 time you type that string on a separate line it will be replaced with the image
@@ -359,7 +357,21 @@ escape HTML and preserve line breaks).
 
 = Tables =
 
-Remarkup supports a simplified HTML table syntax. For example, this:
+Remarkup supports simple table syntax. For example, this:
+
+  | Fruit  | Color  | Price   | Peel?
+  | -----  | -----  | -----   | -----
+  | Apple  | red    | `$0.93` | no
+  | Banana | yellow | `$0.19` | **YES**
+
+...produces this:
+
+| Fruit  | Color  | Price   | Peel?
+| -----  | -----  | -----   | -----
+| Apple  | red    | `$0.93` | no
+| Banana | yellow | `$0.19` | **YES**
+
+Remarkup also supports a simplified HTML table syntax. For example, this:
 
   <table>
     <tr>

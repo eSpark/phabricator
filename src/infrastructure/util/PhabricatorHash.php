@@ -1,23 +1,14 @@
 <?php
 
-/*
- * Copyright 2011 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorHash {
 
+
+  /**
+   * Digest a string for general use, including use which relates to security.
+   *
+   * @param   string  Input string.
+   * @return  string  32-byte hexidecimal SHA1+HMAC hash.
+   */
   public static function digest($string) {
     $key = PhabricatorEnv::getEnvConfig('security.hmac-key');
     if (!$key) {
@@ -26,6 +17,41 @@ final class PhabricatorHash {
     }
 
     return hash_hmac('sha1', $string, $key);
+  }
+
+
+  /**
+   * Digest a string for use in, e.g., a MySQL index. This produces a short
+   * (12-byte), case-sensitive alphanumeric string with 72 bits of entropy,
+   * which is generally safe in most contexts (notably, URLs).
+   *
+   * This method emphasizes compactness, and should not be used for security
+   * related hashing (for general purpose hashing, see @{method:digest}).
+   *
+   * @param   string  Input string.
+   * @return  string  12-byte, case-sensitive alphanumeric hash of the string
+   *                  which
+   */
+  public static function digestForIndex($string) {
+    $hash = sha1($string, $raw_output = true);
+
+    static $map;
+    if ($map === null) {
+      $map = "0123456789".
+             "abcdefghij".
+             "klmnopqrst".
+             "uvwxyzABCD".
+             "EFGHIJKLMN".
+             "OPQRSTUVWX".
+             "YZ._";
+    }
+
+    $result = '';
+    for ($ii = 0; $ii < 12; $ii++) {
+      $result .= $map[(ord($hash[$ii]) & 0x3F)];
+    }
+
+    return $result;
   }
 
 }

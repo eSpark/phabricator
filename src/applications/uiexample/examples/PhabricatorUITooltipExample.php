@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorUITooltipExample extends PhabricatorUIExample {
 
   public function getName() {
@@ -52,14 +36,22 @@ EOTEXT;
       'hi' => array(
         'tip' => 'Hi',
       ),
-      'lorem' => array(
+      'lorem (north)' => array(
         'tip' => $lorem,
       ),
       'lorem (east)' => array(
         'tip' => $lorem,
         'align' => 'E',
       ),
-      'lorem (large)' => array(
+      'lorem (south)' => array(
+        'tip' => $lorem,
+        'align' => 'S',
+      ),
+      'lorem (west)' => array(
+        'tip' => $lorem,
+        'align' => 'W',
+      ),
+      'lorem (large, north)' => array(
         'tip' => $lorem,
         'size' => 300,
       ),
@@ -68,12 +60,30 @@ EOTEXT;
         'size' => 300,
         'align' => 'E',
       ),
+      'lorem (large, west)' => array(
+        'tip' => $lorem,
+        'size' => 300,
+        'align' => 'W',
+      ),
+      'lorem (large, south)' => array(
+        'tip' => $lorem,
+        'size' => 300,
+        'align' => 'S',
+      ),
       'overflow (north)' => array(
         'tip' => $overflow,
       ),
       'overflow (east)' => array(
         'tip' => $overflow,
         'align' => 'E',
+      ),
+      'overflow (south)' => array(
+        'tip' => $overflow,
+        'align' => 'S',
+      ),
+      'overflow (west)' => array(
+        'tip' => $overflow,
+        'align' => 'W',
       ),
     );
 
