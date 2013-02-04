@@ -9,7 +9,7 @@ abstract class PhrictionController extends PhabricatorController {
 
     $page = $this->buildStandardPageView();
 
-    $page->setApplicationName('Phriction');
+    $page->setApplicationName('Wiki');
     $page->setBaseURI('/w/');
     $page->setTitle(idx($data, 'title'));
     $page->setGlyph("\xE2\x9A\xA1");

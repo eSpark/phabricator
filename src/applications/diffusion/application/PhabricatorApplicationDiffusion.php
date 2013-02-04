@@ -69,7 +69,7 @@ final class PhabricatorApplicationDiffusion extends PhabricatorApplication {
   }
 
   public function getApplicationGroup() {
-    return self::GROUP_CORE;
+    return self::GROUP_COMMUNICATION;
   }
 
   public function getApplicationOrder() {

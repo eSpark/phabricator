@@ -40,7 +40,10 @@ final class PhabricatorDirectoryMainController
       $tasks_panel = null;
     }
 
-    $jump_panel = $this->buildJumpPanel();
+    // I removed the jump panel because I don't find it useful
+    // for the eSpark workflow --luke
+    $jump_panel = null;
+
     $revision_panel = $this->buildRevisionPanel();
     $audit_panel = $this->buildAuditPanel();
     $commit_panel = $this->buildCommitPanel();

@@ -7,7 +7,7 @@ final class PhabricatorApplicationFeed extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Review activity.';
+    return 'Review activity';
   }
 
   public function getIconName() {
@@ -28,8 +28,11 @@ final class PhabricatorApplicationFeed extends PhabricatorApplication {
   }
 
   public function getApplicationGroup() {
-    return self::GROUP_COMMUNICATION;
+    return self::GROUP_CORE;
   }
 
+  public function getApplicationOrder() {
+    return 0.090;
+  }
 }
 

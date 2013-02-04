@@ -2,8 +2,12 @@
 
 final class PhabricatorApplicationPhriction extends PhabricatorApplication {
 
-  public function getShortDescription() {
+  public function getName() {
     return 'Wiki';
+  }
+
+  public function getShortDescription() {
+    return 'Read and edit documents';
   }
 
   public function getBaseURI() {
@@ -51,7 +55,7 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
   }
 
   public function getApplicationGroup() {
-    return self::GROUP_COMMUNICATION;
+    return self::GROUP_CORE;
   }
 
   public function getApplicationOrder() {

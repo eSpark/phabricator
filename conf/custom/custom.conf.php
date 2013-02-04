@@ -3,8 +3,8 @@
 return array(
 
 	     // Important! This will put Phabricator into setup mode to help you
-	     // configure things.
-	     //'phabricator.setup' => true,
+             // configure things.
+             // 'phabricator.setup' => true,
 
 	     // This will be the base domain for your install, and must be configured.
 	     // Use "https://" if you have SSL. See below for some notes.
@@ -48,6 +48,14 @@ return array(
 	     'google.application-secret' => '5ezViBm05L6l8hEYqpwzlMvj',
 	     'google.registration-enabled' => true,
 	     'google.auth-permanent' => false,
+
+             'maniphest.enabled' => false,
+             'phabricator.uninstalled-applications' =>
+             array('PhabricatorApplicationManiphest' => true,
+                   'PhabricatorApplicationOwners' => true,
+                   'PhabricatorApplicationProject' => true,
+                   'PhabricatorApplicationFlags' => true,
+                   'PhabricatorApplicationDiviner' => true)
 
 ) + phabricator_read_config_file('production');
 
