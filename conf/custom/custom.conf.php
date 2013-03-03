@@ -40,6 +40,10 @@ return array(
 			    ),
 
 	     'auth.email-domains' => array('esparklearning.com'),
+
+             // These are automated files in Xcode
+             'differential.generated-paths' => array('/.xib$/', // generated graphically in IB
+                                                     '/.project.pbxproj$/'), // project metadata
 	     
 	     // Google OAuth configuration
 	     // This project is owned by luke@esparklearning.com
