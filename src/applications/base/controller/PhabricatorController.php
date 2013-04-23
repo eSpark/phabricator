@@ -147,10 +147,14 @@ abstract class PhabricatorController extends AphrontController {
   public function buildApplicationPage($view, array $options) {
     $page = $this->buildStandardPageView();
 
+    $title = PhabricatorEnv::getEnvConfig('phabricator.serious-business') ?
+      'Phabricator' :
+      pht('Bacon Ice Cream for Breakfast');
+
     $application = $this->getCurrentApplication();
+    $page->setTitle(idx($options, 'title', $title));
     if ($application) {
       $page->setApplicationName($application->getName());
-      $page->setTitle(idx($options, 'title'));
       if ($application->getTitleGlyph()) {
         $page->setGlyph($application->getTitleGlyph());
       }
@@ -169,6 +173,9 @@ abstract class PhabricatorController extends AphrontController {
     if (idx($options, 'device')) {
       $page->setDeviceReady(true);
     }
+
+    $page->setShowChrome(idx($options, 'chrome', true));
+    $page->setDust(idx($options, 'dust', false));
 
     $application_menu = $this->buildApplicationMenu();
     if ($application_menu) {
@@ -203,10 +210,9 @@ abstract class PhabricatorController extends AphrontController {
         $view = new PhabricatorStandardPageView();
         $view->setRequest($request);
         $view->setController($this);
-        $view->appendChild(
-          '<div style="padding: 2em 0;">'.
-            $response->buildResponseString().
-          '</div>');
+        $view->appendChild(hsprintf(
+          '<div style="padding: 2em 0;">%s</div>',
+          $response->buildResponseString()));
         $response = new AphrontWebpageResponse();
         $response->setContent($view->render());
         return $response;
@@ -264,7 +270,7 @@ abstract class PhabricatorController extends AphrontController {
    */
   protected function renderHandlesForPHIDs(array $phids, $style = "\n") {
     $style_map = array(
-      "\n"  => '<br />',
+      "\n"  => phutil_tag('br'),
       ','   => ', ',
     );
 
@@ -272,11 +278,9 @@ abstract class PhabricatorController extends AphrontController {
       throw new Exception("Unknown handle list style '{$style}'!");
     }
 
-    $items = array();
-    foreach ($phids as $phid) {
-      $items[] = $this->getHandle($phid)->renderLink();
-    }
-    return implode($style_map[$style], $items);
+    return implode_selected_handle_links($style_map[$style],
+      $this->getLoadedHandles(),
+      $phids);
   }
 
   protected function buildApplicationMenu() {

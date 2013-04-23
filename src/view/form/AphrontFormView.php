@@ -10,10 +10,16 @@ final class AphrontFormView extends AphrontView {
   private $workflow;
   private $id;
   private $flexible;
+  private $noShading;
   private $sigils = array();
 
   public function setFlexible($flexible) {
     $this->flexible = $flexible;
+    return $this;
+  }
+
+  public function setNoShading($shading) {
+    $this->noShading = $shading;
     return $this;
   }
 
@@ -58,11 +64,9 @@ final class AphrontFormView extends AphrontView {
     }
     require_celerity_resource('aphront-form-view-css');
 
-    Javelin::initBehavior('aphront-form-disable-on-submit');
-
     $layout = new AphrontFormLayoutView();
 
-    if (!$this->flexible) {
+    if ((!$this->flexible) && (!$this->noShading)) {
       $layout
         ->setBackgroundShading(true)
         ->setPadded(true);
@@ -73,7 +77,7 @@ final class AphrontFormView extends AphrontView {
       ->appendChild($this->renderChildren());
 
     if (!$this->user) {
-      throw new Exception('You must pass the user to AphrontFormView.');
+      throw new Exception(pht('You must pass the user to AphrontFormView.'));
     }
 
     $sigils = $this->sigils;
@@ -81,7 +85,7 @@ final class AphrontFormView extends AphrontView {
       $sigils[] = 'workflow';
     }
 
-    return phabricator_render_form(
+    return phabricator_form(
       $this->user,
       array(
         'class'   => $this->flexible ? 'phabricator-form-view' : null,
@@ -100,7 +104,7 @@ final class AphrontFormView extends AphrontView {
       if ($value === null) {
         continue;
       }
-      $inputs[] = phutil_render_tag(
+      $inputs[] = phutil_tag(
         'input',
         array(
           'type'  => 'hidden',
@@ -108,7 +112,7 @@ final class AphrontFormView extends AphrontView {
           'value' => $value,
         ));
     }
-    return implode("\n", $inputs);
+    return $inputs;
   }
 
 }

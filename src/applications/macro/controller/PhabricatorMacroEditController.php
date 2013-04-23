@@ -11,8 +11,19 @@ final class PhabricatorMacroEditController
 
   public function processRequest() {
 
+    $request = $this->getRequest();
+    $user = $request->getUser();
+
     if ($this->id) {
-      $macro = id(new PhabricatorFileImageMacro())->load($this->id);
+      $macro = id(new PhabricatorMacroQuery())
+        ->setViewer($user)
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
+        ->withIDs(array($this->id))
+        ->executeOne();
       if (!$macro) {
         return new Aphront404Response();
       }
@@ -22,11 +33,10 @@ final class PhabricatorMacroEditController
 
     $errors = array();
     $e_name = true;
-    $e_file = true;
+    $e_file = pht('Provide a URL or a file');
     $file = null;
+    $can_fetch = PhabricatorEnv::getEnvConfig('security.allow-outbound-http');
 
-    $request = $this->getRequest();
-    $user = $request->getUser();
     if ($request->isFormPost()) {
       $original = clone $macro;
 
@@ -57,6 +67,17 @@ final class PhabricatorMacroEditController
             'name' => $request->getStr('name'),
             'authorPHID' => $user->getPHID(),
           ));
+      } else if ($request->getStr('url')) {
+        try {
+          $file = PhabricatorFile::newFromFileDownload(
+            $request->getStr('url'),
+            array(
+              'name' => $request->getStr('name'),
+              'authorPHID' => $user->getPHID(),
+            ));
+        } catch (Exception $ex) {
+          $errors[] = pht('Could not fetch URL: %s', $ex->getMessage());
+        }
       } else if ($request->getStr('phid')) {
         $file = id(new PhabricatorFile())->loadOneWhere(
           'phid = %s',
@@ -69,13 +90,13 @@ final class PhabricatorMacroEditController
           $e_file = pht('Invalid');
         } else {
           $macro->setFilePHID($file->getPHID());
+          $macro->attachFile($file);
           $e_file = null;
         }
       }
 
       if (!$macro->getID() && !$file) {
         $errors[] = pht('You must upload an image to create a macro.');
-        $e_file = pht('Required');
       }
 
       if (!$errors) {
@@ -124,16 +145,12 @@ final class PhabricatorMacroEditController
       $error_view = null;
     }
 
-
     $current_file = null;
     if ($macro->getFilePHID()) {
-      $current_file = id(new PhabricatorFile())->loadOneWhere(
-        'phid = %s',
-        $macro->getFilePHID());
+      $current_file = $macro->getFile();
     }
 
     $form = new AphrontFormView();
-    $form->setFlexible(true);
     $form->addHiddenInput('name_form', 1);
     $form->setUser($request->getUser());
 
@@ -167,11 +184,20 @@ final class PhabricatorMacroEditController
         $other_label = pht('File');
       }
 
+      if ($can_fetch) {
+        $form->appendChild(
+          id(new AphrontFormTextControl())
+            ->setLabel(pht('URL'))
+            ->setName('url')
+            ->setValue($request->getStr('url'))
+            ->setError($request->getFileExists('file') ? false : $e_file));
+      }
+
       $form->appendChild(
         id(new AphrontFormFileControl())
           ->setLabel($other_label)
           ->setName('file')
-          ->setError($e_file));
+          ->setError($request->getStr('url') ? false : $e_file));
     }
 
 
@@ -209,10 +235,6 @@ final class PhabricatorMacroEditController
         ->setHref($request->getRequestURI())
         ->setName($crumb));
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
-
     $upload = null;
     if ($macro->getID()) {
       $upload_header = id(new PhabricatorHeaderView())
@@ -221,7 +243,18 @@ final class PhabricatorMacroEditController
       $upload_form = id(new AphrontFormView())
         ->setFlexible(true)
         ->setEncType('multipart/form-data')
-        ->setUser($request->getUser())
+        ->setUser($request->getUser());
+
+      if ($can_fetch) {
+        $upload_form
+          ->appendChild(
+            id(new AphrontFormTextControl())
+              ->setLabel(pht('URL'))
+              ->setName('url')
+              ->setValue($request->getStr('url')));
+      }
+
+      $upload_form
         ->appendChild(
           id(new AphrontFormFileControl())
             ->setLabel(pht('File'))
@@ -233,16 +266,22 @@ final class PhabricatorMacroEditController
       $upload = array($upload_header, $upload_form);
     }
 
+    $panel = new AphrontPanelView();
+    $panel->setHeader(pht('Create New Macro'));
+    $panel->setNoBackground();
+    $panel->appendChild($form);
+    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
         $error_view,
-        $form,
+        $panel,
         $upload,
       ),
       array(
         'title' => $title,
+        'device' => true,
       ));
   }
 }

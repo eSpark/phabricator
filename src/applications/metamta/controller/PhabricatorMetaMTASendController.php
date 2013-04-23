@@ -32,6 +32,7 @@ final class PhabricatorMetaMTASendController
       $mail->setIsHTML($request->getInt('html'));
       $mail->setIsBulk($request->getInt('bulk'));
       $mail->setMailTags($request->getStrList('mailtags'));
+      $mail->setOverrideNoSelfMailPreference(true);
       $mail->save();
       if ($request->getInt('immediately')) {
         $mail->sendNow();
@@ -48,18 +49,19 @@ final class PhabricatorMetaMTASendController
     $doclink_href = PhabricatorEnv::getDoclink(
       'article/Configuring_Outbound_Email.html');
 
-    $doclink = phutil_render_tag(
+    $doclink = phutil_tag(
       'a',
       array(
         'href' => $doclink_href,
         'target' => '_blank',
       ),
     pht('Configuring Outbound Email'));
-    $instructions =
-      '<p class="aphront-form-instructions">'.
-      pht('This form will send a normal email using the settings you have '.
-      'configured for Phabricator. For more information, see %s.', $doclink).
-      '</p>';
+    $instructions = hsprintf(
+      '<p class="aphront-form-instructions">%s</p>',
+      pht(
+        'This form will send a normal email using the settings you have '.
+          'configured for Phabricator. For more information, see %s.',
+        $doclink));
 
     $adapter = PhabricatorEnv::getEnvConfig('metamta.mail-adapter');
     $warning = null;
@@ -67,18 +69,24 @@ final class PhabricatorMetaMTASendController
       $warning = new AphrontErrorView();
       $warning->setTitle('Email is Disabled');
       $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $warning->appendChild(
-        '<p>'.pht('This installation of Phabricator is currently set to use '.
-        '<tt>PhabricatorMailImplementationTestAdapter</tt> to deliver '.
-        'outbound email. This completely disables outbound email! All '.
-        'outbound email will be thrown in a deep, dark hole until you '.
-        'configure a real adapter.').'</p>');
+      $warning->appendChild(phutil_tag(
+        'p',
+        array(),
+        pht(
+          'This installation of Phabricator is currently set to use %s to '.
+            'deliver outbound email. This completely disables outbound email! '.
+            'All outbound email will be thrown in a deep, dark hole until you '.
+            'configure a real adapter.',
+          phutil_tag(
+            'tt',
+            array(),
+            'PhabricatorMailImplementationTestAdapter'))));
     }
 
     $phdlink_href = PhabricatorEnv::getDoclink(
       'article/Managing_Daemons_with_phd.html');
 
-    $phdlink = phutil_render_tag(
+    $phdlink = phutil_tag(
       'a',
       array(
         'href' => $phdlink_href,
@@ -116,8 +124,12 @@ final class PhabricatorMetaMTASendController
         id(new AphrontFormTextControl())
           ->setLabel(pht('Mail Tags'))
           ->setName('mailtags')
-          ->setCaption(
-            pht('Example:').' <tt>differential-cc, differential-comment</tt>'))
+          ->setCaption(pht(
+            'Example: %s',
+            phutil_tag(
+              'tt',
+              array(),
+              'differential-cc, differential-comment'))))
       ->appendChild(
         id(new AphrontFormDragAndDropUploadControl())
           ->setLabel(pht('Attach Files'))
@@ -144,8 +156,7 @@ final class PhabricatorMetaMTASendController
             '1',
             pht('Send immediately. (Do not enqueue for daemons.)'),
             PhabricatorEnv::getEnvConfig('metamta.send-immediately'))
-          ->setCaption(pht('Daemons can be started with %s.', $phdlink))
-          )
+          ->setCaption(pht('Daemons can be started with %s.', $phdlink)))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue(pht('Send Mail')));

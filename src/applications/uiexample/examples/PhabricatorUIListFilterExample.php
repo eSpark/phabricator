@@ -7,8 +7,9 @@ final class PhabricatorUIListFilterExample extends PhabricatorUIExample {
   }
 
   public function getDescription() {
-    return 'Use <tt>AphrontListFilterView</tt> to layout controls for '.
-           'filtering and manipulating lists of objects.';
+    return hsprintf(
+      'Use <tt>AphrontListFilterView</tt> to layout controls for filtering '.
+      'and manipulating lists of objects.');
   }
 
   public function renderExample() {
@@ -16,6 +17,7 @@ final class PhabricatorUIListFilterExample extends PhabricatorUIExample {
     $filter = new AphrontListFilterView();
 
     $form = new AphrontFormView();
+    $form->setNoShading(true);
     $form->setUser($this->getRequest()->getUser());
     $form
       ->appendChild(

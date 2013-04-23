@@ -26,7 +26,7 @@ final class DifferentialParseRenderTestCase extends PhabricatorTestCase {
         $actual = $parser->render(null, null, array());
 
         $expect = Filesystem::readFile($dir.$file.'.'.$type.'.expect');
-        $this->assertEqual($expect, $actual, $file.'.'.$type);
+        $this->assertEqual($expect, (string)$actual, $file.'.'.$type);
       }
     }
   }
@@ -43,6 +43,7 @@ final class DifferentialParseRenderTestCase extends PhabricatorTestCase {
     $changeset = head($diff->getChangesets());
 
     $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer(new PhabricatorUser());
 
     $cparser = new DifferentialChangesetParser();
     $cparser->setDisableCache(true);

@@ -11,6 +11,7 @@ final class AphrontDialogView extends AphrontView {
   private $class;
   private $renderAsForm = true;
   private $formID;
+  private $headerColor = PhabricatorActionHeaderView::HEADER_DARK_GREY;
 
   private $width      = 'default';
   const WIDTH_DEFAULT = 'default';
@@ -31,12 +32,20 @@ final class AphrontDialogView extends AphrontView {
     return $this->title;
   }
 
-  public function addSubmitButton($text = 'Okay') {
+  public function addSubmitButton($text = null) {
+    if (!$text) {
+      $text = pht('Okay');
+    }
+
     $this->submitButton = $text;
     return $this;
   }
 
-  public function addCancelButton($uri, $text = 'Cancel') {
+  public function addCancelButton($uri, $text = null) {
+    if (!$text) {
+      $text = pht('Cancel');
+    }
+
     $this->cancelURI = $uri;
     $this->cancelText = $text;
     return $this;
@@ -74,22 +83,27 @@ final class AphrontDialogView extends AphrontView {
     return $this;
   }
 
+  public function setHeaderColor($color) {
+    $this->headerColor = $color;
+    return $this;
+  }
+
   final public function render() {
     require_celerity_resource('aphront-dialog-view-css');
 
     $buttons = array();
     if ($this->submitButton) {
-      $buttons[] = javelin_render_tag(
+      $buttons[] = javelin_tag(
         'button',
         array(
           'name' => '__submit__',
           'sigil' => '__default__',
         ),
-        phutil_escape_html($this->submitButton));
+        $this->submitButton);
     }
 
     if ($this->cancelURI) {
-      $buttons[] = javelin_render_tag(
+      $buttons[] = javelin_tag(
         'a',
         array(
           'href'  => $this->cancelURI,
@@ -97,13 +111,12 @@ final class AphrontDialogView extends AphrontView {
           'name'  => '__cancel__',
           'sigil' => 'jx-workflow-button',
         ),
-        phutil_escape_html($this->cancelText));
+        $this->cancelText);
     }
-    $buttons = implode('', $buttons);
 
     if (!$this->user) {
       throw new Exception(
-        "You must call setUser() when rendering an AphrontDialogView.");
+        pht("You must call setUser() when rendering an AphrontDialogView."));
     }
 
     $more = $this->class;
@@ -131,9 +144,17 @@ final class AphrontDialogView extends AphrontView {
     );
 
     $hidden_inputs = array();
+    $hidden_inputs[] = phutil_tag(
+      'input',
+      array(
+        'type' => 'hidden',
+        'name' => '__dialog__',
+        'value' => '1',
+      ));
+
     foreach ($this->hidden as $desc) {
       list($key, $value) = $desc;
-      $hidden_inputs[] = javelin_render_tag(
+      $hidden_inputs[] = javelin_tag(
         'input',
         array(
           'type' => 'hidden',
@@ -142,39 +163,34 @@ final class AphrontDialogView extends AphrontView {
           'sigil' => 'aphront-dialog-application-input'
         ));
     }
-    $hidden_inputs = implode("\n", $hidden_inputs);
-    $hidden_inputs =
-      '<input type="hidden" name="__dialog__" value="1" />'.
-      $hidden_inputs;
-
 
     if (!$this->renderAsForm) {
-      $buttons = phabricator_render_form(
+      $buttons = array(phabricator_form(
         $this->user,
         $form_attributes,
-        $hidden_inputs.$buttons);
+        array_merge($hidden_inputs, $buttons)));
     }
 
-    $content =
-      '<div class="aphront-dialog-head">'.
-        phutil_escape_html($this->title).
-      '</div>'.
-      '<div class="aphront-dialog-body">'.
-        $this->renderChildren().
-      '</div>'.
-      '<div class="aphront-dialog-tail">'.
-        $buttons.
-        '<div style="clear: both;"></div>'.
-      '</div>';
+    $buttons[] = phutil_tag('div', array('style' => 'clear: both;'), '');
+    $children = $this->renderChildren();
+
+    $header = new PhabricatorActionHeaderView();
+    $header->setHeaderTitle($this->title);
+    $header->setHeaderColor($this->headerColor);
+
+    $content = hsprintf(
+      '%s%s%s',
+      phutil_tag('div', array('class' => 'aphront-dialog-head'), $header),
+      phutil_tag('div', array('class' => 'aphront-dialog-body'), $children),
+      phutil_tag('div', array('class' => 'aphront-dialog-tail'), $buttons));
 
     if ($this->renderAsForm) {
-      return phabricator_render_form(
+      return phabricator_form(
         $this->user,
         $form_attributes + $attributes,
-        $hidden_inputs.
-        $content);
+        array($hidden_inputs, $content));
     } else {
-      return javelin_render_tag(
+      return javelin_tag(
         'div',
         $attributes,
         $content);

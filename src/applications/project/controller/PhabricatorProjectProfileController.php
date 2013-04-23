@@ -5,6 +5,7 @@ final class PhabricatorProjectProfileController
 
   private $id;
   private $page;
+  private $project;
 
   public function willProcessRequest(array $data) {
     $this->id = idx($data, 'id');
@@ -17,13 +18,11 @@ final class PhabricatorProjectProfileController
 
     $query = id(new PhabricatorProjectQuery())
       ->setViewer($user)
-      ->withIDs(array($this->id));
-
-    if ($this->page == 'people') {
-      $query->needMembers(true);
-    }
+      ->withIDs(array($this->id))
+      ->needMembers(true);
 
     $project = $query->executeOne();
+    $this->project = $project;
     if (!$project) {
       return new Aphront404Response();
     }
@@ -40,34 +39,31 @@ final class PhabricatorProjectProfileController
     $this->page = $nav_view->selectFilter($this->page, 'dashboard');
 
     require_celerity_resource('phabricator-profile-css');
-    switch ($this->page) {
-      case 'dashboard':
-        $content = $this->renderTasksPage($project, $profile);
 
-        $query = new PhabricatorFeedQuery();
-        $query->setFilterPHIDs(
-          array(
-            $project->getPHID(),
-          ));
-        $query->setLimit(50);
-        $query->setViewer($this->getRequest()->getUser());
-        $stories = $query->execute();
+    $tasks = $this->renderTasksPage($project, $profile);
 
-        $content .= $this->renderStories($stories);
-        break;
-      case 'about':
-        $content = $this->renderAboutPage($project, $profile);
-        break;
-      case 'people':
-        $content = $this->renderPeoplePage($project, $profile);
-        break;
-      case 'feed':
-        $content = $this->renderFeedPage($project, $profile);
-        break;
-      default:
-        throw new Exception("Unimplemented filter '{$this->page}'.");
-    }
+    $query = new PhabricatorFeedQuery();
+    $query->setFilterPHIDs(
+      array(
+        $project->getPHID(),
+      ));
+    $query->setLimit(50);
+    $query->setViewer($this->getRequest()->getUser());
+    $stories = $query->execute();
+    $feed = $this->renderStories($stories);
+    $about = $this->renderAboutPage($project, $profile);
+    $people = $this->renderPeoplePage($project, $profile);
+    $col1 = hsprintf('%s%s', $about, $people);
 
+    $content = id(new AphrontMultiColumnView())
+      ->addColumn($col1)
+      ->addColumn($feed)
+      ->setFluidLayout(true);
+
+    $content = hsprintf(
+      '<div class="phabricator-project-layout">%s%s</div>',
+        $tasks,
+        $content);
 
     $header = new PhabricatorProfileHeaderView();
     $header->setName($project->getName());
@@ -85,40 +81,39 @@ final class PhabricatorProjectProfileController
         $class = 'grey disabled';
       }
 
-      $action = phabricator_render_form(
+      $action = phabricator_form(
         $user,
         array(
           'action' => '/project/update/'.$project->getID().'/join/',
           'method' => 'post',
         ),
-        phutil_render_tag(
+        phutil_tag(
           'button',
           array(
             'class' => $class,
           ),
-          'Join Project'));
+          pht('Join Project')));
     } else {
-      $action = javelin_render_tag(
+      $action = javelin_tag(
         'a',
         array(
           'href'  => '/project/update/'.$project->getID().'/leave/',
           'sigil' => 'workflow',
           'class' => 'grey button',
         ),
-        'Leave Project...');
+        pht('Leave Project...'));
     }
 
     $header->addAction($action);
-
     $nav_view->appendChild($header);
-
-    $content = '<div style="padding: 1em;">'.$content.'</div>';
     $header->appendChild($content);
 
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       $nav_view,
       array(
-        'title' => $project->getName().' Project',
+        'title' => pht('%s Project', $project->getName()),
+        'device' => true,
+        'dust' => true,
       ));
   }
 
@@ -129,8 +124,7 @@ final class PhabricatorProjectProfileController
     $viewer = $this->getRequest()->getUser();
 
     $blurb = $profile->getBlurb();
-    $blurb = phutil_escape_html($blurb);
-    $blurb = str_replace("\n", '<br />', $blurb);
+    $blurb = phutil_escape_html_newlines($blurb);
 
     $phids = array($project->getAuthorPHID());
     $phids = array_unique($phids);
@@ -138,30 +132,38 @@ final class PhabricatorProjectProfileController
 
     $timestamp = phabricator_datetime($project->getDateCreated(), $viewer);
 
-    $about =
-      '<div class="phabricator-profile-info-group">
-        <h1 class="phabricator-profile-info-header">About</h1>
+    $about = hsprintf(
+      '<div class="phabricator-profile-info-group profile-wrap-responsive">
+        <h1 class="phabricator-profile-info-header">%s</h1>
         <div class="phabricator-profile-info-pane">
           <table class="phabricator-profile-info-table">
             <tr>
-              <th>Creator</th>
-              <td>'.$handles[$project->getAuthorPHID()]->renderLink().'</td>
+              <th>%s</th>
+              <td>%s</td>
             </tr>
             <tr>
-              <th>Created</th>
-              <td>'.$timestamp.'</td>
+              <th>%s</th>
+              <td>%s</td>
             </tr>
             <tr>
               <th>PHID</th>
-              <td>'.phutil_escape_html($project->getPHID()).'</td>
+              <td>%s</td>
             </tr>
             <tr>
-              <th>Blurb</th>
-              <td>'.$blurb.'</td>
+              <th>%s</th>
+              <td>%s</td>
             </tr>
           </table>
         </div>
-      </div>';
+      </div>',
+      pht('About This Project'),
+      pht('Creator'),
+      $handles[$project->getAuthorPHID()]->renderLink(),
+      pht('Created'),
+      $timestamp,
+      $project->getPHID(),
+      pht('Blurb'),
+      $blurb);
 
     return $about;
   }
@@ -175,22 +177,23 @@ final class PhabricatorProjectProfileController
 
     $affiliated = array();
     foreach ($handles as $phids => $handle) {
-      $affiliated[] = '<li>'.$handle->renderLink().'</li>';
+      $affiliated[] = phutil_tag('li', array(), $handle->renderLink());
     }
 
     if ($affiliated) {
-      $affiliated = '<ul>'.implode("\n", $affiliated).'</ul>';
+      $affiliated = phutil_tag('ul', array(), $affiliated);
     } else {
-      $affiliated = '<p><em>No one is affiliated with this project.</em></p>';
+      $affiliated = hsprintf('<p><em>%s</em></p>', pht(
+        'No one is affiliated with this project.'));
     }
 
-    return
-      '<div class="phabricator-profile-info-group">'.
-        '<h1 class="phabricator-profile-info-header">People</h1>'.
-        '<div class="phabricator-profile-info-pane">'.
-         $affiliated.
-        '</div>'.
-      '</div>';
+    return hsprintf(
+      '<div class="phabricator-profile-info-group profile-wrap-responsive">'.
+        '<h1 class="phabricator-profile-info-header">%s</h1>'.
+        '<div class="phabricator-profile-info-pane">%s</div>'.
+      '</div>',
+      pht('People'),
+      $affiliated);
   }
 
   private function renderFeedPage(
@@ -204,7 +207,7 @@ final class PhabricatorProjectProfileController
     $stories = $query->execute();
 
     if (!$stories) {
-      return 'There are no stories about this project.';
+      return pht('There are no stories about this project.');
     }
 
     return $this->renderStories($stories);
@@ -217,19 +220,19 @@ final class PhabricatorProjectProfileController
     $builder->setUser($this->getRequest()->getUser());
     $view = $builder->buildView();
 
-    return
-      '<div class="phabricator-profile-info-group">'.
-        '<h1 class="phabricator-profile-info-header">Activity Feed</h1>'.
-        '<div class="phabricator-profile-info-pane">'.
-         $view->render().
-        '</div>'.
-      '</div>';
+    return hsprintf(
+      '<div class="profile-feed profile-wrap-responsive">'.
+        '%s'.
+      '</div>',
+      $view->render());
   }
 
 
   private function renderTasksPage(
     PhabricatorProject $project,
     PhabricatorProjectProfile $profile) {
+
+    $user = $this->getRequest()->getUser();
 
     $query = id(new ManiphestTaskQuery())
       ->withAnyProjects(array($project->getPHID()))
@@ -241,47 +244,43 @@ final class PhabricatorProjectProfileController
     $count = $query->getRowCount();
 
     $phids = mpull($tasks, 'getOwnerPHID');
+    $phids = array_merge(
+      $phids,
+      array_mergev(mpull($tasks, 'getProjectPHIDs')));
     $phids = array_filter($phids);
     $handles = $this->loadViewerHandles($phids);
 
-    $task_views = array();
-    foreach ($tasks as $task) {
-      $view = id(new ManiphestTaskSummaryView())
-        ->setTask($task)
-        ->setHandles($handles)
-        ->setUser($this->getRequest()->getUser());
-      $task_views[] = $view->render();
-    }
-
-    if (empty($tasks)) {
-      $task_views = '<em>No open tasks.</em>';
-    } else {
-      $task_views = implode('', $task_views);
-    }
+    $task_list = new ManiphestTaskListView();
+    $task_list->setUser($user);
+    $task_list->setTasks($tasks);
+    $task_list->setHandles($handles);
 
     $open = number_format($count);
 
-    $more_link = phutil_render_tag(
+    $more_link = phutil_tag(
       'a',
       array(
         'href' => '/maniphest/view/all/?projects='.$project->getPHID(),
       ),
-      "View All Open Tasks \xC2\xBB");
+      pht("View All Open Tasks \xC2\xBB"));
 
-    $content =
-      '<div class="phabricator-profile-info-group">
-        <h1 class="phabricator-profile-info-header">'.
-          "Open Tasks ({$open})".
-        '</h1>'.
+    $content = hsprintf(
+      '<div class="phabricator-profile-info-group profile-wrap-responsive">
+        <h1 class="phabricator-profile-info-header">%s</h1>'.
         '<div class="phabricator-profile-info-pane">'.
-          $task_views.
-          '<div class="phabricator-profile-info-pane-more-link">'.
-            $more_link.
-          '</div>'.
+          '%s'.
+          '<div class="phabricator-profile-info-pane-more-link">%s</div>'.
         '</div>
-      </div>';
+      </div>',
+      pht('Open Tasks (%s)', $open),
+      $task_list,
+      $more_link);
 
     return $content;
+  }
+
+  public function buildApplicationMenu() {
+    return $this->buildLocalNavigation($this->project)->getMenu();
   }
 
 }

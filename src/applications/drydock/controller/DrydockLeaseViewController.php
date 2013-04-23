@@ -39,6 +39,7 @@ final class DrydockLeaseViewController extends DrydockController {
     $log_table->appendChild($pager);
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName($title)
@@ -109,19 +110,17 @@ final class DrydockLeaseViewController extends DrydockController {
 
     $view->addProperty(
       pht('Resource Type'),
-      phutil_escape_html($lease->getResourceType()));
+      $lease->getResourceType());
 
     $view->addProperty(
       pht('Resource'),
-      phutil_escape_html($lease->getResourceID()));
+      $lease->getResourceID());
 
     $attributes = $lease->getAttributes();
     if ($attributes) {
       $view->addSectionHeader(pht('Attributes'));
       foreach ($attributes as $key => $value) {
-        $view->addProperty(
-          phutil_escape_html($key),
-          phutil_escape_html($value));
+        $view->addProperty($key, $value);
       }
     }
 

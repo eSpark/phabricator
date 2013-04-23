@@ -33,7 +33,6 @@ $package_spec = array(
     'javelin-behavior-refresh-csrf',
     'javelin-behavior-phabricator-watch-anchor',
     'javelin-behavior-phabricator-autofocus',
-    'phabricator-paste-file-upload',
     'phabricator-menu-item',
     'phabricator-dropdown-menu',
     'javelin-behavior-phabricator-oncopy',
@@ -50,6 +49,8 @@ $package_spec = array(
     'javelin-behavior-phabricator-search-typeahead',
     'javelin-behavior-konami',
     'javelin-behavior-aphlict-dropdown',
+    'javelin-behavior-history-install',
+    'javelin-behavior-phabricator-gesture',
 
     'javelin-behavior-phabricator-active-nav',
     'javelin-behavior-phabricator-nav',
@@ -57,7 +58,7 @@ $package_spec = array(
     'phabricator-textareautils',
     'phabricator-file-upload',
     'javelin-behavior-global-drag-and-drop',
-    'javelin-behavior-phabricator-home-reveal-tiles',
+    'javelin-behavior-phabricator-reveal-content',
   ),
   'core.pkg.css' => array(
     'phabricator-core-css',
@@ -68,7 +69,6 @@ $package_spec = array(
     'aphront-form-view-css',
     'aphront-panel-view-css',
     'aphront-table-view-css',
-    'aphront-crumbs-view-css',
     'aphront-tokenizer-control-css',
     'aphront-typeahead-control-css',
     'aphront-list-filter-view-css',
@@ -81,7 +81,6 @@ $package_spec = array(
     'aphront-pager-view-css',
     'phabricator-transaction-view-css',
     'aphront-tooltip-css',
-    'aphront-headsup-view-css',
     'phabricator-flag-css',
     'aphront-error-view-css',
 
@@ -115,7 +114,6 @@ $package_spec = array(
     'differential-revision-add-comment-css',
     'differential-revision-comment-list-css',
     'phabricator-object-selector-css',
-    'aphront-headsup-action-list-view-css',
     'phabricator-content-source-view-css',
     'differential-local-commits-view-css',
     'inline-comment-summary-css',
@@ -137,6 +135,7 @@ $package_spec = array(
     'javelin-behavior-aphront-drag-and-drop-textarea',
     'javelin-behavior-phabricator-object-selector',
     'javelin-behavior-repository-crossreference',
+    'javelin-behavior-load-blame',
 
     'differential-inline-comment-editor',
     'javelin-behavior-differential-dropdown-menus',
@@ -166,7 +165,6 @@ $package_spec = array(
     'javelin-behavior-maniphest-subpriority-editor',
   ),
   'darkconsole.pkg.js' => array(
-    'javelin-behavior-dark-console-ajax',
     'javelin-behavior-dark-console',
     'javelin-behavior-error-log',
   ),

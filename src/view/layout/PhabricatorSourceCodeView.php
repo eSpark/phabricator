@@ -4,6 +4,7 @@ final class PhabricatorSourceCodeView extends AphrontView {
 
   private $lines;
   private $limit;
+  private $highlights = array();
 
   public function setLimit($limit) {
     $this->limit = $limit;
@@ -12,6 +13,11 @@ final class PhabricatorSourceCodeView extends AphrontView {
 
   public function setLines(array $lines) {
     $this->lines = $lines;
+    return $this;
+  }
+
+  public function setHighlights(array $highlights) {
+    $this->highlights = array_fuse($highlights);
     return $this;
   }
 
@@ -31,28 +37,32 @@ final class PhabricatorSourceCodeView extends AphrontView {
 
       if ($hit_limit) {
         $content_number = '';
-        $content_line = phutil_render_tag(
+        $content_line = phutil_tag(
           'span',
           array(
             'class' => 'c',
           ),
           pht('...'));
       } else {
-        $content_number = phutil_escape_html($line_number);
-        $content_line = "\xE2\x80\x8B".$line;
+        $content_number = $line_number;
+        $content_line = hsprintf("\xE2\x80\x8B%s", $line);
+      }
+
+      $row_attributes = array();
+      if (isset($this->highlights[$line_number])) {
+        $row_attributes['class'] = 'phabricator-source-highlight';
       }
 
       // TODO: Provide nice links.
 
-      $rows[] =
-        '<tr>'.
-          '<th class="phabricator-source-line">'.
-            $content_number.
-          '</th>'.
-          '<td class="phabricator-source-code">'.
-            $content_line.
-          '</td>'.
-        '</tr>';
+      $rows[] = phutil_tag(
+        'tr',
+        $row_attributes,
+        hsprintf(
+          '<th class="phabricator-source-line">%s</th>'.
+          '<td class="phabricator-source-code">%s</td>',
+          $content_number,
+          $content_line));
 
       if ($hit_limit) {
         break;
@@ -66,17 +76,17 @@ final class PhabricatorSourceCodeView extends AphrontView {
     $classes[] = 'remarkup-code';
     $classes[] = 'PhabricatorMonospaced';
 
-    return phutil_render_tag(
+    return phutil_tag(
       'div',
       array(
         'class' => 'phabricator-source-code-container',
       ),
-      phutil_render_tag(
+      phutil_tag(
         'table',
         array(
           'class' => implode(' ', $classes),
         ),
-        implode('', $rows)));
+        phutil_implode_html('', $rows)));
   }
 
 }

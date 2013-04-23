@@ -47,17 +47,17 @@ final class PhabricatorDaemonLogListView extends AphrontView {
         case PhabricatorDaemonLog::STATUS_RUNNING:
           $style = 'color: #00cc00';
           $title = 'Running';
-          $symbol = '&bull;';
+          $symbol = "\xE2\x80\xA2";
           break;
         case PhabricatorDaemonLog::STATUS_DEAD:
           $style = 'color: #cc0000';
           $title = 'Died';
-          $symbol = '&bull;';
+          $symbol = "\xE2\x80\xA2";
           break;
         case PhabricatorDaemonLog::STATUS_EXITED:
           $style = 'color: #000000';
           $title = 'Exited';
-          $symbol = '&bull;';
+          $symbol = "\xE2\x80\xA2";
           break;
         case PhabricatorDaemonLog::STATUS_UNKNOWN:
         default: // fallthrough
@@ -66,7 +66,16 @@ final class PhabricatorDaemonLogListView extends AphrontView {
           $symbol = '?';
       }
 
-      $running = phutil_render_tag(
+      if ($status != PhabricatorDaemonLog::STATUS_RUNNING &&
+          $log->getDateModified() + (3 * 86400) < time()) {
+        // Don't show rows that haven't been running for more than
+        // three days.  We should probably prune these out of the
+        // DB similar to the code above, but we don't need to be
+        // conservative and do it only on the same host
+        continue;
+      }
+
+      $running = phutil_tag(
         'span',
         array(
           'style' => $style,
@@ -76,12 +85,12 @@ final class PhabricatorDaemonLogListView extends AphrontView {
 
       $rows[] = array(
         $running,
-        phutil_escape_html($log->getDaemon()),
-        phutil_escape_html($log->getHost()),
+        $log->getDaemon(),
+        $log->getHost(),
         $log->getPID(),
         phabricator_date($epoch, $this->user),
         phabricator_time($epoch, $this->user),
-        phutil_render_tag(
+        phutil_tag(
           'a',
           array(
             'href' => '/daemon/log/'.$log->getID().'/',

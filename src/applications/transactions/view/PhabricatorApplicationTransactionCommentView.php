@@ -15,6 +15,15 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
   private $statusID;
   private $commentID;
   private $draft;
+  private $requestURI;
+
+  public function setRequestURI(PhutilURI $request_uri) {
+    $this->requestURI = $request_uri;
+    return $this;
+  }
+  public function getRequestURI() {
+    return $this->requestURI;
+  }
 
   public function setDraft(PhabricatorDraft $draft) {
     $this->draft = $draft;
@@ -45,6 +54,25 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
 
   public function render() {
 
+    $user = $this->getUser();
+    if (!$user->isLoggedIn()) {
+      $uri = id(new PhutilURI('/login/'))
+        ->setQueryParam('next', (string) $this->getRequestURI());
+      return phutil_tag(
+        'div',
+        array(
+          'class' => 'login-to-comment'
+        ),
+        javelin_tag(
+          'a',
+          array(
+            'class' => 'button',
+            'sigil' => 'workflow',
+            'href' => $uri
+          ),
+          pht('Login to Comment')));
+    }
+
     $data = array();
 
     $comment = $this->renderCommentPanel();
@@ -68,15 +96,11 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
         'draftKey'      => $this->getDraft()->getDraftKey(),
       ));
 
-    return self::renderSingleView(
-      array(
-        $comment,
-        $preview,
-      ));
+    return array($comment, $preview);
   }
 
   private function renderCommentPanel() {
-    $status = phutil_render_tag(
+    $status = phutil_tag(
       'div',
       array(
         'id' => $this->getStatusID(),
@@ -115,24 +139,23 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
     $preview = id(new PhabricatorTimelineView())
       ->setID($this->getPreviewTimelineID());
 
-    $header = phutil_render_tag(
+    $header = phutil_tag(
       'div',
       array(
         'class' => 'phabricator-timeline-preview-header',
       ),
-      phutil_escape_html(pht('Preview')));
+      pht('Preview'));
 
-    return phutil_render_tag(
+    return phutil_tag(
       'div',
       array(
         'id'    => $this->getPreviewPanelID(),
         'style' => 'display: none',
       ),
-      self::renderSingleView(
-        array(
-          $header,
-          $preview,
-        )));
+      array(
+        $header,
+        $preview,
+      ));
   }
 
   private function getPreviewPanelID() {

@@ -1,6 +1,12 @@
 <?php
 
 final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
+  private $disableMacro = false;
+
+  public function setDisableMacros($disable) {
+    $this->disableMacro = $disable;
+    return $this;
+  }
 
   protected function renderInput() {
     $id = $this->getID();
@@ -48,37 +54,66 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       ),
       'table' => array(
         'tip' => pht('Table'),
-      ),
-      array(
+      )
+    );
+    if (!$this->disableMacro and function_exists('imagettftext')) {
+      $actions[] = array(
         'spacer' => true,
-      ),
-      'meme' => array(
+        );
+      $actions['meme'] = array(
         'tip' => pht('Meme'),
-      ),
-      'help'  => array(
+      );
+    }
+
+    $actions['help'] = array(
         'tip' => pht('Help'),
         'align' => 'right',
         'href'  => PhabricatorEnv::getDoclink(
           'article/Remarkup_Reference.html'),
-      ),
+      );
+
+    $actions[] = array(
+      'spacer' => true,
+      'align' => 'right',
     );
+
+    $is_serious = PhabricatorEnv::getEnvConfig(
+      'phabricator.serious-business');
+
+    $actions['order'] = array(
+      'tip' => $is_serious
+        ? pht('Fullscreen Mode')
+        : pht('Order Mode'),
+      'align' => 'right',
+    );
+
+    if (!$is_serious) {
+      $actions['chaos'] = array(
+        'tip' => pht('Chaos Mode'),
+        'align' => 'right',
+      );
+    }
 
     $buttons = array();
     foreach ($actions as $action => $spec) {
+
+      $classes = array();
+
+      if (idx($spec, 'align') == 'right') {
+        $classes[] = 'remarkup-assist-right';
+      }
+
       if (idx($spec, 'spacer')) {
-        $buttons[] = phutil_render_tag(
+        $classes[] = 'remarkup-assist-separator';
+        $buttons[] = phutil_tag(
           'span',
           array(
-            'class' => 'remarkup-assist-separator',
+            'class' => implode(' ', $classes),
           ),
           '');
         continue;
-      }
-
-      $classes = array();
-      $classes[] = 'remarkup-assist-button';
-      if (idx($spec, 'align') == 'right') {
-        $classes[] = 'remarkup-assist-right';
+      } else {
+        $classes[] = 'remarkup-assist-button';
       }
 
       $href = idx($spec, 'href', '#');
@@ -99,7 +134,7 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
 
       require_celerity_resource('sprite-icon-css');
 
-      $buttons[] = javelin_render_tag(
+      $buttons[] = javelin_tag(
         'a',
         array(
           'class'       => implode(' ', $classes),
@@ -110,7 +145,7 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           'target'      => $target,
           'tabindex'    => -1,
         ),
-        phutil_render_tag(
+        phutil_tag(
           'div',
           array(
             'class' => 'remarkup-assist sprite-icon remarkup-assist-'.$action,
@@ -118,12 +153,12 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           ''));
     }
 
-    $buttons = phutil_render_tag(
+    $buttons = phutil_tag(
       'div',
       array(
         'class' => 'remarkup-assist-bar',
       ),
-      implode('', $buttons));
+      $buttons);
 
     $monospaced_textareas = null;
     $monospaced_textareas_class = null;
@@ -142,13 +177,15 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
     $this->setCustomClass(
       'remarkup-assist-textarea '.$monospaced_textareas_class);
 
-    return javelin_render_tag(
+    return javelin_tag(
       'div',
       array(
         'sigil' => 'remarkup-assist-control',
       ),
-      $buttons.
-      parent::renderInput());
+      array(
+        $buttons,
+        parent::renderInput(),
+      ));
   }
 
 }

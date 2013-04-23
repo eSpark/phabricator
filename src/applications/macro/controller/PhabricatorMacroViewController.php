@@ -13,14 +13,15 @@ final class PhabricatorMacroViewController
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $macro = id(new PhabricatorFileImageMacro())->load($this->id);
+    $macro = id(new PhabricatorMacroQuery())
+      ->setViewer($user)
+      ->withIDs(array($this->id))
+      ->executeOne();
     if (!$macro) {
       return new Aphront404Response();
     }
 
-    $file = id(new PhabricatorFile())->loadOneWhere(
-      'phid = %s',
-      $macro->getFilePHID());
+    $file = $macro->getFile();
 
     $title_short = pht('Macro "%s"', $macro->getName());
     $title_long  = pht('Image Macro "%s"', $macro->getName());
@@ -29,14 +30,15 @@ final class PhabricatorMacroViewController
       $macro->getPHID());
 
     $this->loadHandles($subscribers);
+    $actions = $this->buildActionView($macro);
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setHref($this->getApplicationURI('/view/'.$macro->getID().'/'))
         ->setName($title_short));
 
-    $actions = $this->buildActionView($macro);
     $properties = $this->buildPropertyView($macro, $file, $subscribers);
 
     $xactions = id(new PhabricatorMacroTransactionQuery())
@@ -147,9 +149,9 @@ final class PhabricatorMacroViewController
       foreach ($subscribers as $subscriber) {
         $sub_view[] = $this->getHandle($subscriber)->renderLink();
       }
-      $sub_view = implode(', ', $sub_view);
+      $sub_view = phutil_implode_html(', ', $sub_view);
     } else {
-      $sub_view = '<em>'.pht('None').'</em>';
+      $sub_view = phutil_tag('em', array(), pht('None'));
     }
 
     $view->addProperty(
@@ -157,8 +159,8 @@ final class PhabricatorMacroViewController
       $sub_view);
 
     if ($file) {
-      $view->addTextContent(
-        phutil_render_tag(
+      $view->addImageContent(
+        phutil_tag(
           'img',
           array(
             'src'     => $file->getViewURI(),

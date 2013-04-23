@@ -16,7 +16,8 @@ final class PhabricatorFeedStoryManiphest
   public function renderView() {
     $data = $this->getStoryData();
 
-    $view = new PhabricatorFeedStoryView();
+    $view = new PHUIFeedStoryView();
+    $view->setAppIcon('maniphest-dark');
     $view->setViewed($this->getHasViewed());
 
     $line = $this->getLineForData($data);
@@ -24,22 +25,23 @@ final class PhabricatorFeedStoryManiphest
     $view->setEpoch($data->getEpoch());
 
     $action = $data->getValue('action');
+
+    $view->setImage($this->getHandle($data->getAuthorPHID())->getImageURI());
+
     switch ($action) {
-      case ManiphestAction::ACTION_CREATE:
-        $full_size = true;
+      case ManiphestAction::ACTION_COMMENT:
+        // I'm just fetching the comments here
+        // Don't repeat this at home!
+        $comments = $data->getValue('comments');
+        $content = $this->renderSummary($comments);
         break;
       default:
-        $full_size = false;
+        // I think this is just for create
+        $content = $this->renderSummary($data->getValue('description'));
         break;
     }
 
-    if ($full_size) {
-      $view->setImage($this->getHandle($data->getAuthorPHID())->getImageURI());
-      $content = $this->renderSummary($data->getValue('description'));
-      $view->appendChild($content);
-    } else {
-      $view->setOneLineStory(true);
-    }
+    $view->appendChild($content);
 
     $href = $this->getHandle($data->getValue('taskPHID'))->getURI();
     $view->setHref($href);
@@ -66,16 +68,23 @@ final class PhabricatorFeedStoryManiphest
       case ManiphestAction::ACTION_REASSIGN:
         if ($owner_phid) {
           if ($owner_phid == $actor_phid) {
-            $one_line = "{$actor_link} claimed {$task_link}";
+            $one_line = hsprintf('%s claimed %s', $actor_link, $task_link);
           } else {
-            $one_line = "{$actor_link} {$verb} {$task_link} to {$owner_link}";
+            $one_line = hsprintf('%s %s %s to %s',
+              $actor_link,
+              $verb,
+              $owner_link,
+              $task_link);
           }
         } else {
-          $one_line = "{$actor_link} placed {$task_link} up for grabs";
+          $one_line = hsprintf(
+            '%s placed %s up for grabs',
+            $actor_link,
+            $task_link);
         }
         break;
       default:
-        $one_line = "{$actor_link} {$verb} {$task_link}";
+        $one_line = hsprintf('%s %s %s', $actor_link, $verb, $task_link);
         break;
     }
 

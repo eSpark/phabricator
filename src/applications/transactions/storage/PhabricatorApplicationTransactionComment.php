@@ -61,7 +61,7 @@ abstract class PhabricatorApplicationTransactionComment
 
 
   public function newMarkupEngine($field) {
-    return PhabricatorMarkupEngine::newMarkupEngine(array());
+    return PhabricatorMarkupEngine::getEngine();
   }
 
 
@@ -71,7 +71,13 @@ abstract class PhabricatorApplicationTransactionComment
 
 
   public function didMarkupText($field, $output, PhutilMarkupEngine $engine) {
-    return $output;
+    require_celerity_resource('phabricator-remarkup-css');
+    return phutil_tag(
+      'div',
+      array(
+        'class' => 'phabricator-remarkup',
+      ),
+      $output);
   }
 
 

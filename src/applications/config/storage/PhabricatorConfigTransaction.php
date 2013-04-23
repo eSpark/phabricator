@@ -70,6 +70,38 @@ final class PhabricatorConfigTransaction
     return parent::getIcon();
   }
 
+  public function hasChangeDetails() {
+    switch ($this->getTransactionType()) {
+      case self::TYPE_EDIT:
+        return true;
+    }
+    return parent::hasChangeDetails();
+  }
+
+  public function renderChangeDetails(PhabricatorUser $viewer) {
+    $old = $this->getOldValue();
+    $new = $this->getNewValue();
+
+    if ($old['deleted']) {
+      $old_text = '';
+    } else {
+      $old_text = PhabricatorConfigJSON::prettyPrintJSON($old['value']);
+    }
+
+    if ($new['deleted']) {
+      $new_text = '';
+    } else {
+      $new_text = PhabricatorConfigJSON::prettyPrintJSON($new['value']);
+    }
+
+    $view = id(new PhabricatorApplicationTransactionTextDiffDetailView())
+      ->setUser($viewer)
+      ->setOldText($old_text)
+      ->setNewText($new_text);
+
+    return $view->render();
+  }
+
   public function getColor() {
     $old = $this->getOldValue();
     $new = $this->getNewValue();

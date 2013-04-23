@@ -35,6 +35,9 @@ final class ManiphestTaskDetailController extends ManiphestController {
       'taskID = %d ORDER BY id ASC',
       $task->getID());
 
+    $extensions = ManiphestTaskExtensions::newExtensions();
+    $aux_fields = $extensions->loadFields($task, $user);
+
     $e_commit = PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT;
     $e_dep_on = PhabricatorEdgeConfig::TYPE_TASK_DEPENDS_ON_TASK;
     $e_dep_by = PhabricatorEdgeConfig::TYPE_TASK_DEPENDED_ON_BY_TASK;
@@ -82,44 +85,50 @@ final class ManiphestTaskDetailController extends ManiphestController {
     }
 
     $phids = array_keys($phids);
+
+    $phids = array_merge(
+      $phids,
+      array_mergev(mpull($aux_fields, 'getRequiredHandlePHIDs')));
+
     $this->loadHandles($phids);
+
+    $handles = $this->getLoadedHandles();
+    foreach ($aux_fields as $aux_field) {
+      $aux_field->setHandles($handles);
+    }
 
     $context_bar = null;
 
     if ($parent_task) {
       $context_bar = new AphrontContextBarView();
-      $context_bar->addButton(
-         phutil_render_tag(
-         'a',
-         array(
-           'href' => '/maniphest/task/create/?parent='.$parent_task->getID(),
-           'class' => 'green button',
-         ),
-        'Create Another Subtask'));
-      $context_bar->appendChild(
-        'Created a subtask of <strong>'.
-        $this->getHandle($parent_task->getPHID())->renderLink().
-        '</strong>');
+      $context_bar->addButton(phutil_tag(
+      'a',
+      array(
+        'href' => '/maniphest/task/create/?parent='.$parent_task->getID(),
+        'class' => 'green button',
+      ),
+      pht('Create Another Subtask')));
+      $context_bar->appendChild(hsprintf(
+        'Created a subtask of <strong>%s</strong>',
+        $this->getHandle($parent_task->getPHID())->renderLink()));
     } else if ($workflow == 'create') {
       $context_bar = new AphrontContextBarView();
-      $context_bar->addButton('<label>Create Another:</label>');
-      $context_bar->addButton(
-         phutil_render_tag(
-         'a',
-         array(
-           'href' => '/maniphest/task/create/?template='.$task->getID(),
-           'class' => 'green button',
-         ),
-        'Similar Task'));
-      $context_bar->addButton(
-         phutil_render_tag(
-         'a',
-         array(
-           'href' => '/maniphest/task/create/',
-           'class' => 'green button',
-         ),
-        'Empty Task'));
-      $context_bar->appendChild('New task created.');
+      $context_bar->addButton(phutil_tag('label', array(), 'Create Another'));
+      $context_bar->addButton(phutil_tag(
+        'a',
+        array(
+          'href' => '/maniphest/task/create/?template='.$task->getID(),
+          'class' => 'green button',
+        ),
+        pht('Similar Task')));
+      $context_bar->addButton(phutil_tag(
+        'a',
+        array(
+          'href' => '/maniphest/task/create/',
+          'class' => 'green button',
+        ),
+        pht('Empty Task')));
+      $context_bar->appendChild(pht('New task created.'));
     }
 
     $engine = new PhabricatorMarkupEngine();
@@ -130,13 +139,15 @@ final class ManiphestTaskDetailController extends ManiphestController {
         $engine->addObject($xaction, ManiphestTransaction::MARKUP_FIELD_BODY);
       }
     }
-    $engine->process();
 
-    $extensions = ManiphestTaskExtensions::newExtensions();
-    $aux_fields = $extensions->getAuxiliaryFieldSpecifications();
-    if ($aux_fields) {
-      $task->loadAndAttachAuxiliaryAttributes();
+    foreach ($aux_fields as $aux_field) {
+      foreach ($aux_field->getMarkupFields() as $markup_field) {
+        $engine->addObject($aux_field, $markup_field);
+        $aux_field->setMarkupEngine($engine);
+      }
     }
+
+    $engine->process();
 
     $transaction_types = ManiphestTransactionType::getTransactionTypeMap();
     $resolution_types = ManiphestTaskStatus::getTaskStatusMap();
@@ -190,20 +201,20 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ->addHiddenInput('taskID', $task->getID())
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('Action')
+          ->setLabel(pht('Action'))
           ->setName('action')
           ->setOptions($transaction_types)
           ->setID('transaction-action'))
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('Resolution')
+          ->setLabel(pht('Resolution'))
           ->setName('resolution')
           ->setControlID('resolution')
           ->setControlStyle('display: none')
           ->setOptions($resolution_types))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('Assign To')
+          ->setLabel(pht('Assign To'))
           ->setName('assign_to')
           ->setControlID('assign_to')
           ->setControlStyle('display: none')
@@ -211,7 +222,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
           ->setDisableBehavior(true))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('CCs')
+          ->setLabel(pht('CCs'))
           ->setName('ccs')
           ->setControlID('ccs')
           ->setControlStyle('display: none')
@@ -219,7 +230,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
           ->setDisableBehavior(true))
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('Priority')
+          ->setLabel(pht('Priority'))
           ->setName('priority')
           ->setOptions($priority_map)
           ->setControlID('priority')
@@ -227,7 +238,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
           ->setValue($task->getPriority()))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('Projects')
+          ->setLabel(pht('Projects'))
           ->setName('projects')
           ->setControlID('projects')
           ->setControlStyle('display: none')
@@ -235,25 +246,25 @@ final class ManiphestTaskDetailController extends ManiphestController {
           ->setDisableBehavior(true))
       ->appendChild(
         id(new AphrontFormFileControl())
-          ->setLabel('File')
+          ->setLabel(pht('File'))
           ->setName('file')
           ->setControlID('file')
           ->setControlStyle('display: none'))
       ->appendChild(
         id(new PhabricatorRemarkupControl())
-          ->setLabel('Comments')
+          ->setLabel(pht('Comments'))
           ->setName('comments')
           ->setValue($draft_text)
           ->setID('transaction-comments')
           ->setUser($user))
       ->appendChild(
         id(new AphrontFormDragAndDropUploadControl())
-          ->setLabel('Attached Files')
+          ->setLabel(pht('Attached Files'))
           ->setName('files')
           ->setActivatedClass('aphront-panel-view-drag-and-drop'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue($is_serious ? 'Submit' : 'Avast!'));
+          ->setValue($is_serious ? pht('Submit') : pht('Avast!')));
 
     $control_map = array(
       ManiphestTransactionType::TYPE_STATUS   => 'resolution',
@@ -269,7 +280,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
         'id'          => 'projects-tokenizer',
         'src'         => '/typeahead/common/projects/',
         'ondemand'    => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-        'placeholder' => 'Type a project name...',
+        'placeholder' => pht('Type a project name...'),
       ),
       ManiphestTransactionType::TYPE_OWNER => array(
         'id'          => 'assign-tokenizer',
@@ -277,13 +288,13 @@ final class ManiphestTaskDetailController extends ManiphestController {
         'value'       => $default_claim,
         'limit'       => 1,
         'ondemand'    => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-        'placeholder' => 'Type a user name...',
+        'placeholder' => pht('Type a user name...'),
       ),
       ManiphestTransactionType::TYPE_CCS => array(
         'id'          => 'cc-tokenizer',
         'src'         => '/typeahead/common/mailable/',
         'ondemand'    => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-        'placeholder' => 'Type a user or mailing list...',
+        'placeholder' => pht('Type a user or mailing list...'),
       ),
     );
 
@@ -305,14 +316,13 @@ final class ManiphestTaskDetailController extends ManiphestController {
     $comment_header = id(new PhabricatorHeaderView())
       ->setHeader($is_serious ? pht('Add Comment') : pht('Weigh In'));
 
-    $preview_panel =
+    $preview_panel = hsprintf(
       '<div class="aphront-panel-preview">
         <div id="transaction-preview">
-          <div class="aphront-panel-preview-loading-text">
-            '.pht('Loading preview...').'
-          </div>
+          <div class="aphront-panel-preview-loading-text">%s</div>
         </div>
-      </div>';
+      </div>',
+      pht('Loading preview...'));
 
     $transaction_view = new ManiphestTransactionListView();
     $transaction_view->setTransactions($transactions);
@@ -325,15 +335,21 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $user, $task->getPHID());
 
     $object_name = 'T'.$task->getID();
+    $actions = $this->buildActionView($task);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName($object_name)
-        ->setHref('/'.$object_name));
+        ->setHref('/'.$object_name))
+      ->setActionList($actions)
+      ->addAction(
+        id(new PhabricatorMenuItemView())
+          ->setHref($this->getApplicationURI('/task/create/'))
+          ->setName(pht('Create Task'))
+          ->setIcon('create'));
 
     $header = $this->buildHeaderView($task);
-    $actions = $this->buildActionView($task);
     $properties = $this->buildPropertyView($task, $aux_fields, $edges, $engine);
 
     return $this->buildApplicationPage(
@@ -357,18 +373,9 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
   private function buildHeaderView(ManiphestTask $task) {
     $view = id(new PhabricatorHeaderView())
-      ->setObjectName('T'.$task->getID())
       ->setHeader($task->getTitle());
 
-    $status = $task->getStatus();
-    $status_name = ManiphestTaskStatus::getTaskStatusFullName($status);
-    $status_color = ManiphestTaskStatus::getTaskStatusTagColor($status);
-
-    $view->addTag(
-      id(new PhabricatorTagView())
-        ->setType(PhabricatorTagView::TYPE_STATE)
-        ->setName($status_name)
-        ->setBackgroundColor($status_color));
+    $view->addTag(ManiphestView::renderTagForTask($task));
 
     return $view;
   }
@@ -429,24 +436,25 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     $viewer = $this->getRequest()->getUser();
 
-    $view = new PhabricatorPropertyListView();
+    $view = id(new PhabricatorPropertyListView())
+      ->setUser($viewer)
+      ->setObject($task);
 
     $view->addProperty(
       pht('Assigned To'),
       $task->getOwnerPHID()
         ? $this->getHandle($task->getOwnerPHID())->renderLink()
-        : '<em>'.pht('None').'</em>');
+        : phutil_tag('em', array(), pht('None')));
 
     $view->addProperty(
       pht('Priority'),
-      phutil_escape_html(
-        ManiphestTaskPriority::getTaskPriorityName($task->getPriority())));
+      ManiphestTaskPriority::getTaskPriorityName($task->getPriority()));
 
     $view->addProperty(
       pht('Subscribers'),
       $task->getCCPHIDs()
         ? $this->renderHandlesForPHIDs($task->getCCPHIDs(), ',')
-        : '<em>'.pht('None').'</em>');
+        : phutil_tag('em', array(), pht('None')));
 
     $view->addProperty(
       pht('Author'),
@@ -457,23 +465,21 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $subject = '[T'.$task->getID().'] '.$task->getTitle();
       $view->addProperty(
         pht('From Email'),
-        phutil_render_tag(
+        phutil_tag(
           'a',
           array(
             'href' => 'mailto:'.$source.'?subject='.$subject
             ),
-          phutil_escape_html($source)));
+          $source));
     }
 
     $view->addProperty(
       pht('Projects'),
       $task->getProjectPHIDs()
         ? $this->renderHandlesForPHIDs($task->getProjectPHIDs(), ',')
-        : '<em>'.pht('None').'</em>');
+        : phutil_tag('em', array(), pht('None')));
 
     foreach ($aux_fields as $aux_field) {
-      $aux_key = $aux_field->getAuxiliaryKey();
-      $aux_field->setValue($task->getAuxiliaryAttribute($aux_key));
       $value = $aux_field->renderForDetailView();
       if (strlen($value)) {
         $view->addProperty($aux_field->getLabel(), $value);
@@ -488,9 +494,34 @@ final class ManiphestTaskDetailController extends ManiphestController {
         => pht('Depends On'),
       PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV
         => pht('Differential Revisions'),
-      PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT
-        => pht('Commits'),
     );
+
+    $revisions_commits = array();
+    $handles = $this->getLoadedHandles();
+
+    $commit_phids = array_keys(
+      $edges[PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT]);
+    if ($commit_phids) {
+      $commit_drev = PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV;
+      $drev_edges = id(new PhabricatorEdgeQuery())
+        ->withSourcePHIDs($commit_phids)
+        ->withEdgeTypes(array($commit_drev))
+        ->execute();
+
+      foreach ($commit_phids as $phid) {
+        $revisions_commits[$phid] = $handles[$phid]->renderLink();
+        $revision_phid = key($drev_edges[$phid][$commit_drev]);
+        $revision_handle = idx($handles, $revision_phid);
+        if ($revision_handle) {
+          $task_drev = PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV;
+          unset($edges[$task_drev][$revision_phid]);
+          $revisions_commits[$phid] = hsprintf(
+            '%s / %s',
+            $revision_handle->renderLink($revision_handle->getName()),
+            $revisions_commits[$phid]);
+        }
+      }
+    }
 
     foreach ($edge_types as $edge_type => $edge_name) {
       if ($edges[$edge_type]) {
@@ -498,6 +529,12 @@ final class ManiphestTaskDetailController extends ManiphestController {
           $edge_name,
           $this->renderHandlesForPHIDs(array_keys($edges[$edge_type])));
       }
+    }
+
+    if ($revisions_commits) {
+      $view->addProperty(
+        pht('Commits'),
+        phutil_implode_html(phutil_tag('br'), $revisions_commits));
     }
 
     $attached = $task->getAttached();
@@ -517,10 +554,12 @@ final class ManiphestTaskDetailController extends ManiphestController {
         $file_view->render());
     }
 
+    $view->invokeWillRenderEvent();
+
     if (strlen($task->getDescription())) {
       $view->addSectionHeader(pht('Description'));
       $view->addTextContent(
-        phutil_render_tag(
+        phutil_tag(
           'div',
           array(
             'class' => 'phabricator-remarkup',

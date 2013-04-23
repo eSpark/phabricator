@@ -9,7 +9,7 @@ abstract class PhrictionController extends PhabricatorController {
 
     $page = $this->buildStandardPageView();
 
-    $page->setApplicationName('Wiki');
+    $page->setApplicationName(pht('Wiki'));
     $page->setBaseURI('/w/');
     $page->setTitle(idx($data, 'title'));
     $page->setGlyph("\xE2\x9A\xA1");
@@ -29,10 +29,10 @@ abstract class PhrictionController extends PhabricatorController {
 
     if ($for_app) {
       $nav->addFilter('', pht('Root Document'), '/w/');
-      $nav->addFilter('', pht('Create Document'), '/phriction/new');
+      $nav->addFilter('', pht('New Document'), '/phriction/new');
     }
 
-    $nav->addLabel('Filters');
+    $nav->addLabel(pht('Filters'));
     $nav->addFilter('active', pht('Active Documents'));
     $nav->addFilter('all', pht('All Documents'));
     $nav->addFilter('updates', pht('Recently Updated'));
@@ -49,10 +49,18 @@ abstract class PhrictionController extends PhabricatorController {
   public function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
+    if (get_class($this) != 'PhrictionListController') {
+      $crumbs->addAction(
+        id(new PhabricatorMenuItemView())
+          ->setName(pht('Index'))
+          ->setHref('/phriction/')
+          ->setIcon('transcript'));
+    }
+
     $crumbs->addAction(
       id(new PhabricatorMenuItemView())
-        ->setName(pht('Create Document'))
-        ->setHref('/phriction/new/')
+        ->setName(pht('New Document'))
+        ->setHref('/phriction/new/?slug='.$this->getDocumentSlug())
         ->setWorkflow(true)
         ->setIcon('create'));
 
@@ -96,6 +104,10 @@ abstract class PhrictionController extends PhabricatorController {
         ->setHref($ancestor_handle->getUri());
     }
     return $breadcrumbs;
+  }
+
+  protected function getDocumentSlug() {
+    return '';
   }
 
 }

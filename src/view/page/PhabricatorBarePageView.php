@@ -55,18 +55,18 @@ class PhabricatorBarePageView extends AphrontPageView {
   protected function willRenderPage() {
     // We render this now to resolve static resources so they can appear in the
     // document head.
-    $this->bodyContent = $this->renderChildren();
+    $this->bodyContent = phutil_implode_html('', $this->renderChildren());
   }
 
   protected function getHead() {
     $framebust = null;
     if (!$this->getFrameable()) {
-      $framebust = '(top != self) && top.location.replace(self.location.href);';
+      $framebust = '(top == self) || top.location.replace(self.location.href);';
     }
 
     $viewport_tag = null;
     if ($this->getDeviceReady()) {
-      $viewport_tag = phutil_render_tag(
+      $viewport_tag = phutil_tag(
         'meta',
         array(
           'name' => 'viewport',
@@ -75,25 +75,31 @@ class PhabricatorBarePageView extends AphrontPageView {
                        'maximum-scale=1',
         ));
     }
+    $icon_tag = phutil_tag(
+      'link',
+      array(
+        'rel' => 'apple-touch-icon',
+        'href' => celerity_get_resource_uri('/rsrc/image/apple-touch-icon.png')
+      ));
+
+    $apple_tag = phutil_tag(
+      'meta',
+      array(
+        'name' => 'apple-mobile-web-app-status-bar-style',
+        'content' => 'black-translucent'
+      ));
 
     $response = CelerityAPI::getStaticResourceResponse();
 
-    $head = array(
+    $developer = PhabricatorEnv::getEnvConfig('phabricator.developer-mode');
+    return hsprintf(
+      '%s%s%s%s%s',
       $viewport_tag,
-
-      '<script type="text/javascript">'.
-        $framebust.
-        'window.__DEV__='.
-        (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')
-          ? '1'
-          : '0').
-        ';'.
-      '</script>',
-
-      $response->renderResourcesOfType('css'),
-    );
-
-    return implode("\n", $head);
+      $icon_tag,
+      $apple_tag,
+      CelerityStaticResourceResponse::renderInlineScript(
+        $framebust.jsprintf('window.__DEV__=%d;', ($developer ? 1 : 0))),
+      $response->renderResourcesOfType('css'));
   }
 
   protected function getBody() {

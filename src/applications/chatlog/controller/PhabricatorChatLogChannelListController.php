@@ -4,43 +4,39 @@ final class PhabricatorChatLogChannelListController
   extends PhabricatorChatLogController {
 
   public function processRequest() {
+    $request = $this->getRequest();
+    $user = $request->getUser();
 
-    $table = new PhabricatorChatLogEvent();
+    $channels = id(new PhabricatorChatLogChannelQuery())
+                ->setViewer($user)
+                ->execute();
 
-    $channels = queryfx_all(
-      $table->establishConnection('r'),
-      'SELECT DISTINCT channel FROM %T',
-      $table->getTableName());
-
-    $rows = array();
+    $list = new PhabricatorObjectItemListView();
     foreach ($channels as $channel) {
-      $name = $channel['channel'];
-      $rows[] = array(
-        phutil_render_tag(
-          'a',
-          array(
-            'href' => '/chatlog/channel/'.phutil_escape_uri($name).'/',
-          ),
-          phutil_escape_html($name)));
+        $item = id(new PhabricatorObjectItemView())
+          ->setHeader($channel->getChannelName())
+          ->setHref('/chatlog/channel/'.$channel->getID().'/')
+          ->addAttribute($channel->getServiceName())
+          ->addAttribute($channel->getServiceType());
+        $list->addItem($item);
     }
 
-    $table = new AphrontTableView($rows);
-    $table->setHeaders(
-      array(
-        'Channel',
-      ));
-    $table->setColumnClasses(
-      array(
-        'pri wide',
-      ));
+    $crumbs = $this
+      ->buildApplicationCrumbs()
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName(pht('Channel List'))
+          ->setHref($this->getApplicationURI()));
 
-    $panel = new AphrontPanelView();
-    $panel->appendChild($table);
-
-    return $this->buildStandardPageResponse(
-      $panel,
+    return $this->buildApplicationPage(
       array(
-        'title' => 'Channel List',
+        $crumbs,
+        $list,
+      ),
+      array(
+        'title' => pht('Channel List'),
+        'device' => true,
+        'dust' => true,
       ));
   }
 }

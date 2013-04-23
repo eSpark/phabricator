@@ -56,8 +56,8 @@ abstract class AphrontTagView extends AphrontView {
     return $this;
   }
 
-  final public function getSigil() {
-    return $this->sigil;
+  final public function getSigils() {
+    return $this->sigils;
   }
 
   public function addClass($class) {
@@ -111,7 +111,8 @@ abstract class AphrontTagView extends AphrontView {
     if (!is_array($attributes)) {
       $class = get_class($this);
       throw new Exception(
-        "View '{$class}' did not return an array from getTagAttributes()!");
+        pht("View '%s' did not return an array from getTagAttributes()!",
+          $class));
     }
 
     $sigils = $this->sigils;
@@ -150,7 +151,7 @@ abstract class AphrontTagView extends AphrontView {
       }
     }
 
-    return javelin_render_tag(
+    return javelin_tag(
       $this->getTagName(),
       $attributes,
       $this->getTagContent());

@@ -21,6 +21,9 @@ final class PhabricatorFile extends PhabricatorFileDAO
   protected $storageFormat;
   protected $storageHandle;
 
+  protected $ttl;
+  protected $isExplicitUpload = 1;
+
   public function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
@@ -121,7 +124,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
     $file = id(new PhabricatorFile())->loadOneWhere(
       'name = %s AND contentHash = %s LIMIT 1',
       self::normalizeFileName(idx($params, 'name')),
-      PhabricatorHash::digest($data));
+      self::hashFileContent($data));
 
     if (!$file) {
       $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
@@ -132,11 +135,59 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return $file;
   }
 
+  public static function newFileFromContentHash($hash, $params) {
 
-  public static function newFromFileData($data, array $params = array()) {
+    // Check to see if a file with same contentHash exist
+    $file = id(new PhabricatorFile())->loadOneWhere(
+      'contentHash = %s LIMIT 1', $hash);
+
+    if ($file) {
+      // copy storageEngine, storageHandle, storageFormat
+      $copy_of_storage_engine = $file->getStorageEngine();
+      $copy_of_storage_handle = $file->getStorageHandle();
+      $copy_of_storage_format = $file->getStorageFormat();
+      $copy_of_byteSize = $file->getByteSize();
+      $copy_of_mimeType = $file->getMimeType();
+
+      $file_name = idx($params, 'name');
+      $file_name = self::normalizeFileName($file_name);
+      $file_ttl = idx($params, 'ttl');
+      $authorPHID = idx($params, 'authorPHID');
+
+      $new_file = new  PhabricatorFile();
+
+      $new_file->setName($file_name);
+      $new_file->setByteSize($copy_of_byteSize);
+      $new_file->setAuthorPHID($authorPHID);
+      $new_file->setTtl($file_ttl);
+
+      $new_file->setContentHash($hash);
+      $new_file->setStorageEngine($copy_of_storage_engine);
+      $new_file->setStorageHandle($copy_of_storage_handle);
+      $new_file->setStorageFormat($copy_of_storage_format);
+      $new_file->setMimeType($copy_of_mimeType);
+      $new_file->copyDimensions($file);
+
+      $new_file->save();
+
+      return $new_file;
+    }
+
+    return $file;
+  }
+
+  private static function buildFromFileData($data, array $params = array()) {
     $selector = PhabricatorEnv::newObjectFromConfig('storage.engine-selector');
 
-    $engines = $selector->selectStorageEngines($data, $params);
+    if (isset($params['storageEngines'])) {
+      $engines = $params['storageEngines'];
+    } else {
+      $selector = PhabricatorEnv::newObjectFromConfig(
+        'storage.engine-selector');
+      $engines = $selector->selectStorageEngines($data, $params);
+    }
+
+    assert_instances_of($engines, 'PhabricatorFileStorageEngine');
     if (!$engines) {
       throw new Exception("No valid storage engines are available!");
     }
@@ -178,6 +229,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
     $file_name = idx($params, 'name');
     $file_name = self::normalizeFileName($file_name);
+    $file_ttl = idx($params, 'ttl');
 
     // If for whatever reason, authorPHID isn't passed as a param
     // (always the case with newFromFileDownload()), store a ''
@@ -186,7 +238,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
     $file->setName($file_name);
     $file->setByteSize(strlen($data));
     $file->setAuthorPHID($authorPHID);
-    $file->setContentHash(PhabricatorHash::digest($data));
+    $file->setTtl($file_ttl);
+    $file->setContentHash(self::hashFileContent($data));
 
     $file->setStorageEngine($engine_identifier);
     $file->setStorageHandle($data_handle);
@@ -194,6 +247,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
     // TODO: This is probably YAGNI, but allows for us to do encryption or
     // compression later if we want.
     $file->setStorageFormat(self::STORAGE_FORMAT_RAW);
+    $file->setIsExplicitUpload(idx($params, 'isExplicitUpload') ? 1 : 0);
 
     if (isset($params['mime-type'])) {
       $file->setMimeType($params['mime-type']);
@@ -212,6 +266,17 @@ final class PhabricatorFile extends PhabricatorFileDAO
     $file->save();
 
     return $file;
+  }
+
+  public static function newFromFileData($data, array $params = array()) {
+    $hash = self::hashFileContent($data);
+    $file = self::newFileFromContentHash($hash, $params);
+
+    if ($file) {
+      return $file;
+    }
+
+    return self::buildFromFileData($data, $params);
   }
 
   public function migrateToEngine(PhabricatorFileStorageEngine $engine) {
@@ -271,7 +336,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
 
-  public static function newFromFileDownload($uri, $name) {
+  public static function newFromFileDownload($uri, array $params = array()) {
+    // Make sure we're allowed to make a request first
+    if (!PhabricatorEnv::getEnvConfig('security.allow-outbound-http')) {
+      throw new Exception("Outbound HTTP requests are disabled!");
+    }
+
     $uri = new PhutilURI($uri);
 
     $protocol = $uri->getProtocol();
@@ -286,26 +356,62 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
     $timeout = 5;
 
-    $file_data = HTTPSFuture::loadContent($uri, $timeout);
-    if ($file_data === false) {
-      return null;
-    }
+    list($file_data) = id(new HTTPSFuture($uri))
+        ->setTimeout($timeout)
+        ->resolvex();
 
-    return self::newFromFileData($file_data, array('name' => $name));
+    $params = $params + array(
+      'name' => basename($uri),
+    );
+
+    return self::newFromFileData($file_data, $params);
   }
 
   public static function normalizeFileName($file_name) {
-    return preg_replace('/[^a-zA-Z0-9.~_-]/', '_', $file_name);
+    $pattern = "@[\\x00-\\x19#%&+!~'\$\"\/=\\\\?<> ]+@";
+    $file_name = preg_replace($pattern, '_', $file_name);
+    $file_name = preg_replace('@_+@', '_', $file_name);
+    $file_name = trim($file_name, '_');
+
+    $disallowed_filenames = array(
+      '.'  => 'dot',
+      '..' => 'dotdot',
+      ''   => 'file',
+    );
+    $file_name = idx($disallowed_filenames, $file_name, $file_name);
+
+    return $file_name;
   }
 
   public function delete() {
-    $engine = $this->instantiateStorageEngine();
+    // delete all records of this file in transformedfile
+    $trans_files = id(new PhabricatorTransformedFile())->loadAllWhere(
+      'TransformedPHID = %s', $this->getPHID());
 
+    $this->openTransaction();
+    foreach ($trans_files as $trans_file) {
+      $trans_file->delete();
+    }
     $ret = parent::delete();
+    $this->saveTransaction();
 
-    $engine->deleteFile($this->getStorageHandle());
+    // Check to see if other files are using storage
+    $other_file = id(new PhabricatorFile())->loadAllWhere(
+      'storageEngine = %s AND storageHandle = %s AND
+      storageFormat = %s AND id != %d LIMIT 1', $this->getStorageEngine(),
+      $this->getStorageHandle(), $this->getStorageFormat(),
+      $this->getID());
 
+    // If this is the only file using the storage, delete storage
+    if (count($other_file) == 0) {
+      $engine = $this->instantiateStorageEngine();
+      $engine->deleteFile($this->getStorageHandle());
+    }
     return $ret;
+  }
+
+  public static function hashFileContent($data) {
+    return sha1($data);
   }
 
   public function loadFileData() {
@@ -366,6 +472,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return PhabricatorEnv::getCDNURI($path);
   }
 
+  public function getPreview140URI() {
+    $path = '/file/xform/preview-140/'.$this->getPHID().'/'
+      .$this->getSecretKey().'/';
+    return PhabricatorEnv::getCDNURI($path);
+  }
+
   public function getPreview220URI() {
     $path = '/file/xform/preview-220/'.$this->getPHID().'/'
       .$this->getSecretKey().'/';
@@ -374,6 +486,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
   public function getThumb220x165URI() {
     $path = '/file/xform/thumb-220x165/'.$this->getPHID().'/'
+      .$this->getSecretKey().'/';
+    return PhabricatorEnv::getCDNURI($path);
+  }
+
+  public function getThumb280x210URI() {
+    $path = '/file/xform/thumb-280x210/'.$this->getPHID().'/'
       .$this->getSecretKey().'/';
     return PhabricatorEnv::getCDNURI($path);
   }
@@ -483,6 +601,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return idx($mime_map, $mime_type);
   }
 
+  public function getDisplayIconForMimeType() {
+    $mime_map = PhabricatorEnv::getEnvConfig('files.icon-mime-types');
+    $mime_type = $this->getMimeType();
+    return idx($mime_map, $mime_type, 'docs_file');
+  }
+
   public function validateSecretKey($key) {
     return ($key == $this->getSecretKey());
   }
@@ -522,6 +646,20 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
     if ($save) {
       $this->save();
+    }
+
+    return $this;
+  }
+
+  public function copyDimensions(PhabricatorFile $file) {
+    $metadata = $file->getMetadata();
+    $width = idx($metadata, self::METADATA_IMAGE_WIDTH);
+    if ($width) {
+      $this->metadata[self::METADATA_IMAGE_WIDTH] = $width;
+    }
+    $height = idx($metadata, self::METADATA_IMAGE_HEIGHT);
+    if ($height) {
+      $this->metadata[self::METADATA_IMAGE_HEIGHT] = $height;
     }
 
     return $this;

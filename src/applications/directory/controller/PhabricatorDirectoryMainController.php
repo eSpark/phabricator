@@ -30,7 +30,8 @@ final class PhabricatorDirectoryMainController
   private function buildMainResponse($nav, array $projects) {
     assert_instances_of($projects, 'PhabricatorProject');
 
-    if (PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
+    $maniphest = 'PhabricatorApplicationManiphest';
+    if (PhabricatorApplication::isClassInstalled($maniphest)) {
       $unbreak_panel = $this->buildUnbreakNowPanel();
       $triage_panel = $this->buildNeedsTriagePanel($projects);
       $tasks_panel = $this->buildTasksPanel();
@@ -38,6 +39,12 @@ final class PhabricatorDirectoryMainController
       $unbreak_panel = null;
       $triage_panel = null;
       $tasks_panel = null;
+    }
+
+    if (PhabricatorEnv::getEnvConfig('welcome.html') !== null) {
+      $welcome_panel = $this->buildWelcomePanel();
+    } else {
+      $welcome_panel = null;
     }
 
     // I removed the jump panel because I don't find it useful
@@ -50,6 +57,7 @@ final class PhabricatorDirectoryMainController
 
     $content = array(
       $jump_panel,
+      $welcome_panel,
       $unbreak_panel,
       $triage_panel,
       $revision_panel,
@@ -62,10 +70,12 @@ final class PhabricatorDirectoryMainController
     $nav->appendChild($content);
     $nav->appendChild(new PhabricatorGlobalUploadTargetView());
 
-    return $this->buildStandardPageResponse(
+    return $this->buildApplicationPage(
       $nav,
       array(
         'title' => 'Phabricator',
+        'device' => true,
+        'dust' => true,
       ));
   }
 
@@ -112,7 +122,7 @@ final class PhabricatorDirectoryMainController
     $panel->setHeader('Unbreak Now!');
     $panel->setCaption('Open tasks with "Unbreak Now!" priority.');
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           'href' => '/maniphest/view/all/',
@@ -146,18 +156,19 @@ final class PhabricatorDirectoryMainController
     if (!$tasks) {
       return $this->renderMiniPanel(
         'No "Needs Triage" Tasks',
-        'No tasks in <a href="/project/">projects you are a member of</a> '.
-        'need triage.');
+        hsprintf(
+          'No tasks in <a href="/project/">projects you are a member of</a> '.
+          'need triage.'));
     }
 
     $panel = new AphrontPanelView();
     $panel->setHeader('Needs Triage');
-    $panel->setCaption(
+    $panel->setCaption(hsprintf(
       'Open tasks with "Needs Triage" priority in '.
-      '<a href="/project/">projects you are a member of</a>.');
+      '<a href="/project/">projects you are a member of</a>.'));
 
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           // TODO: This should filter to just your projects' need-triage
@@ -201,7 +212,7 @@ final class PhabricatorDirectoryMainController
     $panel->setCaption('Revisions waiting for you for review or commit.');
 
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           'href' => '/differential/',
@@ -212,7 +223,7 @@ final class PhabricatorDirectoryMainController
     $revision_view = id(new DifferentialRevisionListView())
       ->setHighlightAge(true)
       ->setRevisions(array_merge($blocking, $active))
-      ->setFields(DifferentialRevisionListView::getDefaultFields())
+      ->setFields(DifferentialRevisionListView::getDefaultFields($user))
       ->setUser($user)
       ->loadAssets();
     $phids = array_merge(
@@ -223,6 +234,16 @@ final class PhabricatorDirectoryMainController
     $revision_view->setHandles($handles);
 
     $panel->appendChild($revision_view);
+    $panel->setNoBackground();
+
+    return $panel;
+  }
+
+  private function buildWelcomePanel() {
+    $panel = new AphrontPanelView();
+    $panel->appendChild(
+      phutil_safe_html(
+        PhabricatorEnv::getEnvConfig('welcome.html')));
     $panel->setNoBackground();
 
     return $panel;
@@ -251,7 +272,7 @@ final class PhabricatorDirectoryMainController
     $panel->setHeader('Assigned Tasks');
 
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           'href' => '/maniphest/',
@@ -297,14 +318,14 @@ final class PhabricatorDirectoryMainController
     require_celerity_resource('phabricator-jump-nav');
 
     $doc_href = PhabricatorEnv::getDocLink('article/Jump_Nav_User_Guide.html');
-    $doc_link = phutil_render_tag(
+    $doc_link = phutil_tag(
       'a',
       array(
         'href' => $doc_href,
       ),
       'Jump Nav User Guide');
 
-    $jump_input = phutil_render_tag(
+    $jump_input = phutil_tag(
       'input',
       array(
         'type'  => 'text',
@@ -313,38 +334,55 @@ final class PhabricatorDirectoryMainController
         'id'    => $uniq_id,
         'value' => $query,
       ));
-    $jump_caption = phutil_render_tag(
+    $jump_caption = phutil_tag(
       'p',
       array(
         'class' => 'phabricator-jump-nav-caption',
       ),
-      'Enter the name of an object like <tt>D123</tt> to quickly jump to '.
-      'it. See '.$doc_link.' or type <tt>help</tt>.');
+      hsprintf(
+        'Enter the name of an object like <tt>D123</tt> to quickly jump to '.
+          'it. See %s or type <tt>help</tt>.',
+        $doc_link));
+
+    $form = phabricator_form(
+      $user,
+      array(
+        'action' => '/jump/',
+        'method' => 'POST',
+        'class'  => 'phabricator-jump-nav-form',
+      ),
+      array(
+        $jump_input,
+        $jump_caption,
+      ));
 
     $panel = new AphrontPanelView();
     $panel->setHeader('Jump Nav');
-    $panel->appendChild(
-      phabricator_render_form(
-        $user,
-        array(
-          'action' => '/jump/',
-          'method' => 'POST',
-          'class'  => 'phabricator-jump-nav-form',
-        ),
-        $jump_input.
-        $jump_caption));
+    $panel->setNoBackground();
+    // $panel->appendChild();
 
-    return $panel;
+    $list_filter = new AphrontListFilterView();
+    $list_filter->appendChild(phutil_tag('h1', array(), 'Jump Nav'));
+    $list_filter->appendChild($form);
+
+    $container = phutil_tag('div',
+      array('class' => 'phabricator-jump-nav-container'),
+      $list_filter);
+
+    return $container;
   }
 
   private function renderMiniPanel($title, $body) {
     $panel = new AphrontMiniPanelView();
     $panel->appendChild(
-      phutil_render_tag(
+      phutil_tag(
         'p',
         array(
         ),
-        '<strong>'.$title.':</strong> '.$body));
+        array(
+          phutil_tag('strong', array(), $title.': '),
+          $body
+        )));
     $this->minipanels[] = $panel;
   }
 
@@ -384,7 +422,7 @@ final class PhabricatorDirectoryMainController
     $panel->setCaption('Commits awaiting your audit.');
     $panel->appendChild($view);
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           'href' => '/audit/',
@@ -404,7 +442,7 @@ final class PhabricatorDirectoryMainController
 
     $query = new PhabricatorAuditCommitQuery();
     $query->withAuthorPHIDs($phids);
-    $query->withStatus(PhabricatorAuditQuery::STATUS_OPEN);
+    $query->withStatus(PhabricatorAuditCommitQuery::STATUS_CONCERN);
     $query->needCommitData(true);
     $query->setLimit(10);
 
@@ -429,7 +467,7 @@ final class PhabricatorDirectoryMainController
     $panel->setCaption('Commits which auditors have raised concerns about.');
     $panel->appendChild($view);
     $panel->addButton(
-      phutil_render_tag(
+      phutil_tag(
         'a',
         array(
           'href' => '/audit/',

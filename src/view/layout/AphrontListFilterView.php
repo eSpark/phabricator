@@ -3,15 +3,22 @@
 final class AphrontListFilterView extends AphrontView {
 
   public function render() {
+    $contents = $this->renderChildren();
+
+    if (!$contents) {
+      return null;
+    }
+
     require_celerity_resource('aphront-list-filter-view-css');
-    return
-      '<table class="aphront-list-filter-view">'.
-        '<tr>'.
-          '<td class="aphront-list-filter-view-controls">'.
-            $this->renderChildren().
-          '</td>'.
-        '</tr>'.
-      '</table>';
+    return hsprintf(
+      '<div class="aphront-filter-table-wrapper">'.
+        '<table class="aphront-list-filter-view">'.
+          '<tr>'.
+            '<td class="aphront-list-filter-view-controls">%s</td>'.
+          '</tr>'.
+        '</table>'.
+      '</div>',
+      $contents);
   }
 
 }

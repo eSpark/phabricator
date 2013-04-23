@@ -36,7 +36,6 @@ final class PhabricatorApplicationDetailViewController
     if ($selected->isInstalled()) {
       $status_tag->setName(pht('Installed'));
       $status_tag->setBackgroundColor(PhabricatorTagView::COLOR_GREEN);
-
     } else {
       $status_tag->setName(pht('Uninstalled'));
       $status_tag->setBackgroundColor(PhabricatorTagView::COLOR_RED);
@@ -49,7 +48,6 @@ final class PhabricatorApplicationDetailViewController
               ->setBackgroundColor(PhabricatorTagView::COLOR_GREY);
       $header->addTag($beta_tag);
     }
-
 
     $header->addTag($status_tag);
 
@@ -72,8 +70,7 @@ final class PhabricatorApplicationDetailViewController
   private function buildPropertyView(PhabricatorApplication $selected) {
     $properties = id(new PhabricatorPropertyListView())
               ->addProperty(
-                pht('Description'), $selected->getShortDescription()
-                );
+                pht('Description'), $selected->getShortDescription());
 
     return $properties;
   }
@@ -92,17 +89,22 @@ final class PhabricatorApplicationDetailViewController
                ->setIcon('delete')
                ->setWorkflow(true)
                ->setHref(
-                $this->getApplicationURI(get_class($selected).'/uninstall/'))
-               );
+                $this->getApplicationURI(get_class($selected).'/uninstall/')));
       } else {
-        $view->addAction(
-               id(new PhabricatorActionView())
-               ->setName(pht('Install'))
-               ->setIcon('new')
-               ->setWorkflow(true)
-               ->setHref(
-                 $this->getApplicationURI(get_class($selected).'/install/'))
-               );
+        $action = id(new PhabricatorActionView())
+          ->setName(pht('Install'))
+          ->setIcon('new')
+          ->setWorkflow(true)
+          ->setHref(
+           $this->getApplicationURI(get_class($selected).'/install/'));
+
+        $beta_enabled = PhabricatorEnv::getEnvConfig(
+          'phabricator.show-beta-applications');
+        if ($selected->isBeta() && !$beta_enabled) {
+          $action->setDisabled(true);
+        }
+
+        $view->addAction($action);
       }
     } else {
       $view->addAction(
@@ -112,8 +114,7 @@ final class PhabricatorApplicationDetailViewController
              ->setWorkflow(true)
              ->setDisabled(true)
              ->setHref(
-               $this->getApplicationURI(get_class($selected).'/uninstall/'))
-             );
+               $this->getApplicationURI(get_class($selected).'/uninstall/')));
     }
     return $view;
   }

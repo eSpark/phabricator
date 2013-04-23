@@ -18,9 +18,10 @@ final class PhabricatorMacroMemeDialogController
         $e_macro = pht('Required');
         $errors[] = pht('Macro name is required.');
       } else {
-        $macro = id(new PhabricatorFileImageMacro())->loadOneWhere(
-          'name = %s',
-          $name);
+        $macro = id(new PhabricatorMacroQuery())
+          ->setViewer($user)
+          ->withNames(array($name))
+          ->executeOne();
         if (!$macro) {
           $e_macro = pht('Invalid');
           $errors[] = pht('No such macro.');
@@ -28,8 +29,16 @@ final class PhabricatorMacroMemeDialogController
       }
 
       if (!$errors) {
+        $options = new PhutilSimpleOptions();
+        $data = array(
+          'src' => $name,
+          'above' => $above,
+          'below' => $below,
+        );
+        $string = $options->unparse($data, $escape = '}');
+
         $result = array(
-          'text' => "{meme, src={$name}, above={$above}, below={$below}}",
+          'text' => "{meme, {$string}}",
         );
         return id(new AphrontAjaxResponse())->setContent($result);
       }

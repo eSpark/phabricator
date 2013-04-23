@@ -3,12 +3,6 @@
 final class PhabricatorPeopleLdapController
   extends PhabricatorPeopleController {
 
-  public function shouldRequireAdmin() {
-    return true;
-  }
-
-  private $view;
-
   public function processRequest() {
 
     $request = $this->getRequest();
@@ -22,44 +16,54 @@ final class PhabricatorPeopleLdapController
       ->setUser($admin)
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('LDAP username')
+        ->setLabel(pht('LDAP username'))
         ->setName('username'))
       ->appendChild(
         id(new AphrontFormPasswordControl())
-        ->setLabel('Password')
+        ->setLabel(pht('Password'))
         ->setName('password'))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('LDAP query')
-        ->setCaption('A filter such as (objectClass=*)')
+        ->setLabel(pht('LDAP query'))
+        ->setCaption(pht('A filter such as (objectClass=*)'))
         ->setName('query'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-        ->setValue('Search'));
+        ->setValue(pht('Search')));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader('Import LDAP Users');
-    $panel->appendChild($form);
+    $panel = id(new AphrontPanelView())
+      ->setHeader(pht('Import LDAP Users'))
+      ->setNoBackground()
+      ->setWidth(AphrontPanelView::WIDTH_FORM)
+      ->appendChild($form);
 
-
-    if ($request->getStr('import')) {
-      $content[] = $this->processImportRequest($request);
-    }
-
-    $content[] = $panel;
-
-    if ($request->getStr('search')) {
-      $content[] = $this->processSearchRequest($request);
-    }
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName(pht('Import Ldap Users'))
+        ->setHref($this->getApplicationURI('/ldap/')));
 
     $nav = $this->buildSideNavView();
+    $nav->setCrumbs($crumbs);
     $nav->selectFilter('ldap');
     $nav->appendChild($content);
+
+    if ($request->getStr('import')) {
+      $nav->appendChild($this->processImportRequest($request));
+    }
+
+    $nav->appendChild($panel);
+
+    if ($request->getStr('search')) {
+      $nav->appendChild($this->processSearchRequest($request));
+    }
 
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => 'Import Ldap Users',
+        'title'  => pht('Import Ldap Users'),
+        'device' => true,
+        'dust'   => true,
       ));
   }
 
@@ -69,11 +73,15 @@ final class PhabricatorPeopleLdapController
     $emails = $request->getArr('email');
     $names = $request->getArr('name');
 
-    $panel = new AphrontErrorView();
-    $panel->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
-    $panel->setTitle("Import Successful");
-    $errors = array("Successfully imported users from LDAP");
+    $notice_view = new AphrontErrorView();
+    $notice_view->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+    $notice_view->setTitle(pht("Import Successful"));
+    $notice_view->setErrors(array(
+      pht("Successfully imported users from LDAP"),
+    ));
 
+    $list = new PhabricatorObjectItemListView();
+    $list->setNoDataString(pht("No users imported?"));
 
     foreach ($usernames as $username) {
       $user = new PhabricatorUser();
@@ -92,14 +100,28 @@ final class PhabricatorPeopleLdapController
         $ldap_info->setLDAPUsername($username);
         $ldap_info->setUserID($user->getID());
         $ldap_info->save();
-        $errors[] = 'Successfully added ' . $username;
+
+        $header = pht('Successfully added %s', $username);
+        $attribute = null;
+        $color = 'green';
       } catch (Exception $ex) {
-        $errors[] = 'Failed to add ' . $username . ' ' . $ex->getMessage();
+        $header = pht('Failed to add %s', $username);
+        $attribute = $ex->getMessage();
+        $color = 'red';
       }
+
+      $item = id(new PhabricatorObjectItemView())
+        ->setHeader($header)
+        ->addAttribute($attribute)
+        ->setBarColor($color);
+
+      $list->addItem($item);
     }
 
-    $panel->setErrors($errors);
-    return $panel;
+    return array(
+      $notice_view,
+      $list,
+    );
 
   }
 
@@ -127,23 +149,23 @@ final class PhabricatorPeopleLdapController
       $table = new AphrontTableView($results);
       $table->setHeaders(
         array(
-          'Username',
-          'Email',
-          'RealName',
-          'Import?',
+          pht('Username'),
+          pht('Email'),
+          pht('Real Name'),
+          pht('Import?'),
         ));
       $form->appendChild($table);
       $form->setAction($request->getRequestURI()
         ->alter('import', 'true')->alter('search', null))
         ->appendChild(
           id(new AphrontFormSubmitControl())
-          ->setValue('Import'));
+          ->setValue(pht('Import')));
 
 
       $panel->appendChild($form);
     } catch (Exception $ex) {
       $error_view = new AphrontErrorView();
-      $error_view->setTitle('LDAP Search Failed');
+      $error_view->setTitle(pht('LDAP Search Failed'));
       $error_view->setErrors(array($ex->getMessage()));
       return $error_view;
     }
@@ -153,34 +175,29 @@ final class PhabricatorPeopleLdapController
 
   private function renderUserInputs($user) {
     $username = $user[0];
-    $inputs =  phutil_render_tag(
-      'input',
-      array(
-        'type' => 'checkbox',
-        'name' => 'usernames[]',
-        'value' =>$username,
-      ),
-      '');
-
-    $inputs .=  phutil_render_tag(
-      'input',
-      array(
-        'type' => 'hidden',
-        'name' => "email[$username]",
-        'value' =>$user[1],
-      ),
-      '');
-
-    $inputs .=  phutil_render_tag(
-      'input',
-      array(
-        'type' => 'hidden',
-        'name' => "name[$username]",
-        'value' =>$user[2],
-      ),
-      '');
-
-    return $inputs;
+    return hsprintf(
+      '%s%s%s',
+      phutil_tag(
+        'input',
+        array(
+          'type' => 'checkbox',
+          'name' => 'usernames[]',
+          'value' => $username,
+        )),
+      phutil_tag(
+        'input',
+        array(
+          'type' => 'hidden',
+          'name' => "email[$username]",
+          'value' => $user[1],
+        )),
+      phutil_tag(
+        'input',
+        array(
+          'type' => 'hidden',
+          'name' => "name[$username]",
+          'value' => $user[2],
+        )));
   }
 
 }

@@ -18,6 +18,7 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
           array(
             'name'        => $request->getStr('name'),
             'authorPHID'  => $user->getPHID(),
+            'isExplicitUpload' => true,
           ));
       }
 
@@ -30,16 +31,14 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
     $instructions = id(new AphrontFormMarkupControl())
       ->setControlID($support_id)
       ->setControlStyle('display: none')
-      ->setValue(
-        '<br /><br />'.
+      ->setValue(hsprintf(
+        '<br /><br /><strong>%s</strong> %s<br /><br />',
+        pht('Drag and Drop:'),
         pht(
-          '<strong>Drag and Drop:</strong> You can also upload files by '.
-          'dragging and dropping them from your desktop onto this page or '.
-          'the Phabricator home page.').
-        '<br /><br />');
+          'You can also upload files by dragging and dropping them from your '.
+          'desktop onto this page or the Phabricator home page.')));
 
     $form = id(new AphrontFormView())
-      ->setFlexible(true)
       ->setUser($user)
       ->setEncType('multipart/form-data')
       ->appendChild(
@@ -68,9 +67,6 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
 
     $title = pht('Upload File');
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
     if ($errors) {
       $errors = id(new AphrontErrorView())
         ->setTitle(pht('Form Errors'))
@@ -80,12 +76,17 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
     $global_upload = id(new PhabricatorGlobalUploadTargetView())
       ->setShowIfSupportedID($support_id);
 
+    $panel = new AphrontPanelView();
+    $panel->setHeader(pht('New File Upload'));
+    $panel->setNoBackground();
+    $panel->appendChild($form);
+    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
         $errors,
-        $form,
+        $panel,
         $global_upload,
       ),
       array(
@@ -99,12 +100,12 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
     $limit = phabricator_parse_bytes($limit);
     if ($limit) {
       $formatted = phabricator_format_bytes($limit);
-      return 'Maximum file size: '.phutil_escape_html($formatted);
+      return 'Maximum file size: '.$formatted;
     }
 
     $doc_href = PhabricatorEnv::getDocLink(
       'article/Configuring_File_Upload_Limits.html');
-    $doc_link = phutil_render_tag(
+    $doc_link = phutil_tag(
       'a',
       array(
         'href'    => $doc_href,
@@ -112,7 +113,7 @@ final class PhabricatorFileUploadController extends PhabricatorFileController {
       ),
       'Configuring File Upload Limits');
 
-    return 'Upload limit is not configured, see '.$doc_link.'.';
+    return hsprintf('Upload limit is not configured, see %s.', $doc_link);
   }
 
 }

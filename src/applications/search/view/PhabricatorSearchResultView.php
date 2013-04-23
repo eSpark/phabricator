@@ -34,7 +34,7 @@ final class PhabricatorSearchResultView extends AphrontView {
 
     require_celerity_resource('phabricator-search-results-css');
 
-    $link = phutil_render_tag(
+    $link = phutil_tag(
       'a',
       array(
         'href' => $handle->getURI(),
@@ -44,7 +44,7 @@ final class PhabricatorSearchResultView extends AphrontView {
     $img = $handle->getImageURI();
 
     if ($img) {
-      $img = phutil_render_tag(
+      $img = phutil_tag(
         'div',
         array(
           'class' => 'result-image',
@@ -53,43 +53,32 @@ final class PhabricatorSearchResultView extends AphrontView {
         '');
     }
 
-    switch ($handle->getType()) {
-      case PhabricatorPHIDConstants::PHID_TYPE_CMIT:
-        $object_name = $handle->getName();
-        if ($this->object) {
-          $data = $this->object->loadOneRelative(
-            new PhabricatorRepositoryCommitData(),
-            'commitID');
-          if ($data && strlen($data->getSummary())) {
-            $object_name = $handle->getName().': '.$data->getSummary();
-          }
-        }
-        break;
-      default:
-        $object_name = $handle->getFullName();
-        break;
-    }
+    $object_name = $handle->getFullName();
 
-    return
+    return hsprintf(
       '<div class="phabricator-search-result">'.
-        $img.
+        '%s'.
         '<div class="result-desc">'.
-          phutil_render_tag(
-            'a',
-            array(
-              'class' => 'result-name',
-              'href' => $handle->getURI(),
-            ),
-            $this->emboldenQuery($object_name)).
-          '<div class="result-type">'.$type_name.' &middot; '.$link.'</div>'.
+          '%s'.
+          '<div class="result-type">%s &middot; %s</div>'.
         '</div>'.
         '<div style="clear: both;"></div>'.
-      '</div>';
+      '</div>',
+      $img,
+      phutil_tag(
+        'a',
+        array(
+          'class' => 'result-name',
+          'href' => $handle->getURI(),
+        ),
+        $this->emboldenQuery($object_name)),
+      $type_name,
+      $link);
   }
 
   private function emboldenQuery($str) {
     if (!$this->query) {
-      return phutil_escape_html($str);
+      return $str;
     }
 
     $query = $this->query->getQuery();
@@ -113,7 +102,7 @@ final class PhabricatorSearchResultView extends AphrontView {
         '<strong>\1</strong>',
         $str);
     }
-    return $str;
+    return phutil_safe_html($str);
   }
 
 }

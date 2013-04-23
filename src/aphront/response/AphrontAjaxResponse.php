@@ -38,16 +38,23 @@ final class AphrontAjaxResponse extends AphrontResponse {
     $console = $this->getConsole();
     if ($console) {
       Javelin::initBehavior(
-        'dark-console-ajax',
+        'dark-console',
         array(
-          'console' => $console->render($this->getRequest()),
-          'uri'     => (string) $this->getRequest()->getRequestURI(),
+          'uri'     => (string)$this->getRequest()->getRequestURI(),
+          'key'     => $console->getKey($this->getRequest()),
         ));
     }
 
+    // Flatten the response first, so we initialize any behaviors and metadata
+    // we need to.
+    $content = array(
+      'payload' => $this->content,
+    );
+    $this->encodeJSONForHTTPResponse($content);
+
     $response = CelerityAPI::getStaticResourceResponse();
     $object = $response->buildAjaxResponse(
-      $this->content,
+      $content['payload'],
       $this->error);
 
     $response_json = $this->encodeJSONForHTTPResponse($object);

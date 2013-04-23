@@ -64,15 +64,22 @@ final class PonderQuestionViewController extends PonderController {
       ->setActionURI("/ponder/answer/add/");
 
     $header = id(new PhabricatorHeaderView())
-      ->setObjectName('Q'.$question->getID())
       ->setHeader($question->getTitle());
 
     $actions = $this->buildActionListView($question);
     $properties = $this->buildPropertyListView($question, $subscribers);
 
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView());
+    $crumbs->setActionList($actions);
+    $crumbs->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName('Q'.$this->questionID)
+          ->setHref('/Q'.$this->questionID));
+
     $nav = $this->buildSideNavView($question);
     $nav->appendChild(
       array(
+        $crumbs,
         $header,
         $actions,
         $properties,
@@ -117,15 +124,12 @@ final class PonderQuestionViewController extends PonderController {
       phabricator_datetime($question->getDateCreated(), $viewer));
 
     if ($subscribers) {
-      foreach ($subscribers as $key => $subscriber) {
-        $subscribers[$key] = $this->getHandle($subscriber)->renderLink();
-      }
-      $subscribers = implode(', ', $subscribers);
+      $subscribers = $this->renderHandlesForPHIDs($subscribers);
     }
 
     $view->addProperty(
       pht('Subscribers'),
-      nonempty($subscribers, '<em>'.pht('None').'</em>'));
+      nonempty($subscribers, phutil_tag('em', array(), pht('None'))));
 
     return $view;
   }

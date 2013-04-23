@@ -1,12 +1,30 @@
 <?php
 
 final class PhabricatorFileImageMacro extends PhabricatorFileDAO
-  implements PhabricatorSubscribableInterface {
+  implements
+    PhabricatorSubscribableInterface,
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorPolicyInterface {
 
   protected $filePHID;
   protected $phid;
   protected $name;
   protected $isDisabled = 0;
+
+  private $file;
+
+  public function attachFile(PhabricatorFile $file) {
+    $this->file = $file;
+    return $this;
+  }
+
+  public function getFile() {
+    if (!$this->file) {
+      throw new Exception("Attach a file with attachFile() first!");
+    }
+
+    return $this->file;
+  }
 
   public function getConfiguration() {
     return array(
@@ -19,22 +37,30 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
       PhabricatorPHIDConstants::PHID_TYPE_MCRO);
   }
 
-  static public function newFromImageURI($uri, $file_name, $image_macro_name) {
-    $file = PhabricatorFile::newFromFileDownload($uri, $file_name);
-
-    if (!$file) {
-      return null;
-    }
-
-    $image_macro = new PhabricatorFileImageMacro();
-    $image_macro->setName($image_macro_name);
-    $image_macro->setFilePHID($file->getPHID());
-    $image_macro->save();
-
-    return $image_macro;
+  public function isAutomaticallySubscribed($phid) {
+    return false;
   }
 
-  public function isAutomaticallySubscribed($phid) {
+  public function getApplicationTransactionEditor() {
+    return new PhabricatorMacroEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return new PhabricatorMacroTransaction();
+  }
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
+    );
+  }
+
+  public function getPolicy($capability) {
+    return PhabricatorPolicies::POLICY_USER;
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
   }
 

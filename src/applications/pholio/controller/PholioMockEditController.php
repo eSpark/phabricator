@@ -51,6 +51,9 @@ final class PholioMockEditController extends PholioController {
     $v_name = $mock->getName();
     $v_desc = $mock->getDescription();
     $v_view = $mock->getViewPolicy();
+    $v_cc = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+      $mock->getPHID());
+    $files = array();
 
     if ($request->isFormPost()) {
       $xactions = array();
@@ -58,14 +61,17 @@ final class PholioMockEditController extends PholioController {
       $type_name = PholioTransactionType::TYPE_NAME;
       $type_desc = PholioTransactionType::TYPE_DESCRIPTION;
       $type_view = PhabricatorTransactions::TYPE_VIEW_POLICY;
+      $type_cc   = PhabricatorTransactions::TYPE_SUBSCRIBERS;
 
       $v_name = $request->getStr('name');
       $v_desc = $request->getStr('description');
       $v_view = $request->getStr('can_view');
+      $v_cc   = $request->getArr('cc');
 
       $xactions[$type_name] = $v_name;
       $xactions[$type_desc] = $v_desc;
       $xactions[$type_view] = $v_view;
+      $xactions[$type_cc]   = array('=' => $v_cc);
 
       if (!strlen($request->getStr('name'))) {
         $e_name = 'Required';
@@ -76,7 +82,6 @@ final class PholioMockEditController extends PholioController {
       if ($is_new) {
         // TODO: Make this transactional and allow edits?
 
-        $files = array();
 
         $file_phids = $request->getArr('file_phids');
         if ($file_phids) {
@@ -87,7 +92,7 @@ final class PholioMockEditController extends PholioController {
         }
 
         if (!$files) {
-          $e_images = 'Required';
+          $e_images = pht('Required');
           $errors[] = pht('You must add at least one image to the mock.');
         } else {
           $mock->setCoverPHID(head($files)->getPHID());
@@ -165,6 +170,23 @@ final class PholioMockEditController extends PholioController {
     // NOTE: Make this show up correctly on the rendered form.
     $mock->setViewPolicy($v_view);
 
+    $handles = id(new PhabricatorObjectHandleData($v_cc))
+      ->setViewer($user)
+      ->loadHandles();
+
+    $cc_tokens = mpull($handles, 'getFullName', 'getPHID');
+
+    $images_controller = '';
+    if ($is_new) {
+      $images_controller =
+          id(new AphrontFormDragAndDropUploadControl($request))
+            ->setValue($files)
+            ->setName('file_phids')
+            ->setLabel(pht('Images'))
+            ->setActivatedClass('aphront-textarea-drag-and-drop')
+            ->setError($e_images);
+    }
+
     $form = id(new AphrontFormView())
       ->setUser($user)
       ->setFlexible(true)
@@ -180,11 +202,14 @@ final class PholioMockEditController extends PholioController {
           ->setValue($v_desc)
           ->setLabel(pht('Description'))
           ->setUser($user))
+      ->appendChild($images_controller)
       ->appendChild(
-        id(new AphrontFormDragAndDropUploadControl($request))
-          ->setName('file_phids')
-          ->setLabel(pht('Images'))
-          ->setError($e_images))
+        id(new AphrontFormTokenizerControl())
+          ->setLabel(pht('CC'))
+          ->setName('cc')
+          ->setValue($cc_tokens)
+          ->setUser($user)
+          ->setDatasource('/typeahead/common/mailable/'))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setUser($user)
@@ -194,11 +219,14 @@ final class PholioMockEditController extends PholioController {
           ->setName('can_view'))
       ->appendChild($submit);
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI()));
 
     $content = array(
-      $header,
+      $crumbs,
       $error_view,
       $form,
     );
@@ -211,6 +239,7 @@ final class PholioMockEditController extends PholioController {
       $nav,
       array(
         'title' => $title,
+        'device' => true,
       ));
   }
 

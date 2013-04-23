@@ -31,6 +31,13 @@ JX.behavior('aphront-form-disable-on-submit', function(config) {
       return;
     }
 
+    // Don't double-submit forms.
+    if (form._disabled) {
+      return;
+    }
+
+    will_submit(form);
+
     // If nothing handled the synthetic submit, submit normally.
     form.submit();
   });
@@ -55,6 +62,12 @@ JX.behavior('aphront-form-disable-on-submit', function(config) {
     }
 
     root = e.getNode('tag:form');
+
+    // If the form is a "download" form, don't disable it on submit because
+    // we won't transition off the page.
+    if (JX.Stratcom.hasSigil(root, 'download')) {
+      return;
+    }
 
     // Open the form to a new tab in Firefox explicitly (automatic in Chrome).
     // We render some buttons as links so users may be confused that the links

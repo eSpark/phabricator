@@ -9,12 +9,17 @@ abstract class PhabricatorBaseEnglishTranslation
 
   public function getTranslations() {
     return array(
+      'These %d configuration value(s) are related:' => array(
+        'This configuration value is related:',
+        'These configuration values are related:',
+      ),
       'Differential Revision(s)' => array(
         'Differential Revision',
         'Differential Revisions',
       ),
       'file(s)' => array('file', 'files'),
       'Maniphest Task(s)' => array('Maniphest Task', 'Maniphest Tasks'),
+      'Task(s)' => array('Task', 'Tasks'),
 
       'Please fix these errors and try again.' => array(
         'Please fix this error and try again.',
@@ -32,6 +37,8 @@ abstract class PhabricatorBaseEnglishTranslation
       'COMMIT(S)' => array('COMMIT', 'COMMITS'),
 
       '%d line(s)' => array('%d line', '%d lines'),
+      '%d path(s)' => array('%d path', '%d paths'),
+      '%d diff(s)' => array('%d diff', '%d diffs'),
 
       'added %d commit(s): %s' => array(
         'added commit: %2$s',
@@ -125,6 +132,11 @@ abstract class PhabricatorBaseEnglishTranslation
         '%d Problem Commits',
       ),
 
+      '%d Review(s) Blocking Others' => array(
+        '%d Review Blocking Others',
+        '%d Reviews Blocking Others',
+      ),
+
       '%d Review(s) Need Attention' => array(
         '%d Review Needs Attention',
         '%d Reviews Need Attention',
@@ -187,17 +199,9 @@ abstract class PhabricatorBaseEnglishTranslation
           '%s added a subscriber: %3$s.',
           '%s added subscribers: %3$s.',
         ),
-        array(
-          '%s added a subscriber: %3$s.',
-          '%s added subscribers: %3$s.',
-        ),
       ),
 
       '%s removed %d subscriber(s): %s.' => array(
-        array(
-          '%s removed a subscriber: %3$s.',
-          '%s removed subscribers: %3$s.',
-        ),
         array(
           '%s removed a subscriber: %3$s.',
           '%s removed subscribers: %3$s.',
@@ -209,10 +213,6 @@ abstract class PhabricatorBaseEnglishTranslation
           '%s added a participant: %3$s.',
           '%s added participants: %3$s.',
         ),
-        array(
-          '%s added a participant: %3$s.',
-          '%s added participants: %3$s.',
-        ),
       ),
 
       '%s removed %d participant(s): %s.' => array(
@@ -220,9 +220,12 @@ abstract class PhabricatorBaseEnglishTranslation
           '%s removed a participant: %3$s.',
           '%s removed participants: %3$s.',
         ),
+      ),
+
+      '%d people(s)' => array(
         array(
-          '%s removed a participant: %3$s.',
-          '%s removed participants: %3$s.',
+          '%d person',
+          '%d people',
         ),
       ),
 
@@ -242,29 +245,29 @@ abstract class PhabricatorBaseEnglishTranslation
       ),
 
       'Install these %d PHP extension(s):' => array(
-        'Install this %d PHP extension:',
-        'Install these %d PHP extensions:',
+        'Install this PHP extension:',
+        'Install these PHP extensions:',
       ),
 
       'The current Phabricator configuration has these %d value(s):' => array(
-        'The current Phabricator configuration has this %d value:',
-        'The current Phabricator configuration has these %d values:',
+        'The current Phabricator configuration has this value:',
+        'The current Phabricator configuration has these values:',
       ),
 
       'To update these %d value(s), run these command(s) from the command line:'
       => array(
-        'To update this %d value, run this command from the command line:',
-        'To update these %d values, run these commands from the command line:',
+        'To update this value, run this command from the command line:',
+        'To update these values, run these commands from the command line:',
       ),
 
       'You can update these %d value(s) here:' => array(
-        'You can update this %d value here:',
-        'You can update these %d values here:',
+        'You can update this value here:',
+        'You can update these values here:',
       ),
 
       'The current PHP configuration has these %d value(s):' => array(
-        'The current PHP configuration has this %d value:',
-        'The current PHP configuration has these %d values:',
+        'The current PHP configuration has this value:',
+        'The current PHP configuration has these values:',
       ),
 
       'To update these %d value(s), edit your PHP configuration file.' => array(
@@ -274,9 +277,9 @@ abstract class PhabricatorBaseEnglishTranslation
 
       'To update these %d value(s), edit your PHP configuration file, located '.
       'here:' => array(
-        'To update this %d value, edit your PHP configuration file, located '.
+        'To update this value, edit your PHP configuration file, located '.
         'here:',
-        'To update these %d values, edit your PHP configuration file, located '.
+        'To update these values, edit your PHP configuration file, located '.
         'here:',
       ),
 
@@ -286,9 +289,20 @@ abstract class PhabricatorBaseEnglishTranslation
       ),
 
       'You have %d unresolved setup issue(s)...' => array(
-        'You have %d unresolved setup issue...',
+        'You have an unresolved setup issue...',
         'You have %d unresolved setup issues...',
       ),
+
+      '%s added %d inline comment(s).' => array(
+        array(
+          '%s added an inline comment.',
+          '%s added inline comments.',
+        ),
+      ),
+
+      '%d comment(s)' => array('%d comment', '%d comments'),
+      '%d rejection(s)' => array('%d rejection', '%d rejections'),
+      '%d update(s)' => array('%d update', '%d updates'),
 
     );
   }

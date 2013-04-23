@@ -64,9 +64,18 @@ final class CeleritySpriteGenerator {
       // Strip 'text_' from these file names.
       $class_name = substr($icon, 5);
 
+      if ($class_name == 'order_off') {
+        $tcss = '.remarkup-control-order-mode .remarkup-assist-order';
+      } else if ($class_name == 'chaos_off') {
+        $tcss = '.remarkup-control-chaos-mode .remarkup-assist-chaos';
+      } else {
+        $tcss = '.remarkup-assist-'.$class_name;
+      }
+
       $sprite = id(clone $template)
         ->setName('remarkup-assist-'.$icon)
-        ->setTargetCSS('.remarkup-assist-'.$class_name);
+        ->setTargetCSS($tcss);
+
       foreach ($scales as $scale_key => $scale) {
         $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
         $sprite->setSourceFile($path, $scale);
@@ -83,25 +92,136 @@ final class CeleritySpriteGenerator {
     return $sheet;
   }
 
+  public function buildActionsSheet() {
+    $icons = $this->getDirectoryList('actions_white_1x');
+
+    $colors = array(
+      'dark',
+      'grey',
+      'white',
+    );
+
+    $scales = array(
+      '1x'  => 1,
+      '2x'  => 2,
+    );
+
+    $template = id(new PhutilSprite())
+      ->setSourceSize(24, 24);
+
+    $sprites = array();
+    foreach ($colors as $color) {
+      foreach ($icons as $icon) {
+        $prefix = 'actions_';
+        if (strlen($color)) {
+          $prefix .= $color.'_';
+        }
+
+        $suffix = '';
+        if (strlen($color)) {
+          $suffix = '-'.$color;
+        }
+
+        $sprite = id(clone $template)
+          ->setName('actions-'.$icon.$suffix);
+
+        $tcss = array();
+        $tcss[] = '.actions-'.$icon.$suffix;
+        if ($color == 'dark') {
+          $tcss[] = '.device-desktop '.
+            '.actions-'.$icon.'-grey.phui-icon-item-link:hover';
+        }
+
+        $sprite->setTargetCSS(implode(', ', $tcss));
+
+        foreach ($scales as $scale_key => $scale) {
+          $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
+          $sprite->setSourceFile($path, $scale);
+        }
+        $sprites[] = $sprite;
+      }
+    }
+
+    $sheet = $this->buildSheet('actions', true);
+    $sheet->setScales($scales);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
+    public function buildMiniconsSheet() {
+    $icons = $this->getDirectoryList('minicons_white_1x');
+
+    $colors = array(
+      'white',
+      'dark',
+    );
+
+    $scales = array(
+      '1x'  => 1,
+      '2x'  => 2,
+    );
+
+    $template = id(new PhutilSprite())
+      ->setSourceSize(16, 16);
+
+    $sprites = array();
+    foreach ($colors as $color) {
+      foreach ($icons as $icon) {
+        $prefix = 'minicons_';
+        if (strlen($color)) {
+          $prefix .= $color.'_';
+        }
+
+        $suffix = '';
+        if (strlen($color)) {
+          $suffix = '-'.$color;
+        }
+
+        $sprite = id(clone $template)
+          ->setName('minicons-'.$icon.$suffix);
+
+        $sprite->setTargetCSS('.minicons-'.$icon.$suffix);
+
+        foreach ($scales as $scale_key => $scale) {
+          $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
+          $sprite->setSourceFile($path, $scale);
+        }
+        $sprites[] = $sprite;
+      }
+    }
+
+    $sheet = $this->buildSheet('minicons', true);
+    $sheet->setScales($scales);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
+
   public function buildMenuSheet() {
     $sprites = array();
 
     $sources = array(
       'seen_read_all' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications .phabricator-main-menu-alert-icon',
       ),
       'seen_have_unread' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications:hover .phabricator-main-menu-alert-icon',
       ),
       'unseen_any' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications.alert-unread .phabricator-main-menu-alert-icon',
       ),
@@ -110,15 +230,25 @@ final class CeleritySpriteGenerator {
         'y' => 31,
         'css' => '.phabricator-crumb-divider',
       ),
-      'eye' => array(
+      'search' => array(
         'x' => 24,
-        'y' => 20,
-        'css' => '.menu-icon-eye',
+        'y' => 24,
+        'css' => '.menu-icon-search',
+      ),
+      'search_blue' => array(
+        'x' => 24,
+        'y' => 24,
+        'css' => '.menu-icon-search-blue',
       ),
       'app' => array(
         'x' => 24,
-        'y' => 20,
+        'y' => 24,
         'css' => '.menu-icon-app',
+      ),
+      'app_blue' => array(
+        'x' => 24,
+        'y' => 24,
+        'css' => '.menu-icon-app-blue',
       ),
       'logo' => array(
         'x' => 139,
@@ -126,20 +256,20 @@ final class CeleritySpriteGenerator {
         'css' => '.phabricator-main-menu-logo-image',
       ),
       'conf-off' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications .phabricator-main-menu-message-icon',
       ),
       'conf-hover' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications:hover .phabricator-main-menu-message-icon',
       ),
       'conf-unseen' => array(
-        'x' => 14,
-        'y' => 14,
+        'x' => 18,
+        'y' => 18,
         'css' =>
           '.alert-notifications.message-unread '.
           '.phabricator-main-menu-message-icon',
@@ -176,8 +306,67 @@ final class CeleritySpriteGenerator {
     return $sheet;
   }
 
+  public function buildTokenSheet() {
+    $tokens = $this->getDirectoryList('tokens_1x');
+
+    $template = id(new PhutilSprite())
+      ->setSourceSize(16, 16);
+
+    $sprites = array();
+    foreach ($tokens as $token) {
+      $path = $this->getPath('tokens_1x/'.$token.'.png');
+
+      $sprite = id(clone $template)
+        ->setName('tokens-'.$token)
+        ->setTargetCSS('.tokens-'.$token)
+        ->setSourceFile($path, 1);
+
+      $sprites[] = $sprite;
+    }
+
+    $sheet = $this->buildSheet('tokens', false);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
+  public function buildPaymentsSheet() {
+    $icons = $this->getDirectoryList('payments_2x');
+    $scales = array(
+      '2x' => 1,
+    );
+    $template = id(new PhutilSprite())
+      ->setSourceSize(60, 32);
+
+    $sprites = array();
+    $prefix = 'payments_';
+    foreach ($icons as $icon) {
+      $sprite = id(clone $template)
+        ->setName('payments-'.$icon)
+        ->setTargetCSS('.payments-'.$icon);
+
+      foreach ($scales as $scale_key => $scale) {
+        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
+        $sprite->setSourceFile($path, $scale);
+      }
+      $sprites[] = $sprite;
+    }
+
+    $sheet = $this->buildSheet('payments', true);
+    $sheet->setScales($scales);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
+
   public function buildConpherenceSheet() {
-    $icons = $this->getDirectoryList('conpher_1x');
+    $name = 'conpherence';
+    $icons = $this->getDirectoryList($name.'_1x');
     $scales = array(
       '1x' => 1,
       '2x' => 2,
@@ -186,10 +375,10 @@ final class CeleritySpriteGenerator {
       ->setSourceSize(32, 32);
 
     $sprites = array();
-      foreach ($icons as $icon) {
+    foreach ($icons as $icon) {
       $color = preg_match('/_on/', $icon) ? 'on' : 'off';
 
-      $prefix = 'conpher_';
+      $prefix = $name.'_';
 
       $sprite = id(clone $template)
         ->setName($prefix.$icon);
@@ -210,7 +399,39 @@ final class CeleritySpriteGenerator {
       $sprites[] = $sprite;
     }
 
-    $sheet = $this->buildSheet('conpher', true);
+    $sheet = $this->buildSheet($name, true);
+    $sheet->setScales($scales);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
+  public function buildDocsSheet() {
+    $icons = $this->getDirectoryList('docs_1x');
+    $scales = array(
+      '1x' => 1,
+      '2x' => 2,
+    );
+    $template = id(new PhutilSprite())
+      ->setSourceSize(32, 32);
+
+    $sprites = array();
+    $prefix = 'docs_';
+    foreach ($icons as $icon) {
+      $sprite = id(clone $template)
+        ->setName($prefix.$icon)
+        ->setTargetCSS('.'.$prefix.$icon);
+
+      foreach ($scales as $scale_key => $scale) {
+        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
+        $sprite->setSourceFile($path, $scale);
+      }
+      $sprites[] = $sprite;
+    }
+
+    $sheet = $this->buildSheet('docs', true);
     $sheet->setScales($scales);
     foreach ($sprites as $sprite) {
       $sheet->addSprite($sprite);
@@ -230,30 +451,15 @@ final class CeleritySpriteGenerator {
       'menu-hover'      => 28,
       'menu-label'      => 24,
       'menu-selected'   => 28,
+      'red-header'      => 70,
+      'blue-header'     => 70,
+      'green-header'    => 70,
+      'yellow-header'   => 70,
+      'grey-header'     => 70,
+      'dark-grey-header' => 70,
     );
 
-    // Reorder the sprites so less-specific rules generate earlier in the sheet.
-    // Otherwise we end up with blue "a.black" buttons because the blue rules
-    // have the same specificity but appear later.
-    $gradients = array_fuse($gradients);
-    $gradients = array_select_keys(
-      $gradients,
-      array(
-        'blue-dark',
-        'blue-light',
-      )) + $gradients;
-
     $extra_css = array(
-      'black-dark' => ', button.black, a.black, a.black:visited',
-      'black-light' => ', button.black:active, a.black:active',
-      'blue-dark' => ', button, a.button, a.button:visited, input.inputsubmit',
-      'blue-light' => ', button:active, a.button:active',
-      'grey-dark' => ', button.grey, input.inputaux, a.grey, a.grey:visited, '.
-                        'a.button.disabled, button[disabled], button.disabled',
-      'grey-light' => ', button.grey:active, a.grey:active, '.
-                        'button.grey_active, a.dropdown-open',
-      'green-dark' => ', button.green, a.green, a.green:visited',
-      'green-light' => ', button.green:active, a.green:active',
       'dark-menu-label' =>
         ', .phabricator-dark-menu .phabricator-menu-item-type-label',
       'menu-label' =>
@@ -286,8 +492,7 @@ final class CeleritySpriteGenerator {
       'gradient',
       false,
       PhutilSpriteSheet::TYPE_REPEAT_X,
-      ', button, a.button, a.button:visited, input.inputsubmit, '.
-      '.phabricator-dark-menu .phabricator-menu-item-type-label, '.
+      ', .phabricator-dark-menu .phabricator-menu-item-type-label, '.
       '.phabricator-side-menu .phabricator-menu-item-type-label, '.
       '.device-desktop .phabricator-side-menu '.
         'a.phabricator-menu-item-type-link:hover, '.
@@ -344,7 +549,6 @@ final class CeleritySpriteGenerator {
         'light' => 'lb',
         'dark'  => 'dark',
         'blue'  => 'blue',
-        'glow'  => 'glow',
       );
     } else {
       $scales = array(
@@ -363,7 +567,6 @@ final class CeleritySpriteGenerator {
 
         'blue'  => 'blue',
         'light' => 'lb',
-        'glow'  => 'glow',
         */
       );
     }
@@ -378,17 +581,13 @@ final class CeleritySpriteGenerator {
     foreach ($apps as $app) {
       foreach ($colors as $color => $color_path) {
 
-        $css = '.app-'.$app.'-'.$color.$variant_short;
+        $css = '.apps-'.$app.'-'.$color.$variant_short;
         if ($color == 'blue' && $variant_name == 'apps-large') {
-          $css .= ', .phabricator-crumb-view:hover .app-'.$app.'-dark-large';
-        }
-        if ($color == 'glow' && $variant_name == 'apps-large') {
-          $css .= ', .device-desktop .phabricator-dark-menu a:hover '.
-                  '.app-'.$app.'-light-large';
+          $css .= ', .phabricator-crumb-view:hover .apps-'.$app.'-dark-large';
         }
 
         $sprite = id(clone $template)
-          ->setName('app-'.$app.'-'.$color.$variant_short)
+          ->setName('apps-'.$app.'-'.$color.$variant_short)
           ->setTargetCSS($css);
 
         foreach ($scales as $scale_name => $scale) {

@@ -4,21 +4,33 @@ final class PhabricatorMenuView extends AphrontTagView {
 
   private $items = array();
 
-  public function newLabel($name) {
+  protected function canAppendChild() {
+    return false;
+  }
+
+  public function newLabel($name, $key = null) {
     $item = id(new PhabricatorMenuItemView())
       ->setType(PhabricatorMenuItemView::TYPE_LABEL)
       ->setName($name);
+
+    if ($key !== null) {
+      $item->setKey($key);
+    }
 
     $this->addMenuItem($item);
 
     return $item;
   }
 
-  public function newLink($name, $href) {
+  public function newLink($name, $href, $key = null) {
     $item = id(new PhabricatorMenuItemView())
       ->setType(PhabricatorMenuItemView::TYPE_LINK)
       ->setName($name)
       ->setHref($href);
+
+    if ($key !== null) {
+      $item->setKey($key);
+    }
 
     $this->addMenuItem($item);
 
@@ -37,11 +49,82 @@ final class PhabricatorMenuView extends AphrontTagView {
   }
 
   public function addMenuItem(PhabricatorMenuItemView $item) {
-    $key = $item->getKey();
-    $this->items[] = $item;
-    $this->appendChild($item);
+    return $this->addMenuItemAfter(null, $item);
+  }
 
+  public function addMenuItemAfter($key, PhabricatorMenuItemView $item) {
+    if ($key === null) {
+      $this->items[] = $item;
+      return $this;
+    }
+
+    if (!$this->getItem($key)) {
+      throw new Exception(pht("No such key '%s' to add menu item after!",
+        $key));
+    }
+
+    $result = array();
+    foreach ($this->items as $other) {
+      $result[] = $other;
+      if ($other->getKey() == $key) {
+        $result[] = $item;
+      }
+    }
+
+    $this->items = $result;
     return $this;
+  }
+
+  public function addMenuItemBefore($key, PhabricatorMenuItemView $item) {
+    if ($key === null) {
+      array_unshift($this->items, $item);
+      return $this;
+    }
+
+    $this->requireKey($key);
+
+    $result = array();
+    foreach ($this->items as $other) {
+      if ($other->getKey() == $key) {
+        $result[] = $item;
+      }
+      $result[] = $other;
+    }
+
+    $this->items = $result;
+    return $this;
+  }
+
+  public function addMenuItemToLabel($key, PhabricatorMenuItemView $item) {
+    $this->requireKey($key);
+
+    $other = $this->getItem($key);
+    if ($other->getType() != PhabricatorMenuItemView::TYPE_LABEL) {
+      throw new Exception(pht("Menu item '%s' is not a label!", $key));
+    }
+
+    $seen = false;
+    $after = null;
+    foreach ($this->items as $other) {
+      if (!$seen) {
+        if ($other->getKey() == $key) {
+          $seen = true;
+        }
+      } else {
+        if ($other->getType() == PhabricatorMenuItemView::TYPE_LABEL) {
+          break;
+        }
+      }
+      $after = $other->getKey();
+    }
+
+    return $this->addMenuItemAfter($after, $item);
+  }
+
+  private function requireKey($key) {
+    if (!$this->getItem($key)) {
+      throw new Exception(pht("No menu item with key '%s' exists!", $key));
+    }
   }
 
   public function getItem($key) {
@@ -71,7 +154,7 @@ final class PhabricatorMenuView extends AphrontTagView {
       if ($key !== null) {
         if (isset($key_map[$key])) {
           throw new Exception(
-            "Menu contains duplicate items with key '{$key}'!");
+            pht("Menu contains duplicate items with key '%s'!", $key));
         }
         $key_map[$key] = $item;
       }
@@ -82,5 +165,9 @@ final class PhabricatorMenuView extends AphrontTagView {
     return array(
       'class' => 'phabricator-menu-view',
     );
+  }
+
+  protected function getTagContent() {
+    return $this->items;
   }
 }

@@ -8,9 +8,15 @@
 final class DarkConsoleXHProfPluginAPI {
 
   private static $profilerStarted;
+  private static $profilerRunning;
+  private static $profileFilePHID;
 
   public static function isProfilerAvailable() {
     return extension_loaded('xhprof');
+  }
+
+  public static function getProfilerHeader() {
+    return 'X-Phabricator-Profiler';
   }
 
   public static function isProfilerRequested() {
@@ -18,20 +24,41 @@ final class DarkConsoleXHProfPluginAPI {
       return $_REQUEST['__profile__'];
     }
 
-    static $profilerRequested = null;
+    $header = AphrontRequest::getHTTPHeader(self::getProfilerHeader());
+    if ($header) {
+      return $header;
+    }
 
-    if (!isset($profilerRequested)) {
+    return false;
+  }
+
+  private static function shouldStartProfiler() {
+    if (self::isProfilerRequested()) {
+      return true;
+    }
+
+    static $sample_request = null;
+
+    if ($sample_request === null) {
       if (PhabricatorEnv::getEnvConfig('debug.profile-rate')) {
         $rate = PhabricatorEnv::getEnvConfig('debug.profile-rate');
         if (mt_rand(1, $rate) == 1) {
-          $profilerRequested = true;
+          $sample_request = true;
         } else {
-          $profilerRequested = false;
+          $sample_request = false;
         }
       }
     }
 
-    return $profilerRequested;
+    return $sample_request;
+  }
+
+  public static function isProfilerStarted() {
+    return self::$profilerStarted;
+  }
+
+  private static function isProfilerRunning() {
+    return self::$profilerRunning;
   }
 
   public static function includeXHProfLib() {
@@ -47,8 +74,43 @@ final class DarkConsoleXHProfPluginAPI {
   }
 
 
+  public static function saveProfilerSample(PhutilDeferredLog $access_log) {
+    $file_phid = self::getProfileFilePHID();
+    if (!$file_phid) {
+      return;
+    }
+
+    if (self::isProfilerRequested()) {
+      $sample_rate = 0;
+    } else {
+      $sample_rate = PhabricatorEnv::getEnvConfig('debug.profile-rate');
+    }
+
+    $profile_sample = id(new PhabricatorXHProfSample())
+      ->setFilePHID($file_phid)
+      ->setSampleRate($sample_rate)
+      ->setUsTotal($access_log->getData('T'))
+      ->setHostname($access_log->getData('h'))
+      ->setRequestPath($access_log->getData('U'))
+      ->setController($access_log->getData('C'))
+      ->setUserPHID($access_log->getData('P'));
+
+    AphrontWriteGuard::allowDangerousUnguardedWrites(true);
+      $caught = null;
+      try {
+        $profile_sample->save();
+      } catch (Exception $ex) {
+        $caught = $ex;
+      }
+    AphrontWriteGuard::allowDangerousUnguardedWrites(false);
+
+    if ($caught) {
+      throw $caught;
+    }
+  }
+
   public static function hookProfiler() {
-    if (!self::isProfilerRequested()) {
+    if (!self::shouldStartProfiler()) {
       return;
     }
 
@@ -61,58 +123,65 @@ final class DarkConsoleXHProfPluginAPI {
     }
 
     self::startProfiler();
-    self::$profilerStarted = true;
   }
 
-  public static function startProfiler() {
+  private static function startProfiler() {
     self::includeXHProfLib();
     xhprof_enable();
+
+    self::$profilerStarted = true;
+    self::$profilerRunning = true;
   }
 
-  public static function stopProfiler() {
-    if (self::$profilerStarted) {
-      $data = xhprof_disable();
-      $data = serialize($data);
-      $file_class = 'PhabricatorFile';
+  public static function getProfileFilePHID() {
+    self::stopProfiler();
+    return self::$profileFilePHID;
+  }
 
-      // Since these happen on GET we can't do guarded writes. These also
-      // sometimes happen after we've disposed of the write guard; in this
-      // case we need to disable the whole mechanism.
-
-      $use_scope = AphrontWriteGuard::isGuardActive();
-      if ($use_scope) {
-        $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-      } else {
-        AphrontWriteGuard::allowDangerousUnguardedWrites(true);
-      }
-
-      $caught = null;
-      try {
-        $file = call_user_func(
-          array($file_class, 'newFromFileData'),
-          $data,
-          array(
-            'mime-type' => 'application/xhprof',
-            'name'      => 'profile.xhprof',
-          ));
-      } catch (Exception $ex) {
-        $caught = $ex;
-      }
-
-      if ($use_scope) {
-        unset($unguarded);
-      } else {
-        AphrontWriteGuard::allowDangerousUnguardedWrites(false);
-      }
-
-      if ($caught) {
-        throw $caught;
-      } else {
-        return $file->getPHID();
-      }
-    } else {
-      return null;
+  private static function stopProfiler() {
+    if (!self::isProfilerRunning()) {
+      return;
     }
+
+    $data = xhprof_disable();
+    $data = serialize($data);
+    self::$profilerRunning = false;
+
+    // Since these happen on GET we can't do guarded writes. These also
+    // sometimes happen after we've disposed of the write guard; in this
+    // case we need to disable the whole mechanism.
+
+    $use_scope = AphrontWriteGuard::isGuardActive();
+    if ($use_scope) {
+      $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
+    } else {
+      AphrontWriteGuard::allowDangerousUnguardedWrites(true);
+    }
+
+    $caught = null;
+    try {
+      $file = call_user_func(
+        array('PhabricatorFile', 'newFromFileData'),
+        $data,
+        array(
+          'mime-type' => 'application/xhprof',
+          'name'      => 'profile.xhprof',
+        ));
+    } catch (Exception $ex) {
+      $caught = $ex;
+    }
+
+    if ($use_scope) {
+      unset($unguarded);
+    } else {
+      AphrontWriteGuard::allowDangerousUnguardedWrites(false);
+    }
+
+    if ($caught) {
+      throw $caught;
+    }
+
+    self::$profileFilePHID = $file->getPHID();
   }
 
 }

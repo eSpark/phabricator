@@ -10,6 +10,7 @@ final class DiffusionBrowseController extends DiffusionController {
       $is_file = true;
     } else {
       $browse_query = DiffusionBrowseQuery::newFromDiffusionRequest($drequest);
+      $browse_query->setViewer($this->getRequest()->getUser());
       $results = $browse_query->loadPaths();
       $reason = $browse_query->getReasonForEmptyResultSet();
       $is_file = ($reason == DiffusionBrowseQuery::REASON_IS_FILE);
@@ -21,7 +22,7 @@ final class DiffusionBrowseController extends DiffusionController {
       $title = 'Tag: '.$drequest->getSymbolicCommit();
 
       $tag_view = new AphrontPanelView();
-      $tag_view->setHeader(phutil_escape_html($title));
+      $tag_view->setHeader($title);
       $tag_view->appendChild(
         $this->markupText($drequest->getTagContent()));
 
@@ -106,9 +107,10 @@ final class DiffusionBrowseController extends DiffusionController {
 
   private function markupText($text) {
     $engine = PhabricatorMarkupEngine::newDiffusionMarkupEngine();
+    $engine->setConfig('viewer', $this->getRequest()->getUser());
     $text = $engine->markupText($text);
 
-    $text = phutil_render_tag(
+    $text = phutil_tag(
       'div',
       array(
         'class' => 'phabricator-remarkup',

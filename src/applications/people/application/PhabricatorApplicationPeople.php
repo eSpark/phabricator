@@ -30,6 +30,12 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
     return false;
   }
 
+  public function getEventListeners() {
+    return array(
+      new PhabricatorPeopleHovercardEventListener(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/people/' => array(
@@ -58,8 +64,7 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
       $item = new PhabricatorMenuItemView();
       $item->setName($user->getUsername());
       $item->setHref('/p/'.$user->getUsername().'/');
-      $item->setSortOrder(0.0);
-      $item->addClass('phabricator-core-menu-item-profile');
+      $item->addClass('phabricator-core-menu-item');
 
       $classes = array(
         'phabricator-core-menu-icon',
@@ -67,7 +72,7 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
       );
 
       $item->appendChild(
-        phutil_render_tag(
+        phutil_tag(
           'span',
           array(
             'class' => implode(' ', $classes),

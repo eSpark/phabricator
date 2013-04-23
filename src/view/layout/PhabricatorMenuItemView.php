@@ -6,13 +6,13 @@ final class PhabricatorMenuItemView extends AphrontTagView {
   const TYPE_SPACER   = 'type-spacer';
   const TYPE_LABEL    = 'type-label';
   const TYPE_BUTTON   = 'type-button';
+  const TYPE_CUSTOM   = 'type-custom';
 
   private $name;
   private $href;
   private $type = self::TYPE_LINK;
   private $isExternal;
   private $key;
-  private $sortOrder = 1.0;
   private $icon;
   private $selected;
 
@@ -88,15 +88,6 @@ final class PhabricatorMenuItemView extends AphrontTagView {
     return $this->isExternal;
   }
 
-  public function setSortOrder($order) {
-    $this->sortOrder = $order;
-    return $this;
-  }
-
-  public function getSortOrder() {
-    return $this->sortOrder;
-  }
-
   protected function getTagName() {
     return $this->href ? 'a' : 'div';
   }
@@ -113,20 +104,42 @@ final class PhabricatorMenuItemView extends AphrontTagView {
 
   protected function getTagContent() {
     $name = null;
+    $icon = null;
+
     if ($this->name) {
+
       $external = null;
       if ($this->isExternal) {
         $external = " \xE2\x86\x97";
       }
-      $name = phutil_render_tag(
+
+      if ($this->icon) {
+        require_celerity_resource('sprite-icon-css');
+        $icon = phutil_tag(
+          'span',
+            array(
+              'class' => 'phabricator-menu-item-icon sprite-icon '.
+                       'action-'.$this->icon,
+        ),
+        '');
+      }
+
+      $name = phutil_tag(
         'span',
         array(
           'class' => 'phabricator-menu-item-name',
         ),
-        phutil_escape_html($this->name.$external));
+        array(
+          $this->name,
+          $external,
+        ));
     }
 
-    return $this->renderChildren().$name;
+    return array(
+      $icon,
+      $this->renderChildren(),
+      $name,
+    );
   }
 
 }

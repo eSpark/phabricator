@@ -24,8 +24,6 @@ final class PhabricatorSettingsPanelDisplayPreferences
     $pref_editor       = PhabricatorUserPreferences::PREFERENCE_EDITOR;
     $pref_multiedit    = PhabricatorUserPreferences::PREFERENCE_MULTIEDIT;
     $pref_titles       = PhabricatorUserPreferences::PREFERENCE_TITLES;
-    $pref_symbols      =
-      PhabricatorUserPreferences::PREFERENCE_DIFFUSION_SYMBOLS;
     $pref_monospaced_textareas =
       PhabricatorUserPreferences::PREFERENCE_MONOSPACED_TEXTAREAS;
 
@@ -40,9 +38,6 @@ final class PhabricatorSettingsPanelDisplayPreferences
       $preferences->setPreference(
         $pref_multiedit,
         $request->getStr($pref_multiedit));
-      $preferences->setPreference(
-        $pref_symbols,
-        $request->getStr($pref_symbols));
       $preferences->setPreference($pref_monospaced, $monospaced);
       $preferences->setPreference(
         $pref_monospaced_textareas,
@@ -63,18 +58,16 @@ function helloWorld() {
 }
 EXAMPLE;
 
-    $editor_doc_link = phutil_render_tag(
+    $editor_doc_link = phutil_tag(
       'a',
       array(
         'href' => PhabricatorEnv::getDoclink(
           'article/User_Guide_Configuring_an_External_Editor.html'),
       ),
-      'User Guide: Configuring an External Editor');
+      pht('User Guide: Configuring an External Editor'));
 
     $font_default = PhabricatorEnv::getEnvConfig('style.monospace');
-    $font_default = phutil_escape_html($font_default);
 
-    $pref_symbols_value = $preferences->getPreference($pref_symbols);
     $pref_monospaced_textareas_value = $preferences
       ->getPreference($pref_monospaced_textareas);
     if (!$pref_monospaced_textareas_value) {
@@ -85,95 +78,96 @@ EXAMPLE;
         $pref_dark_console_value = 0;
     }
 
+    $editor_instructions = pht('Link to edit files in external editor. '.
+      '%%f is replaced by filename, %%l by line number, %%r by repository '.
+      'callsign, %%%% by literal %%. For documentation, see: %s',
+      hsprintf('%s', $editor_doc_link));
+
     $form = id(new AphrontFormView())
       ->setUser($user)
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('Page Titles')
+          ->setLabel(pht('Page Titles'))
           ->setName($pref_titles)
           ->setValue($preferences->getPreference($pref_titles))
           ->setOptions(
             array(
               'glyph' =>
-              "In page titles, show Tool names as unicode glyphs: \xE2\x9A\x99",
+              pht("In page titles, show Tool names as unicode glyphs: " .
+                "\xE2\x9A\x99"),
               'text' =>
-              'In page titles, show Tool names as plain text: [Differential]',
+              pht('In page titles, show Tool names as plain text: ' .
+                '[Differential]'),
             )))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Editor Link')
+        ->setLabel(pht('Editor Link'))
         ->setName($pref_editor)
-        ->setCaption(
-          'Link to edit files in external editor. '.
-          '%f is replaced by filename, %l by line number, %r by repository '.
-          'callsign, %% by literal %. '.
-          "For documentation, see {$editor_doc_link}.")
+        // How to pht()
+        ->setCaption($editor_instructions)
         ->setValue($preferences->getPreference($pref_editor)))
       ->appendChild(
         id(new AphrontFormSelectControl())
-        ->setLabel('Edit Multiple Files')
+        ->setLabel(pht('Edit Multiple Files'))
         ->setName($pref_multiedit)
         ->setOptions(array(
-          '' => 'Supported (paths separated by spaces)',
-          'disable' => 'Not Supported',
+          '' => pht('Supported (paths separated by spaces)'),
+          'disable' => pht('Not Supported'),
         ))
         ->setValue($preferences->getPreference($pref_multiedit)))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Monospaced Font')
+        ->setLabel(pht('Monospaced Font'))
         ->setName($pref_monospaced)
-        ->setCaption(
-          'Overrides default fonts in tools like Differential.<br />'.
-          '(Default: '.$font_default.')')
+        // Check plz
+        ->setCaption(hsprintf(
+          '%s<br />(%s: %s)',
+          pht('Overrides default fonts in tools like Differential.'),
+          pht('Default'),
+          $font_default))
         ->setValue($preferences->getPreference($pref_monospaced)))
       ->appendChild(
         id(new AphrontFormMarkupControl())
-        ->setValue(
-          '<pre class="PhabricatorMonospaced">'.
-          phutil_escape_html($example_string).
-          '</pre>'))
+        ->setValue(phutil_tag(
+          'pre',
+          array('class' => 'PhabricatorMonospaced'),
+          $example_string)))
       ->appendChild(
         id(new AphrontFormRadioButtonControl())
-        ->setLabel('Symbol Links')
-        ->setName($pref_symbols)
-        ->setValue($pref_symbols_value ? $pref_symbols_value : 'enabled')
-        ->addButton('enabled', 'Enabled (default)',
-          'Use this setting to disable linking symbol names in Differential '.
-          'and Diffusion to their definitions. This is enabled by default.')
-        ->addButton('disabled', 'Disabled', null))
-      ->appendChild(
-        id(new AphrontFormRadioButtonControl())
-        ->setLabel('Monospaced Textareas')
+        ->setLabel(pht('Monospaced Textareas'))
         ->setName($pref_monospaced_textareas)
         ->setValue($pref_monospaced_textareas_value)
-        ->addButton('enabled', 'Enabled',
-          'Show all textareas using the monospaced font defined above.')
-        ->addButton('disabled', 'Disabled', null))
-      ->appendChild(
+        ->addButton('enabled', pht('Enabled'),
+          pht('Show all textareas using the monospaced font defined above.'))
+        ->addButton('disabled', pht('Disabled'), null));
+
+    if (PhabricatorEnv::getEnvConfig('darkconsole.enabled')) {
+      $form->appendChild(
         id(new AphrontFormRadioButtonControl())
-        ->setLabel('Dark Console')
+        ->setLabel(pht('Dark Console'))
         ->setName($pref_dark_console)
         ->setValue($pref_dark_console_value ?
             $pref_dark_console_value : 0)
-        ->addButton(1, 'Enabled',
-          'Enabling and using the built-in debugging console.')
-        ->addButton(0, 'Disabled', null))
-      ->appendChild(
-        id(new AphrontFormSubmitControl())
-          ->setValue('Save Preferences'));
+        ->addButton(1, pht('Enabled'),
+          pht('Enabling and using the built-in debugging console.'))
+        ->addButton(0, pht('Disabled'), null));
+    }
 
+    $form->appendChild(
+      id(new AphrontFormSubmitControl())
+        ->setValue(pht('Save Preferences')));
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Display Preferences');
+    $panel->setHeader(pht('Display Preferences'));
     $panel->appendChild($form);
     $panel->setNoBackground();
 
     $error_view = null;
     if ($request->getStr('saved') === 'true') {
       $error_view = id(new AphrontErrorView())
-        ->setTitle('Preferences Saved')
+        ->setTitle(pht('Preferences Saved'))
         ->setSeverity(AphrontErrorView::SEVERITY_NOTICE)
-        ->setErrors(array('Your preferences have been saved.'));
+        ->setErrors(array(pht('Your preferences have been saved.')));
     }
 
     return array(

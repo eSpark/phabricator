@@ -12,6 +12,8 @@ final class PholioMockQuery
 
   private $needCoverFiles;
   private $needImages;
+  private $needInlineComments;
+  private $needTokenCounts;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -28,7 +30,27 @@ final class PholioMockQuery
     return $this;
   }
 
-  public function loadPage() {
+  public function needCoverFiles($need_cover_files) {
+    $this->needCoverFiles = $need_cover_files;
+    return $this;
+  }
+
+  public function needImages($need_images) {
+    $this->needImages = $need_images;
+    return $this;
+  }
+
+  public function needInlineComments($need_inline_comments) {
+    $this->needInlineComments = $need_inline_comments;
+    return $this;
+  }
+
+  public function needTokenCounts($need) {
+    $this->needTokenCounts = $need;
+    return $this;
+  }
+
+  protected function loadPage() {
     $table = new PholioMock();
     $conn_r = $table->establishConnection('r');
 
@@ -45,10 +67,14 @@ final class PholioMockQuery
     if ($mocks && $this->needImages) {
       $this->loadImages($mocks);
     }
+
     if ($mocks && $this->needCoverFiles) {
       $this->loadCoverFiles($mocks);
     }
 
+    if ($mocks && $this->needTokenCounts) {
+      $this->loadTokenCounts($mocks);
+    }
 
     return $mocks;
   }
@@ -82,17 +108,7 @@ final class PholioMockQuery
     return $this->formatWhereClause($where);
   }
 
-  public function needCoverFiles($need_cover_files) {
-    $this->needCoverFiles = $need_cover_files;
-    return $this;
-  }
-
-  public function needImages($need_images) {
-    $this->needImages = $need_images;
-    return $this;
-  }
-
-  public function loadImages(array $mocks) {
+  private function loadImages(array $mocks) {
     assert_instances_of($mocks, 'PholioMock');
 
     $mock_ids = mpull($mocks, 'getID');
@@ -105,8 +121,19 @@ final class PholioMockQuery
       'phid IN (%Ls)',
       $file_phids), null, 'getPHID');
 
+    if ($this->needInlineComments) {
+      $all_inline_comments = id(new PholioTransactionComment())
+        ->loadAllWhere('imageid IN (%Ld)',
+          mpull($all_images, 'getID'));
+      $all_inline_comments = mgroup($all_inline_comments, 'getImageID');
+    }
+
     foreach ($all_images as $image) {
       $image->attachFile($all_files[$image->getFilePHID()]);
+      if ($this->needInlineComments) {
+        $inlines = idx($all_images, $image->getID(), array());
+        $image->attachInlineComments($inlines);
+      }
     }
 
     $image_groups = mgroup($all_images, 'getMockID');
@@ -116,7 +143,7 @@ final class PholioMockQuery
     }
   }
 
-  public function loadCoverFiles(array $mocks) {
+  private function loadCoverFiles(array $mocks) {
     assert_instances_of($mocks, 'PholioMock');
     $cover_file_phids = mpull($mocks, 'getCoverPHID');
     $cover_files = mpull(id(new PhabricatorFile())->loadAllWhere(
@@ -127,4 +154,18 @@ final class PholioMockQuery
       $mock->attachCoverFile($cover_files[$mock->getCoverPHID()]);
     }
   }
+
+  private function loadTokenCounts(array $mocks) {
+    assert_instances_of($mocks, 'PholioMock');
+
+    $phids = mpull($mocks, 'getPHID');
+    $counts = id(new PhabricatorTokenCountQuery())
+      ->withObjectPHIDs($phids)
+      ->execute();
+
+    foreach ($mocks as $mock) {
+      $mock->attachTokenCount(idx($counts, $mock->getPHID(), 0));
+    }
+  }
+
 }

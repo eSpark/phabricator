@@ -42,9 +42,9 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
       $item = new PhabricatorMenuItemView();
       $item->setName(pht('Settings'));
       $item->setIcon('settings');
+      $item->addClass('phabricator-core-menu-item');
       $item->setSelected($selected);
       $item->setHref('/settings/');
-      $item->setSortOrder(0.90);
       $items[] = $item;
     }
 

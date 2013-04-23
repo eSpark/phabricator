@@ -7,6 +7,10 @@ final class PhabricatorConfigAllController
     $request = $this->getRequest();
     $user = $request->getUser();
 
+    $db_values = id(new PhabricatorConfigEntry())
+      ->loadAllWhere('namespace = %s', 'default');
+    $db_values = mpull($db_values, null, 'getConfigKey');
+
     $rows = array();
     $options = PhabricatorApplicationConfigOptions::loadAllOptions();
     ksort($options);
@@ -14,23 +18,24 @@ final class PhabricatorConfigAllController
       $key = $option->getKey();
 
       if ($option->getMasked()) {
-        $value = '<em>'.pht('Masked').'</em>';
+        $value = phutil_tag('em', array(), pht('Masked'));
       } else if ($option->getHidden()) {
-        $value = '<em>'.pht('Hidden').'</em>';
+        $value = phutil_tag('em', array(), pht('Hidden'));
       } else {
         $value = PhabricatorEnv::getEnvConfig($key);
         $value = PhabricatorConfigJSON::prettyPrintJSON($value);
-        $value = phutil_escape_html($value);
       }
 
+      $db_value = idx($db_values, $key);
       $rows[] = array(
-        phutil_render_tag(
+        phutil_tag(
           'a',
           array(
             'href' => $this->getApplicationURI('edit/'.$key.'/'),
           ),
-          phutil_escape_html($key)),
+          $key),
         $value,
+        $db_value && !$db_value->getIsDeleted() ? pht('Customized') : '',
       );
     }
     $table = id(new AphrontTableView($rows))
@@ -44,6 +49,7 @@ final class PhabricatorConfigAllController
         array(
           pht('Key'),
           pht('Value'),
+          pht('Customized'),
         ));
 
     $title = pht('Current Settings');
@@ -68,13 +74,16 @@ final class PhabricatorConfigAllController
       $display_version = pht('Unknown');
     }
     $version_property_list = id(new PhabricatorPropertyListView());
-    $version_property_list->addProperty('Version',
-      phutil_escape_html($display_version));
+    $version_property_list->addProperty(
+      pht('Version'),
+      $display_version);
+
     $version_path = $phabricator_root.'/conf/local/VERSION';
     if (Filesystem::pathExists($version_path)) {
       $version_from_file = Filesystem::readFile($version_path);
-      $version_property_list->addProperty('Local Version',
-        phutil_escape_html($version_from_file));
+      $version_property_list->addProperty(
+        pht('Local Version'),
+        $version_from_file);
     }
 
     $nav = $this->buildSideNavView();
@@ -89,8 +98,8 @@ final class PhabricatorConfigAllController
       array(
         'title' => $title,
         'device' => true,
-      )
-    );
+        'dust' => true,
+      ));
   }
 
 }

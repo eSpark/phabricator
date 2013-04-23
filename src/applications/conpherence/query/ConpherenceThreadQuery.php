@@ -6,12 +6,47 @@
 final class ConpherenceThreadQuery
   extends PhabricatorCursorPagedPolicyAwareQuery {
 
+  const TRANSACTION_LIMIT = 100;
+
   private $phids;
   private $ids;
   private $needWidgetData;
+  private $needHeaderPics;
+  private $needOrigPics;
+  private $needTransactions;
+  private $needParticipantCache;
+  private $needFilePHIDs;
+  private $afterTransactionID;
+  private $beforeTransactionID;
+  private $transactionLimit;
+
+  public function needFilePHIDs($need_file_phids) {
+    $this->needFilePHIDs = $need_file_phids;
+    return $this;
+  }
+
+  public function needParticipantCache($participant_cache) {
+    $this->needParticipantCache = $participant_cache;
+    return $this;
+  }
+
+  public function needOrigPics($need_orig_pics) {
+    $this->needOrigPics = $need_orig_pics;
+    return $this;
+  }
+
+  public function needHeaderPics($need_header_pics) {
+    $this->needHeaderPics = $need_header_pics;
+    return $this;
+  }
 
   public function needWidgetData($need_widget_data) {
     $this->needWidgetData = $need_widget_data;
+    return $this;
+  }
+
+  public function needTransactions($need_transactions) {
+    $this->needTransactions = $need_transactions;
     return $this;
   }
 
@@ -25,7 +60,26 @@ final class ConpherenceThreadQuery
     return $this;
   }
 
-  public function loadPage() {
+  public function setAfterTransactionID($id) {
+    $this->afterTransactionID = $id;
+    return $this;
+  }
+
+  public function setBeforeTransactionID($id) {
+    $this->beforeTransactionID = $id;
+    return $this;
+  }
+
+  public function setTransactionLimit($transaction_limit) {
+    $this->transactionLimit = $transaction_limit;
+    return $this;
+  }
+
+  public function getTransactionLimit() {
+    return $this->transactionLimit;
+  }
+
+  protected function loadPage() {
     $table = new ConpherenceThread();
     $conn_r = $table->establishConnection('r');
 
@@ -41,11 +95,26 @@ final class ConpherenceThreadQuery
 
     if ($conpherences) {
       $conpherences = mpull($conpherences, null, 'getPHID');
-      $this->loadParticipants($conpherences);
-      $this->loadTransactionsAndHandles($conpherences);
-      $this->loadFilePHIDs($conpherences);
+      $this->loadParticipantsAndInitHandles($conpherences);
+      if ($this->needParticipantCache) {
+        $this->loadCoreHandles($conpherences, 'getRecentParticipantPHIDs');
+      } else if ($this->needWidgetData) {
+        $this->loadCoreHandles($conpherences, 'getParticipantPHIDs');
+      }
+      if ($this->needTransactions) {
+        $this->loadTransactionsAndHandles($conpherences);
+      }
+      if ($this->needFilePHIDs || $this->needWidgetData) {
+        $this->loadFilePHIDs($conpherences);
+      }
       if ($this->needWidgetData) {
         $this->loadWidgetData($conpherences);
+      }
+      if ($this->needOrigPics) {
+        $this->loadOrigPics($conpherences);
+      }
+      if ($this->needHeaderPics) {
+        $this->loadHeaderPics($conpherences);
       }
     }
 
@@ -74,7 +143,7 @@ final class ConpherenceThreadQuery
     return $this->formatWhereClause($where);
   }
 
-  private function loadParticipants(array $conpherences) {
+  private function loadParticipantsAndInitHandles(array $conpherences) {
     $participants = id(new ConpherenceParticipant())
       ->loadAllWhere('conpherencePHID IN (%Ls)', array_keys($conpherences));
     $map = mgroup($participants, 'getConpherencePHID');
@@ -83,20 +152,52 @@ final class ConpherenceThreadQuery
       $conpherence_participants = mpull(
         $conpherence_participants,
         null,
-        'getParticipantPHID'
-      );
+        'getParticipantPHID');
       $current_conpherence->attachParticipants($conpherence_participants);
+      $current_conpherence->attachHandles(array());
     }
 
     return $this;
   }
 
+  private function loadCoreHandles(
+    array $conpherences,
+    $method) {
+
+    $handle_phids = array();
+    foreach ($conpherences as $conpherence) {
+      $handle_phids[$conpherence->getPHID()] =
+        $conpherence->$method();
+    }
+    $flat_phids = array_mergev($handle_phids);
+    $handles = id(new PhabricatorObjectHandleData($flat_phids))
+      ->setViewer($this->getViewer())
+      ->loadHandles();
+    foreach ($handle_phids as $conpherence_phid => $phids) {
+      $conpherence = $conpherences[$conpherence_phid];
+      $conpherence->attachHandles(array_select_keys($handles, $phids));
+    }
+    return $this;
+  }
+
   private function loadTransactionsAndHandles(array $conpherences) {
-    $transactions = id(new ConpherenceTransactionQuery())
+    $query = id(new ConpherenceTransactionQuery())
       ->setViewer($this->getViewer())
       ->withObjectPHIDs(array_keys($conpherences))
-      ->needHandles(true)
-      ->loadPage();
+      ->needHandles(true);
+
+    // We have to flip these for the underyling query class. The semantics of
+    // paging are tricky business.
+    if ($this->afterTransactionID) {
+      $query->setBeforeID($this->afterTransactionID);
+    } else if ($this->beforeTransactionID) {
+      $query->setAfterID($this->beforeTransactionID);
+    }
+    if ($this->getTransactionLimit()) {
+      // fetch an extra for "show older" scenarios
+      $query->setLimit($this->getTransactionLimit() + 1);
+    }
+    $transactions = $query->execute();
     $transactions = mgroup($transactions, 'getObjectPHID');
     foreach ($conpherences as $phid => $conpherence) {
       $current_transactions = $transactions[$phid];
@@ -104,7 +205,7 @@ final class ConpherenceThreadQuery
       foreach ($current_transactions as $transaction) {
         $handles += $transaction->getHandles();
       }
-      $conpherence->attachHandles($handles);
+      $conpherence->attachHandles($conpherence->getHandles() + $handles);
       $conpherence->attachTransactions($transactions[$phid]);
     }
     return $this;
@@ -133,47 +234,109 @@ final class ConpherenceThreadQuery
     $participant_phids = array_mergev($participant_phids);
     $file_phids = array_mergev($file_phids);
 
-    // open tasks of all participants
-    $tasks = id(new ManiphestTaskQuery())
-      ->withOwners($participant_phids)
-      ->withStatus(ManiphestTaskQuery::STATUS_OPEN)
-      ->execute();
-    $tasks = mgroup($tasks, 'getOwnerPHID');
-
     // statuses of everyone currently in the conpherence
-    // until the beginning of the next work week.
-    // NOTE: this is a bit boring on the weekends.
-    $end_of_week = phabricator_format_local_time(
-      strtotime('Monday midnight'),
+    // for a rolling one week window
+    $start_of_week = phabricator_format_local_time(
+      strtotime('last monday', strtotime('tomorrow')),
       $this->getViewer(),
-      'U'
-    );
+      'U');
+    $end_of_week = phabricator_format_local_time(
+      strtotime('last monday +1 week', strtotime('tomorrow')),
+      $this->getViewer(),
+      'U');
     $statuses = id(new PhabricatorUserStatus())
       ->loadAllWhere(
-        'userPHID in (%Ls) AND dateTo <= %d',
+        'userPHID in (%Ls) AND dateTo >= %d AND dateFrom <= %d',
         $participant_phids,
-        $end_of_week
-      );
+        $start_of_week,
+        $end_of_week);
     $statuses = mgroup($statuses, 'getUserPHID');
 
     // attached files
     $files = array();
+    $file_author_phids = array();
+    $authors = array();
     if ($file_phids) {
       $files = id(new PhabricatorFileQuery())
         ->setViewer($this->getViewer())
         ->withPHIDs($file_phids)
         ->execute();
       $files = mpull($files, null, 'getPHID');
+      $file_author_phids = mpull($files, 'getAuthorPHID', 'getPHID');
+      $authors = id(new PhabricatorObjectHandleData($file_author_phids))
+        ->setViewer($this->getViewer())
+        ->loadHandles();
+      $authors = mpull($authors, null, 'getPHID');
     }
 
     foreach ($conpherences as $phid => $conpherence) {
       $participant_phids = array_keys($conpherence->getParticipants());
+      $statuses = array_select_keys($statuses, $participant_phids);
+      $statuses = array_mergev($statuses);
+      $statuses = msort($statuses, 'getDateFrom');
+
+      $conpherence_files = array();
+      $files_authors = array();
+      foreach ($conpherence->getFilePHIDs() as $curr_phid) {
+        $curr_file = idx($files, $curr_phid);
+        if (!$curr_file) {
+          // this file was deleted or user doesn't have permission to see it
+          // this is generally weird
+          continue;
+        }
+        $conpherence_files[$curr_phid] = $curr_file;
+        // some files don't have authors so be careful
+        $current_author = null;
+        $current_author_phid = idx($file_author_phids, $curr_phid);
+        if ($current_author_phid) {
+          $current_author = $authors[$current_author_phid];
+        }
+        $files_authors[$curr_phid] = $current_author;
+      }
       $widget_data = array(
-        'tasks' => array_select_keys($tasks, $participant_phids),
-        'statuses' => array_select_keys($statuses, $participant_phids),
-        'files' => array_select_keys($files, $conpherence->getFilePHIDs()),
+        'statuses' => $statuses,
+        'files' => $conpherence_files,
+        'files_authors' => $files_authors
       );
       $conpherence->attachWidgetData($widget_data);
+    }
+
+    return $this;
+  }
+
+  private function loadOrigPics(array $conpherences) {
+    return $this->loadPics(
+      $conpherences,
+      ConpherenceImageData::SIZE_ORIG);
+  }
+
+  private function loadHeaderPics(array $conpherences) {
+    return $this->loadPics(
+      $conpherences,
+      ConpherenceImageData::SIZE_HEAD);
+  }
+
+  private function loadPics(array $conpherences, $size) {
+    $conpherence_pic_phids = array();
+    foreach ($conpherences as $conpherence) {
+      $phid = $conpherence->getImagePHID($size);
+      if ($phid) {
+        $conpherence_pic_phids[$conpherence->getPHID()] = $phid;
+      }
+    }
+
+    if (!$conpherence_pic_phids) {
+      return $this;
+    }
+
+    $files = id(new PhabricatorFileQuery())
+      ->setViewer($this->getViewer())
+      ->withPHIDs($conpherence_pic_phids)
+      ->execute();
+    $files = mpull($files, null, 'getPHID');
+
+    foreach ($conpherence_pic_phids as $conpherence_phid => $pic_phid) {
+      $conpherences[$conpherence_phid]->setImage($files[$pic_phid], $size);
     }
 
     return $this;

@@ -11,8 +11,9 @@ final class ConpherenceNewController extends ConpherenceController {
 
     $conpherence = id(new ConpherenceThread())
       ->attachParticipants(array())
-      ->attachFilePHIDs(array());
-    $title = pht('New Conversation');
+      ->attachFilePHIDs(array())
+      ->setMessageCount(0);
+    $title = pht('New Message');
     $participants = array();
     $message = '';
     $files = array();
@@ -34,6 +35,8 @@ final class ConpherenceNewController extends ConpherenceController {
       } else {
         $participants[] = $user->getPHID();
         $participants = array_unique($participants);
+        $conpherence->setRecentParticipantPHIDs(
+          array_slice($participants, 0, 10));
       }
 
       $message = $request->getStr('message');
@@ -44,8 +47,7 @@ final class ConpherenceNewController extends ConpherenceController {
 
       $file_phids =
         PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
-          array($message)
-        );
+          array($message));
       if ($file_phids) {
         $files = id(new PhabricatorFileQuery())
           ->setViewer($user)
@@ -70,14 +72,12 @@ final class ConpherenceNewController extends ConpherenceController {
           ->attachComment(
             id(new ConpherenceTransactionComment())
             ->setContent($message)
-            ->setConpherencePHID($conpherence->getPHID())
-          );
+            ->setConpherencePHID($conpherence->getPHID()));
         $content_source = PhabricatorContentSource::newForSource(
           PhabricatorContentSource::SOURCE_WEB,
           array(
             'ip' => $request->getRemoteAddr()
-          )
-        );
+          ));
         id(new ConpherenceEditor())
           ->setContentSource($content_source)
           ->setContinueOnNoEffect(true)
@@ -92,11 +92,10 @@ final class ConpherenceNewController extends ConpherenceController {
             ->setTitle('Success')
             ->addCancelButton('#', 'Okay')
             ->appendChild(
-              phutil_render_tag('p',
-              array(),
-              pht('Message sent successfully.')
-            )
-          );
+              phutil_tag(
+                'p',
+                array(),
+                pht('Message sent successfully.')));
           $response = id(new AphrontDialogResponse())
             ->setDialog($dialog);
         } else {
@@ -125,25 +124,22 @@ final class ConpherenceNewController extends ConpherenceController {
 
     $submit_uri = $this->getApplicationURI('new/');
     $cancel_uri = $this->getApplicationURI();
-    if ($request->isAjax()) {
-      // TODO - we can get a better cancel_uri once we get better at crazy
-      // ajax jonx T2086
-      if ($participant_prefill) {
-        $handle = $handles[$participant_prefill];
-        $cancel_uri = $handle->getURI();
-      }
-      $form = id(new AphrontDialogView())
-        ->setSubmitURI($submit_uri)
-        ->addSubmitButton()
-        ->setWidth(AphrontDialogView::WIDTH_FORM)
-        ->addCancelButton($cancel_uri);
-    } else {
-      $form = id(new AphrontFormView())
-        ->setID('conpherence-message-pane')
-        ->setAction($submit_uri);
+
+    // TODO - we can get a better cancel_uri once we get better at crazy
+    // ajax jonx T2086
+    if ($participant_prefill) {
+      $handle = $handles[$participant_prefill];
+      $cancel_uri = $handle->getURI();
     }
 
-    $form
+    $dialog = id(new AphrontDialogView())
+      ->setWidth(AphrontDialogView::WIDTH_FORM)
+      ->setUser($user)
+      ->setTitle($title)
+      ->addCancelButton($cancel_uri)
+      ->addSubmitButton(pht('Send Message'));
+
+    $form = id(new AphrontFormLayoutView())
       ->setUser($user)
       ->appendChild(
         id(new AphrontFormTokenizerControl())
@@ -152,50 +148,16 @@ final class ConpherenceNewController extends ConpherenceController {
         ->setUser($user)
         ->setDatasource('/typeahead/common/users/')
         ->setLabel(pht('To'))
-        ->setError($e_participants)
-      )
+        ->setError($e_participants))
       ->appendChild(
         id(new PhabricatorRemarkupControl())
         ->setName('message')
         ->setValue($message)
         ->setLabel(pht('Message'))
-        ->setPlaceHolder(pht('Drag and drop to include files...'))
-        ->setError($e_message)
-      );
+        ->setError($e_message));
 
-    if ($request->isAjax()) {
-      $form->setTitle($title);
-      return id(new AphrontDialogResponse())
-        ->setDialog($form);
-    }
+    $dialog->appendChild($form);
 
-    $form
-      ->appendChild(
-        id(new AphrontFormSubmitControl())
-        ->setValue(pht('Submit'))
-        ->addCancelButton($cancel_uri)
-      );
-
-    $this->loadStartingConpherences();
-    $this->setSelectedConpherencePHID(null);
-    $this->initJavelinBehaviors();
-    $nav = $this->buildSideNavView('new');
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
-    $nav->appendChild(
-      array(
-        $header,
-        $error_view,
-        $form,
-      ));
-
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
-        'device' => true,
-      )
-    );
+    return id(new AphrontDialogResponse())->setDialog($dialog);
   }
 }

@@ -42,25 +42,50 @@ class PhabricatorApplicationTransactionView extends AphrontView {
   }
 
   public function buildEvents() {
-    $field = PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT;
-    $engine = $this->getOrBuildEngine();
-
     $user = $this->getUser();
 
     $anchor = $this->anchorOffset;
     $events = array();
-    foreach ($this->transactions as $xaction) {
+
+    $xactions = $this->transactions;
+    foreach ($xactions as $key => $xaction) {
       if ($xaction->shouldHide()) {
-        continue;
+        unset($xactions[$key]);
       }
+    }
+
+    $last = null;
+    $last_key = null;
+    $groups = array();
+    foreach ($xactions as $key => $xaction) {
+      if ($last && $this->shouldGroupTransactions($last, $xaction)) {
+        $groups[$last_key][] = $xaction;
+        unset($xactions[$key]);
+      } else {
+        $last = $xaction;
+        $last_key = $key;
+      }
+    }
+
+    foreach ($xactions as $key => $xaction) {
+      $xaction->attachTransactionGroup(idx($groups, $key, array()));
 
       $event = id(new PhabricatorTimelineEventView())
         ->setUser($user)
         ->setTransactionPHID($xaction->getPHID())
         ->setUserHandle($xaction->getHandle($xaction->getAuthorPHID()))
         ->setIcon($xaction->getIcon())
-        ->setColor($xaction->getColor())
-        ->setTitle($xaction->getTitle());
+        ->setColor($xaction->getColor());
+
+      $title = $xaction->getTitle();
+      if ($xaction->hasChangeDetails()) {
+        $title = array(
+          $title,
+          ' ',
+          $this->buildChangeDetails($xaction),
+        );
+      }
+      $event->setTitle($title);
 
       if ($this->isPreview) {
         $event->setIsPreview(true);
@@ -72,7 +97,6 @@ class PhabricatorApplicationTransactionView extends AphrontView {
 
         $anchor++;
       }
-
 
       $has_deleted_comment = $xaction->getComment() &&
         $xaction->getComment()->getIsDeleted();
@@ -95,12 +119,9 @@ class PhabricatorApplicationTransactionView extends AphrontView {
         }
       }
 
-      if ($xaction->hasComment()) {
-        $event->appendChild(
-          $engine->getOutput($xaction->getComment(), $field));
-      } else if ($has_deleted_comment) {
-        $event->appendChild(
-          '<em>'.pht('This comment has been deleted.').'</em>');
+      $content = $this->renderTransactionContent($xaction);
+      if ($content) {
+        $event->appendChild($content);
       }
 
       $events[] = $event;
@@ -133,7 +154,7 @@ class PhabricatorApplicationTransactionView extends AphrontView {
   }
 
 
-  private function getOrBuildEngine() {
+  protected function getOrBuildEngine() {
     if ($this->engine) {
       return $this->engine;
     }
@@ -151,6 +172,87 @@ class PhabricatorApplicationTransactionView extends AphrontView {
     $engine->process();
 
     return $engine;
+  }
+
+  private function buildChangeDetails(
+    PhabricatorApplicationTransaction $xaction) {
+
+    Javelin::initBehavior('phabricator-reveal-content');
+
+    $show_id = celerity_generate_unique_node_id();
+    $hide_id = celerity_generate_unique_node_id();
+    $content_id = celerity_generate_unique_node_id();
+
+    $show_more = javelin_tag(
+      'a',
+      array(
+        'href' => '#',
+        'sigil' => 'reveal-content',
+        'mustcapture' => true,
+        'id' => $show_id,
+        'meta' => array(
+          'hideIDs' => array($show_id),
+          'showIDs' => array($hide_id, $content_id),
+        ),
+      ),
+      pht('(Show Details)'));
+
+    $hide_more = javelin_tag(
+      'a',
+      array(
+        'href' => '#',
+        'sigil' => 'reveal-content',
+        'mustcapture' => true,
+        'id' => $hide_id,
+        'style' => 'display: none',
+        'meta' => array(
+          'hideIDs' => array($hide_id, $content_id),
+          'showIDs' => array($show_id),
+        ),
+      ),
+      pht('(Hide Details)'));
+
+    $content = phutil_tag(
+      'div',
+      array(
+        'id'    => $content_id,
+        'style' => 'display: none',
+        'class' => 'phabricator-timeline-change-details',
+      ),
+      $xaction->renderChangeDetails($this->getUser()));
+
+    return array(
+      $show_more,
+      $hide_more,
+      $content,
+    );
+  }
+
+  protected function shouldGroupTransactions(
+    PhabricatorApplicationTransaction $u,
+    PhabricatorApplicationTransaction $v) {
+    return false;
+  }
+
+  protected function renderTransactionContent(
+    PhabricatorApplicationTransaction $xaction) {
+
+    $field = PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT;
+    $engine = $this->getOrBuildEngine();
+    $comment = $xaction->getComment();
+
+    if ($comment) {
+      if ($comment->getIsDeleted()) {
+        return phutil_tag(
+          'em',
+          array(),
+          pht('This comment has been deleted.'));
+      } else {
+        return $engine->getOutput($comment, $field);
+      }
+    }
+
+    return null;
   }
 
 }

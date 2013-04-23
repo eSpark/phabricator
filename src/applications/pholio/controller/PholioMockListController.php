@@ -14,10 +14,13 @@ final class PholioMockListController extends PholioController {
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
+    $viewer_phid = $user->getPHID();
 
     $query = id(new PholioMockQuery())
       ->setViewer($user)
-      ->needCoverFiles(true);
+      ->needCoverFiles(true)
+      ->needImages(true)
+      ->needTokenCounts(true);
 
     $nav = $this->buildSideNav();
     $filter = $nav->selectFilter('view/'.$this->view, 'view/all');
@@ -25,8 +28,12 @@ final class PholioMockListController extends PholioController {
     switch ($filter) {
       case 'view/all':
       default:
-        $title = 'All Mocks';
-        break;
+        $title = pht('All Mocks');
+      break;
+      case 'view/my':
+        $title = pht('My Mocks');
+        $query->withAuthorPHIDs(array($viewer_phid));
+      break;
     }
 
     $pager = new AphrontCursorPagerView();
@@ -34,30 +41,52 @@ final class PholioMockListController extends PholioController {
 
     $mocks = $query->executeWithCursorPager($pager);
 
+    $author_phids = array();
+    foreach ($mocks as $mock) {
+      $author_phids[] = $mock->getAuthorPHID();
+    }
+    $this->loadHandles($author_phids);
+
+
     $board = new PhabricatorPinboardView();
     foreach ($mocks as $mock) {
-      $board->addItem(
-        id(new PhabricatorPinboardItemView())
-          ->setHeader($mock->getName())
-          ->setURI('/M'.$mock->getID())
-          ->setImageURI($mock->getCoverFile()->getThumb160x120URI()));
+      $item = new PhabricatorPinboardItemView();
+      $item->setHeader('M'.$mock->getID().' '.$mock->getName())
+           ->setURI('/M'.$mock->getID())
+           ->setImageURI($mock->getCoverFile()->getThumb280x210URI())
+           ->setImageSize(280, 210)
+           ->addIconCount('image', count($mock->getImages()))
+           ->addIconCount('like', $mock->getTokenCount());
+
+      if ($mock->getAuthorPHID()) {
+        $author_handle = $this->getHandle($mock->getAuthorPHID());
+        $datetime = phabricator_date($mock->getDateCreated(), $user);
+        $item->appendChild(
+          pht('By %s on %s', $author_handle->renderLink(), $datetime));
+      }
+      $board->addItem($item);
     }
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
     $content = array(
-      $header,
       $board,
       $pager,
     );
 
     $nav->appendChild($content);
 
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI()));
+    $nav->setCrumbs($crumbs);
+
     return $this->buildApplicationPage(
       $nav,
       array(
         'title' => $title,
+        'device' => true,
+        'dust' => true,
       ));
   }
 

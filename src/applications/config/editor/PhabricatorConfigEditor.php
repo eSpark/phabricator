@@ -18,7 +18,7 @@ final class PhabricatorConfigEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorConfigTransaction::TYPE_EDIT:
         return array(
-          'deleted' => (bool)$object->getIsDeleted(),
+          'deleted' => (int)$object->getIsDeleted(),
           'value'   => $object->getValue(),
         );
     }
@@ -54,7 +54,7 @@ final class PhabricatorConfigEditor
             $v['value']);
         }
 
-        $object->setIsDeleted($v['deleted']);
+        $object->setIsDeleted((int)$v['deleted']);
         $object->setValue($v['value']);
         break;
     }
@@ -102,6 +102,30 @@ final class PhabricatorConfigEditor
   protected function didApplyTransactions(array $xactions) {
     // Force all the setup checks to run on the next page load.
     PhabricatorSetupCheck::deleteSetupCheckCache();
+  }
+
+  public static function storeNewValue(
+   PhabricatorConfigEntry $config_entry, $value, AphrontRequest $request) {
+    $xaction = id(new PhabricatorConfigTransaction())
+              ->setTransactionType(PhabricatorConfigTransaction::TYPE_EDIT)
+              ->setNewValue(
+                array(
+                   'deleted' => false,
+                   'value' => $value
+                ));
+
+    $editor = id(new PhabricatorConfigEditor())
+           ->setActor($request->getUser())
+           ->setContinueOnNoEffect(true)
+           ->setContentSource(
+             PhabricatorContentSource::newForSource(
+               PhabricatorContentSource::SOURCE_WEB,
+               array(
+                 'ip' => $request->getRemoteAddr(),
+               )));
+
+
+    $editor->applyTransactions($config_entry, array($xaction));
   }
 
 }

@@ -41,7 +41,7 @@ final class PhabricatorPasteQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new PhabricatorPaste();
     $conn_r = $table->establishConnection('r');
 
@@ -141,7 +141,7 @@ final class PhabricatorPasteQuery
     foreach ($pastes as $paste) {
       $key = $this->getContentCacheKey($paste);
       if (isset($caches[$key])) {
-        $paste->attachContent($caches[$key]);
+        $paste->attachContent(phutil_safe_html($caches[$key]));
       } else {
         $need_raw[] = $paste;
       }

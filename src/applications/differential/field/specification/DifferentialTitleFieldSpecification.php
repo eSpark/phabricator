@@ -41,7 +41,16 @@ final class DifferentialTitleFieldSpecification
     if (!strlen($this->title)) {
       $this->error = 'Required';
       throw new DifferentialFieldValidationException(
-        "You must provide a title.");
+        "You must provide a revision title in the first line ".
+        "of your commit message.");
+    }
+
+    if (preg_match('/^<<.*>>$/', $this->title)) {
+      $default_title = self::getDefaultRevisionTitle();
+      $this->error = 'Required';
+      throw new DifferentialFieldValidationException(
+        "Replace the line '{$default_title}' with a revision title ".
+        "that describes the change.");
     }
   }
 
@@ -86,13 +95,17 @@ final class DifferentialTitleFieldSpecification
     return 'wide pri';
   }
 
+  public static function getDefaultRevisionTitle() {
+    return '<<Replace this line with your Revision Title>>';
+  }
+
   public function renderValueForRevisionList(DifferentialRevision $revision) {
-    return phutil_render_tag(
+    return phutil_tag(
       'a',
       array(
         'href' => '/D'.$revision->getID(),
       ),
-      phutil_escape_html($revision->getTitle()));
+      $revision->getTitle());
   }
 
 }

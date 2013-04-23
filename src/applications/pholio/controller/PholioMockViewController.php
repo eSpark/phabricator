@@ -6,9 +6,15 @@
 final class PholioMockViewController extends PholioController {
 
   private $id;
+  private $imageID;
+
+  public function shouldAllowPublic() {
+    return true;
+  }
 
   public function willProcessRequest(array $data) {
     $this->id = $data['id'];
+    $this->imageID = idx($data, 'imageID');
   }
 
   public function processRequest() {
@@ -54,7 +60,7 @@ final class PholioMockViewController extends PholioController {
     }
     $engine->process();
 
-    $title = 'M'.$mock->getID().' '.$mock->getName();
+    $title = $mock->getName();
 
     $header = id(new PhabricatorHeaderView())
       ->setHeader($title);
@@ -63,18 +69,30 @@ final class PholioMockViewController extends PholioController {
     $properties = $this->buildPropertyView($mock, $engine, $subscribers);
 
     require_celerity_resource('pholio-css');
+    require_celerity_resource('pholio-inline-comments-css');
 
-    $output = new PholioMockImagesView();
-    $output->setMock($mock);
+    $output = id(new PholioMockImagesView())
+      ->setRequestURI($request->getRequestURI())
+      ->setUser($user)
+      ->setMock($mock)
+      ->setImageID($this->imageID);
 
-    $xaction_view = id(new PhabricatorApplicationTransactionView())
+    $xaction_view = id(new PholioTransactionView())
       ->setUser($this->getRequest()->getUser())
       ->setTransactions($xactions)
       ->setMarkupEngine($engine);
 
     $add_comment = $this->buildAddCommentView($mock);
 
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
+    $crumbs->setActionList($actions);
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName('M'.$mock->getID())
+        ->setHref('/M'.$mock->getID()));
+
     $content = array(
+      $crumbs,
       $header,
       $actions,
       $properties,
@@ -83,12 +101,16 @@ final class PholioMockViewController extends PholioController {
       $add_comment,
     );
 
+    PhabricatorFeedStoryNotification::updateObjectNotificationViews(
+      $user,
+      $mock->getPHID());
 
     return $this->buildApplicationPage(
       $content,
       array(
-        'title' => $title,
+        'title' => 'M'.$mock->getID().' '.$title,
         'device' => true,
+        'pageObjects' => array($mock->getPHID()),
       ));
   }
 
@@ -108,7 +130,7 @@ final class PholioMockViewController extends PholioController {
       id(new PhabricatorActionView())
         ->setIcon('edit')
         ->setName(pht('Edit Mock'))
-        ->setHref($this->getApplicationURI('/edit/'.$mock->getID()))
+        ->setHref($this->getApplicationURI('/edit/'.$mock->getID().'/'))
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
@@ -122,7 +144,9 @@ final class PholioMockViewController extends PholioController {
 
     $user = $this->getRequest()->getUser();
 
-    $properties = new PhabricatorPropertyListView();
+    $properties = id(new PhabricatorPropertyListView())
+      ->setUser($user)
+      ->setObject($mock);
 
     $properties->addProperty(
       pht('Author'),
@@ -145,16 +169,18 @@ final class PholioMockViewController extends PholioController {
       foreach ($subscribers as $subscriber) {
         $sub_view[] = $this->getHandle($subscriber)->renderLink();
       }
-      $sub_view = implode(', ', $sub_view);
+      $sub_view = phutil_implode_html(', ', $sub_view);
     } else {
-      $sub_view = '<em>'.pht('None').'</em>';
+      $sub_view = phutil_tag('em', array(), pht('None'));
     }
 
     $properties->addProperty(
       pht('Subscribers'),
       $sub_view);
 
-    $properties->addTextContent(
+    $properties->invokeWillRenderEvent();
+
+    $properties->addImageContent(
       $engine->getOutput($mock, PholioMock::MARKUP_FIELD_DESCRIPTION));
 
     return $properties;
@@ -182,7 +208,8 @@ final class PholioMockViewController extends PholioController {
       ->setUser($user)
       ->setDraft($draft)
       ->setSubmitButtonName($button_name)
-      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'));
+      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'))
+      ->setRequestURI($this->getRequest()->getRequestURI());
 
     return array(
       $header,

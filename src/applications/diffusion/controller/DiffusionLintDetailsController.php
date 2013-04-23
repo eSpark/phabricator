@@ -11,6 +11,8 @@ final class DiffusionLintDetailsController extends DiffusionController {
     $messages = $this->loadLintMessages($branch, $limit, $offset);
     $is_dir = (substr('/'.$drequest->getPath(), -1) == '/');
 
+    $authors = $this->loadViewerHandles(ipull($messages, 'authorPHID'));
+
     $rows = array();
     foreach ($messages as $message) {
       $path = hsprintf(
@@ -31,13 +33,18 @@ final class DiffusionLintDetailsController extends DiffusionController {
         )),
         $message['line']);
 
+      $author = $message['authorPHID'];
+      if ($author && $authors[$author]) {
+        $author = $authors[$author]->renderLink();
+      }
+
       $rows[] = array(
         $path,
         $line,
-        phutil_escape_html(ArcanistLintSeverity::getStringForSeverity(
-          $message['severity'])),
-        phutil_escape_html($message['name']),
-        phutil_escape_html($message['description']),
+        $author,
+        ArcanistLintSeverity::getStringForSeverity($message['severity']),
+        $message['name'],
+        $message['description'],
       );
     }
 
@@ -45,11 +52,12 @@ final class DiffusionLintDetailsController extends DiffusionController {
       ->setHeaders(array(
         'Path',
         'Line',
+        'Author',
         'Severity',
         'Name',
         'Description',
       ))
-      ->setColumnClasses(array('', 'n', '', '', ''))
+      ->setColumnClasses(array('', 'n'))
       ->setColumnVisibility(array($is_dir));
 
     $content = array();
@@ -71,7 +79,7 @@ final class DiffusionLintDetailsController extends DiffusionController {
 
     $content[] = id(new AphrontPanelView())
       ->setHeader(
-        ($lint != '' ? phutil_escape_html($lint)." \xC2\xB7 " : '').
+        ($lint != '' ? $lint." \xC2\xB7 " : '').
         pht('%d Lint Message(s)', count($messages)))
       ->setCaption($link)
       ->appendChild($table)
@@ -108,17 +116,15 @@ final class DiffusionLintDetailsController extends DiffusionController {
     $conn = $branch->establishConnection('r');
 
     $where = array(
-      qsprintf(
-        $conn,
-        'branchID = %d',
-        $branch->getID())
+      qsprintf($conn, 'branchID = %d', $branch->getID()),
     );
+
     if ($drequest->getPath() != '') {
-      $is_dir = (substr($drequest->getPath(), -1) == '/');
-      $where[] = qsprintf(
-        $conn,
-        'path '.($is_dir ? 'LIKE %>' : '= %s'),
-        '/'.$drequest->getPath());
+      $path = '/'.$drequest->getPath();
+      $is_dir = (substr($path, -1) == '/');
+      $where[] = ($is_dir
+        ? qsprintf($conn, 'path LIKE %>', $path)
+        : qsprintf($conn, 'path = %s', $path));
     }
 
     if ($drequest->getLint() != '') {

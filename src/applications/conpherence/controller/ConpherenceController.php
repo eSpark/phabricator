@@ -5,35 +5,6 @@
  */
 abstract class ConpherenceController extends PhabricatorController {
   private $conpherences;
-  private $selectedConpherencePHID;
-  private $readConpherences;
-  private $unreadConpherences;
-
-  public function setUnreadConpherences(array $conpherences) {
-    assert_instances_of($conpherences, 'ConpherenceThread');
-    $this->unreadConpherences = $conpherences;
-    return $this;
-  }
-  public function getUnreadConpherences() {
-    return $this->unreadConpherences;
-  }
-
-  public function setReadConpherences(array $conpherences) {
-    assert_instances_of($conpherences, 'ConpherenceThread');
-    $this->readConpherences = $conpherences;
-    return $this;
-  }
-  public function getReadConpherences() {
-    return $this->readConpherences;
-  }
-
-  public function setSelectedConpherencePHID($phid) {
-    $this->selectedConpherencePHID = $phid;
-    return $this;
-  }
-  public function getSelectedConpherencePHID() {
-    return $this->selectedConpherencePHID;
-  }
 
   /**
    * Try for a full set of unread conpherences, and if we fail
@@ -72,111 +43,33 @@ abstract class ConpherenceController extends PhabricatorController {
 
     $all_participation = $unread + $read;
     $all_conpherence_phids = array_keys($all_participation);
-    $all_conpherences = id(new ConpherenceThreadQuery())
-      ->setViewer($user)
-      ->withPHIDs($all_conpherence_phids)
-      ->execute();
+    $all_conpherences = array();
+    if ($all_conpherence_phids) {
+      $all_conpherences = id(new ConpherenceThreadQuery())
+        ->setViewer($user)
+        ->withPHIDs($all_conpherence_phids)
+        ->needParticipantCache(true)
+        ->execute();
+    }
     $unread_conpherences = array_select_keys(
       $all_conpherences,
-      array_keys($unread)
-    );
-    $this->setUnreadConpherences($unread_conpherences);
+      array_keys($unread));
 
     $read_conpherences = array_select_keys(
       $all_conpherences,
-      array_keys($read)
-    );
-    $this->setReadConpherences($read_conpherences);
+      array_keys($read));
 
-    if (!$this->getSelectedConpherencePHID()) {
-      $this->setSelectedConpherencePHID(reset($all_conpherence_phids));
-    }
-
-    return $this;
-  }
-
-  public function buildSideNavView($filter = null) {
-    require_celerity_resource('conpherence-menu-css');
-    $unread_conpherences = $this->getUnreadConpherences();
-    $read_conpherences = $this->getReadConpherences();
-
-    $user = $this->getRequest()->getUser();
-
-    $menu = new PhabricatorMenuView();
-    $nav = AphrontSideNavFilterView::newFromMenu($menu);
-    $nav->addClass('conpherence-menu');
-    $nav->setMenuID('conpherence-menu');
-
-    $nav->addButton(
-      'new',
-      pht('New Conversation'),
-      $this->getApplicationURI('new/')
-    );
-    $nav->addLabel(pht('Unread'));
-    $nav = $this->addConpherencesToNav($unread_conpherences, $nav);
-
-    $nav->addLabel(pht('Read'));
-    $nav = $this->addConpherencesToNav($read_conpherences, $nav, true);
-
-    $nav->selectFilter($filter);
-
-    return $nav;
-  }
-
-  private function addConpherencesToNav(
-    array $conpherences,
-    AphrontSideNavFilterView $nav,
-    $read = false) {
-
-    $user = $this->getRequest()->getUser();
-    foreach ($conpherences as $conpherence) {
-      $uri = $this->getApplicationURI('view/'.$conpherence->getID().'/');
-      $data = $conpherence->getDisplayData($user);
-      $title = $data['title'];
-      $subtitle = $data['subtitle'];
-      $unread_count = $data['unread_count'];
-      $epoch = $data['epoch'];
-      $image = $data['image'];
-      $snippet = $data['snippet'];
-
-      $item = id(new ConpherenceMenuItemView())
-        ->setUser($user)
-        ->setTitle($title)
-        ->setSubtitle($subtitle)
-        ->setHref($uri)
-        ->setEpoch($epoch)
-        ->setImageURI($image)
-        ->setMessageText($snippet)
-        ->setUnreadCount($unread_count)
-        ->setID($conpherence->getPHID())
-        ->addSigil('conpherence-menu-click')
-        ->setMetadata(array('id' => $conpherence->getID()));
-      if ($this->getSelectedConpherencePHID() == $conpherence->getPHID()) {
-        $item->addClass('conpherence-selected');
-        $item->addClass('hide-unread-count');
-      }
-      $nav->addCustomBlock($item->render());
-    }
-    if (empty($conpherences) || $read) {
-      $nav->addCustomBlock($this->getNoConpherencesBlock());
-    }
-
-    return $nav;
-  }
-
-  private function getNoConpherencesBlock() {
-
-    return phutil_render_tag(
-      'div',
-      array(
-        'class' => 'no-conpherences-menu-item'
-      ),
-      pht('No more conversations.')
-    );
+    return array($unread_conpherences, $read_conpherences);
   }
 
   public function buildApplicationMenu() {
-    return $this->buildSideNavView()->getMenu();
+    $nav = new PhabricatorMenuView();
+
+    $nav->newLink(
+      pht('New Message'),
+      $this->getApplicationURI('new/'));
+
+    return $nav;
   }
 
   public function buildApplicationCrumbs() {
@@ -185,40 +78,109 @@ abstract class ConpherenceController extends PhabricatorController {
     $crumbs
       ->addAction(
         id(new PhabricatorMenuItemView())
-          ->setName(pht('New Conversation'))
+          ->setName(pht('New Message'))
           ->setHref($this->getApplicationURI('new/'))
-          ->setIcon('create')
-      )
+          ->setIcon('create'))
       ->addCrumb(
         id(new PhabricatorCrumbView())
-          ->setName(pht('Conpherence'))
-      );
+          ->setName(pht('Conpherence')));
 
     return $crumbs;
   }
 
-  protected function initJavelinBehaviors() {
+  protected function buildHeaderPaneContent(ConpherenceThread $conpherence) {
+    $user = $this->getRequest()->getUser();
+    $display_data = $conpherence->getDisplayData(
+      $user,
+      ConpherenceImageData::SIZE_HEAD);
+    $edit_href = $this->getApplicationURI('update/'.$conpherence->getID().'/');
+    $class_mod = $display_data['image_class'];
 
-    Javelin::initBehavior('conpherence-menu',
-      array(
-        'base_uri' => $this->getApplicationURI(''),
-        'header' => 'conpherence-header-pane',
-        'messages' => 'conpherence-messages',
-        'widgets_pane' => 'conpherence-widget-pane',
-        'form_pane' => 'conpherence-form',
-        'fancy_ajax' => (bool) $this->getSelectedConpherencePHID()
-      )
-    );
-    Javelin::initBehavior('conpherence-init',
-      array(
-        'selected_conpherence_id' => $this->getSelectedConpherencePHID(),
-        'menu_pane' => 'conpherence-menu',
-        'messages_pane' => 'conpherence-message-pane',
-        'messages' => 'conpherence-messages',
-        'widgets_pane' => 'conpherence-widget-pane',
-        'form_pane' => 'conpherence-form'
-      )
+    return array(
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'upload-photo'
+        ),
+        pht('Drop photo here to change this Conpherence photo.')),
+      javelin_tag(
+        'a',
+        array(
+          'class' => 'edit',
+          'href' => $edit_href,
+          'sigil' => 'conpherence-edit-metadata',
+          'meta' => array(
+            'action' => 'metadata'
+          )
+        ),
+        ''),
+      phutil_tag(
+        'div',
+        array(
+          'class' => $class_mod.'header-image',
+          'style' => 'background-image: url('.$display_data['image'].');'
+        ),
+        ''),
+      phutil_tag(
+        'div',
+        array(
+          'class' => $class_mod.'title',
+        ),
+        $display_data['title']),
+      phutil_tag(
+        'div',
+        array(
+          'class' => $class_mod.'subtitle',
+        ),
+        $display_data['subtitle']),
     );
   }
 
+  protected function renderConpherenceTransactions(
+    ConpherenceThread $conpherence) {
+
+    $user = $this->getRequest()->getUser();
+    $transactions = $conpherence->getTransactions();
+    $oldest_transaction_id = 0;
+    $too_many = ConpherenceThreadQuery::TRANSACTION_LIMIT + 1;
+    if (count($transactions) == $too_many) {
+      $last_transaction = end($transactions);
+      unset($transactions[$last_transaction->getID()]);
+      $oldest_transaction = end($transactions);
+      $oldest_transaction_id = $oldest_transaction->getID();
+    }
+    $transactions = array_reverse($transactions);
+    $handles = $conpherence->getHandles();
+    $rendered_transactions = array();
+    $engine = id(new PhabricatorMarkupEngine())
+      ->setViewer($user);
+    foreach ($transactions as $key => $transaction) {
+      if ($transaction->shouldHide()) {
+        unset($transactions[$key]);
+        continue;
+      }
+      if ($transaction->getComment()) {
+        $engine->addObject(
+          $transaction->getComment(),
+          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
+      }
+    }
+    $engine->process();
+    foreach ($transactions as $transaction) {
+      $rendered_transactions[] = id(new ConpherenceTransactionView())
+        ->setUser($user)
+        ->setConpherenceTransaction($transaction)
+        ->setHandles($handles)
+        ->setMarkupEngine($engine)
+        ->render();
+    }
+    $latest_transaction_id = $transaction->getID();
+
+    return array(
+      'transactions' => $rendered_transactions,
+      'latest_transaction_id' => $latest_transaction_id,
+      'oldest_transaction_id' => $oldest_transaction_id
+    );
+
+  }
 }

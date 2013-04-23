@@ -56,8 +56,8 @@ final class PhameBlogEditController
       $skin          = $request->getStr('skin');
 
       if (empty($name)) {
-        $errors[] = 'You must give the blog a name.';
-        $e_name = 'Required';
+        $errors[] = pht('You must give the blog a name.');
+        $e_name = pht('Required');
       } else {
         $e_name = null;
       }
@@ -71,7 +71,7 @@ final class PhameBlogEditController
         $error = $blog->validateCustomDomain($custom_domain);
         if ($error) {
           $errors[] = $error;
-          $e_custom_domain = 'Invalid';
+          $e_custom_domain = pht('Invalid');
         }
       }
 
@@ -91,8 +91,8 @@ final class PhameBlogEditController
           return id(new AphrontRedirectResponse())
             ->setURI($this->getApplicationURI('blog/view/'.$blog->getID().'/'));
         } catch (AphrontQueryDuplicateKeyException $ex) {
-          $errors[] = 'Domain must be unique.';
-          $e_custom_domain = 'Not Unique';
+          $errors[] = pht('Domain must be unique.');
+          $e_custom_domain = pht('Not Unique');
         }
       }
     }
@@ -110,19 +110,19 @@ final class PhameBlogEditController
       ->setFlexible(true)
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Name')
+        ->setLabel(pht('Name'))
         ->setName('name')
         ->setValue($blog->getName())
         ->setID('blog-name')
-        ->setError($e_name)
-      )
+        ->setError($e_name))
       ->appendChild(
         id(new PhabricatorRemarkupControl())
-        ->setLabel('Description')
+        ->setLabel(pht('Description'))
         ->setName('description')
         ->setValue($blog->getDescription())
         ->setID('blog-description')
-        ->setUser($user))
+        ->setUser($user)
+        ->setDisableMacros(true))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setUser($user)
@@ -146,29 +146,26 @@ final class PhameBlogEditController
           ->setName('can_join'))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Custom Domain')
+        ->setLabel(pht('Custom Domain'))
         ->setName('custom_domain')
         ->setValue($blog->getDomain())
-        ->setCaption('Must include at least one dot (.), e.g. '.
-        'blog.example.com')
-        ->setError($e_custom_domain)
-      )
+        ->setCaption(
+          pht('Must include at least one dot (.), e.g. blog.example.com'))
+        ->setError($e_custom_domain))
       ->appendChild(
         id(new AphrontFormSelectControl())
-        ->setLabel('Skin')
+        ->setLabel(pht('Skin'))
         ->setName('skin')
         ->setValue($blog->getSkin())
-        ->setOptions($skins)
-      )
+        ->setOptions($skins))
       ->appendChild(
         id(new AphrontFormSubmitControl())
         ->addCancelButton($cancel_uri)
-        ->setValue($submit_button)
-      );
+        ->setValue($submit_button));
 
     if ($errors) {
       $error_view = id(new AphrontErrorView())
-        ->setTitle('Form Errors')
+        ->setTitle(pht('Form Errors'))
         ->setErrors($errors);
     } else {
       $error_view = null;
@@ -177,10 +174,17 @@ final class PhameBlogEditController
     $header = id(new PhabricatorHeaderView())
       ->setHeader($page_title);
 
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($page_title)
+        ->setHref($this->getApplicationURI('blog/new')));
+
     $nav = $this->renderSideNavFilterView();
     $nav->selectFilter($this->id ? null : 'blog/new');
     $nav->appendChild(
       array(
+        $crumbs,
         $header,
         $error_view,
         $form,
@@ -189,7 +193,9 @@ final class PhameBlogEditController
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title'   => $page_title,
+        'title' => $page_title,
+        'device' => true,
+        'dust' => true,
       ));
   }
 }

@@ -9,7 +9,9 @@ final class ConpherenceThread extends ConpherenceDAO
   protected $id;
   protected $phid;
   protected $title;
-  protected $imagePHID;
+  protected $messageCount;
+  protected $recentParticipantPHIDs = array();
+  protected $imagePHIDs = array();
   protected $mailKey;
 
   private $participants;
@@ -17,10 +19,15 @@ final class ConpherenceThread extends ConpherenceDAO
   private $handles;
   private $filePHIDs;
   private $widgetData;
+  private $images = array();
 
   public function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_SERIALIZATION => array(
+        'recentParticipantPHIDs' => self::SERIALIZATION_JSON,
+        'imagePHIDs' => self::SERIALIZATION_JSON,
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -34,6 +41,33 @@ final class ConpherenceThread extends ConpherenceDAO
       $this->setMailKey(Filesystem::readRandomCharacters(20));
     }
     return parent::save();
+  }
+
+  public function getImagePHID($size) {
+    $image_phids = $this->getImagePHIDs();
+    return idx($image_phids, $size);
+  }
+  public function setImagePHID($phid, $size) {
+    $image_phids = $this->getImagePHIDs();
+    $image_phids[$size] = $phid;
+    return $this->setImagePHIDs($image_phids);
+  }
+
+  public function getImage($size) {
+    $images = $this->getImages();
+    return idx($images, $size);
+  }
+  public function setImage(PhabricatorFile $file, $size) {
+    $files = $this->getImages();
+    $files[$size] = $file;
+    return $this->setImages($files);
+  }
+  public function setImages(array $files) {
+    $this->images = $files;
+    return $this;
+  }
+  private function getImages() {
+    return $this->images;
   }
 
   public function attachParticipants(array $participants) {
@@ -86,6 +120,22 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this->transactions;
   }
 
+  public function getTransactionsFrom($begin = 0, $amount = null) {
+    $length = count($this->transactions);
+    if ($amount === null) {
+      $amount === $length;
+    }
+    if ($this->transactions === null) {
+      throw new Exception(
+        'You must attachTransactions first!'
+      );
+    }
+    return array_slice(
+      $this->transactions,
+      $length - $begin - $amount,
+      $amount);
+  }
+
   public function attachFilePHIDs(array $file_phids) {
     $this->filePHIDs = $file_phids;
     return $this;
@@ -112,44 +162,62 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this->widgetData;
   }
 
-  public function loadImageURI() {
-    $src_phid = $this->getImagePHID();
+  public function loadImageURI($size) {
+    $file = $this->getImage($size);
 
-    if ($src_phid) {
-      $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $src_phid);
-      if ($file) {
-        return $file->getBestURI();
-      }
+    if ($file) {
+      return $file->getBestURI();
     }
 
     return PhabricatorUser::getDefaultProfileImageURI();
   }
 
-  public function getDisplayData(PhabricatorUser $user) {
-    $transactions = $this->getTransactions();
-    $latest_transaction = end($transactions);
-    $latest_participant = $latest_transaction->getAuthorPHID();
+  public function getDisplayData(PhabricatorUser $user, $size) {
+    $recent_phids = $this->getRecentParticipantPHIDs();
     $handles = $this->getHandles();
-    $latest_handle = $handles[$latest_participant];
-    if ($this->getImagePHID()) {
-      $img_src = $this->loadImageURI();
-    } else {
-      $img_src = $latest_handle->getImageURI();
-    }
-    $title = $this->getTitle();
-    if (!$title) {
-      $title = $latest_handle->getName();
-      unset($handles[$latest_participant]);
-    }
-    unset($handles[$user->getPHID()]);
 
-    $subtitle = '';
-    $count = 0;
-    $final = false;
-    foreach ($handles as $handle) {
-      if ($handle->getType() != PhabricatorPHIDConstants::PHID_TYPE_USER) {
+    // luck has little to do with it really; most recent participant who isn't
+    // the user....
+    $lucky_phid = null;
+    $lucky_index = null;
+    foreach ($recent_phids as $index => $phid) {
+      if ($phid == $user->getPHID()) {
         continue;
       }
+      $lucky_phid = $phid;
+      break;
+    }
+    reset($recent_phids);
+
+    if ($lucky_phid) {
+      $lucky_handle = $handles[$lucky_phid];
+    // this will be just the user talking to themselves. weirdos.
+    } else {
+      $lucky_handle = reset($handles);
+    }
+
+    $title = $this->getTitle();
+    if (!$title) {
+      $title = $lucky_handle->getName();
+    }
+
+    $image = $this->getImagePHID($size);
+    if ($image) {
+      $img_src = $this->getImage($size)->getBestURI();
+      $img_class = 'custom-';
+    } else {
+      $img_src = $lucky_handle->getImageURI();
+      $img_class = null;
+    }
+
+    $count = 0;
+    $final = false;
+    $subtitle = null;
+    foreach ($recent_phids as $phid) {
+      if ($phid == $user->getPHID()) {
+        continue;
+      }
+      $handle = $handles[$phid];
       if ($subtitle) {
         if ($final) {
           $subtitle .= '...';
@@ -165,58 +233,16 @@ final class ConpherenceThread extends ConpherenceDAO
 
     $participants = $this->getParticipants();
     $user_participation = $participants[$user->getPHID()];
-    $unread_count = 0;
-    $max_count = 10;
-    $snippet = null;
-    if (!$user_participation->isUpToDate()) {
-      $behind_transaction_phid =
-        $user_participation->getBehindTransactionPHID();
-    } else {
-      $behind_transaction_phid = null;
-    }
-    foreach (array_reverse($transactions) as $transaction) {
-      switch ($transaction->getTransactionType()) {
-        case ConpherenceTransactionType::TYPE_PARTICIPANTS:
-        case ConpherenceTransactionType::TYPE_TITLE:
-        case ConpherenceTransactionType::TYPE_PICTURE:
-          continue 2;
-        case PhabricatorTransactions::TYPE_COMMENT:
-          if ($snippet === null) {
-            $snippet = phutil_utf8_shorten(
-              $transaction->getComment()->getContent(),
-              48
-            );
-          }
-          // fallthrough intentionally here
-        case ConpherenceTransactionType::TYPE_FILES:
-          if ($behind_transaction_phid) {
-            $unread_count++;
-            if ($transaction->getPHID() == $behind_transaction_phid) {
-              break 2;
-            }
-          }
-          if ($unread_count > $max_count) {
-            break 2;
-          }
-          break;
-        default:
-          continue 2;
-      }
-      if ($snippet && !$behind_transaction_phid) {
-        break;
-      }
-    }
-    if ($unread_count > $max_count) {
-      $unread_count = $max_count.'+';
-    }
+    $unread_count = $this->getMessageCount() -
+      $user_participation->getSeenMessageCount();
 
     return array(
       'title' => $title,
       'subtitle' => $subtitle,
       'unread_count' => $unread_count,
-      'epoch' => $latest_transaction->getDateCreated(),
+      'epoch' => $this->getDateModified(),
       'image' => $img_src,
-      'snippet' => $snippet,
+      'image_class' => $img_class,
     );
   }
 

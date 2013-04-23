@@ -13,7 +13,15 @@ final class PhabricatorMacroDisableController
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $macro = id(new PhabricatorFileImageMacro())->load($this->id);
+    $macro = id(new PhabricatorMacroQuery())
+      ->setViewer($user)
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
+      ->withIDs(array($this->id))
+      ->executeOne();
     if (!$macro) {
       return new Aphront404Response();
     }
@@ -43,10 +51,10 @@ final class PhabricatorMacroDisableController
     $dialog
       ->setUser($request->getUser())
       ->setTitle(pht('Really disable macro?'))
-      ->appendChild(
-        '<p>'.pht('Really disable the much-beloved image macro %s? '.
-        'It will be sorely missed.', phutil_escape_html($macro->getName())).
-        '</p>')
+      ->appendChild(phutil_tag('p', array(), pht(
+        'Really disable the much-beloved image macro %s? '.
+          'It will be sorely missed.',
+        $macro->getName())))
       ->setSubmitURI($this->getApplicationURI('/disable/'.$this->id.'/'))
       ->addSubmitButton(pht('Disable'))
       ->addCancelButton($view_uri);

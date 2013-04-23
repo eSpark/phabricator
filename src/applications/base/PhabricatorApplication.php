@@ -58,21 +58,24 @@ abstract class PhabricatorApplication {
     return $this->getName().' Application';
   }
 
-  public function isEnabled() {
-    return true;
+  public function isInstalled() {
+    if (!$this->canUninstall()) {
+      return true;
+    }
+
+    $beta = PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
+    if (!$beta && $this->isBeta()) {
+      return false;
+    }
+
+    $uninstalled = PhabricatorEnv::getEnvConfig(
+      'phabricator.uninstalled-applications');
+
+    return empty($uninstalled[get_class($this)]);
   }
 
-  public function isInstalled() {
-    $uninstalled =
-      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
-
-      if (!$this->canUninstall()) {
-        return true;
-      } else if (isset($uninstalled[get_class($this)])) {
-        return false;
-      } else {
-        return true;
-      }
+  public static function isClassInstalled($class) {
+    return self::getByClass($class)->isInstalled();
   }
 
   public function isBeta() {
@@ -150,6 +153,10 @@ abstract class PhabricatorApplication {
       default:
         return self::TILE_SHOW;
     }
+  }
+
+  public function getRemarkupRules() {
+    return array();
   }
 
 
@@ -230,7 +237,6 @@ abstract class PhabricatorApplication {
 /* -(  Application Management  )--------------------------------------------- */
 
   public static function getByClass($class_name) {
-
     $selected = null;
     $applications = PhabricatorApplication::getAllApplications();
 
@@ -244,7 +250,6 @@ abstract class PhabricatorApplication {
   }
 
   public static function getAllApplications() {
-
     $classes = id(new PhutilSymbolLoader())
             ->setAncestorClass(__CLASS__)
             ->setConcreteOnly(true)
@@ -257,44 +262,28 @@ abstract class PhabricatorApplication {
       $apps[] = $app;
     }
 
+    // Reorder the applications into "application order". Notably, this ensures
+    // their event handlers register in application order.
+    $apps = msort($apps, 'getApplicationOrder');
+    $apps = mgroup($apps, 'getApplicationGroup');
+    $apps = array_select_keys($apps, self::getApplicationGroups()) + $apps;
+    $apps = array_mergev($apps);
+
     return $apps;
   }
 
   public static function getAllInstalledApplications() {
     static $applications;
 
-    $show_beta =
-      PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
-
-    $uninstalled =
-      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
-
-
-
     if (empty($applications)) {
-      $classes = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->setConcreteOnly(true)
-        ->selectAndLoadSymbols();
-
+      $all_applications = self::getAllApplications();
       $apps = array();
-      foreach ($classes as $class) {
-
-      if (isset($uninstalled[$class['name']])) {
-        continue;
-      }
-
-      $app = newv($class['name'], array());
-
-      if (!$app->isEnabled()) {
+      foreach ($all_applications as $app) {
+        if (!$app->isInstalled()) {
           continue;
-      }
+        }
 
-      if (!$show_beta && $app->isBeta()) {
-          continue;
-      }
-
-      $apps[] = $app;
+        $apps[] = $app;
       }
 
       $applications = $apps;

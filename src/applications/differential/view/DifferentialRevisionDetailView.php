@@ -52,12 +52,16 @@ final class DifferentialRevisionDetailView extends AphrontView {
         ->setName($action['name'])
         ->setHref(idx($action, 'href'))
         ->setWorkflow(idx($action, 'sigil') == 'workflow')
+        ->setRenderAsForm(!empty($action['instant']))
         ->setUser($user)
         ->setDisabled(idx($action, 'disabled', false));
       $actions->addAction($obj);
     }
 
-    $properties = new PhabricatorPropertyListView();
+    $properties = id(new PhabricatorPropertyListView())
+      ->setUser($user)
+      ->setObject($revision);
+
     $status = $revision->getStatus();
     $local_vcs = $this->getDiff()->getSourceControlSystem();
 
@@ -65,34 +69,56 @@ final class DifferentialRevisionDetailView extends AphrontView {
     if ($status == ArcanistDifferentialRevisionStatus::ACCEPTED) {
       switch ($local_vcs) {
         case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-          $next_step = '<tt>arc land</tt>';
+          $bookmark = $this->getDiff()->getBookmark();
+          $next_step = ($bookmark != ''
+            ? csprintf('arc land %s', $bookmark)
+            : 'arc land');
           break;
+
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
+          $branch = $this->getDiff()->getBranch();
+          $next_step = ($branch != ''
+            ? csprintf('arc land %s', $branch)
+            : 'arc land');
+          break;
+
         case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-          $next_step = '<tt>arc commit</tt>';
+          $next_step = 'arc commit';
           break;
       }
     }
     if ($next_step) {
+      $next_step = phutil_tag('tt', array(), $next_step);
       $properties->addProperty(pht('Next Step'), $next_step);
     }
 
     foreach ($this->auxiliaryFields as $field) {
       $value = $field->renderValueForRevisionView();
-      if (strlen($value)) {
+      if ($value !== null) {
         $label = rtrim($field->renderLabelForRevisionView(), ':');
         $properties->addProperty($label, $value);
       }
     }
     $properties->setHasKeyboardShortcuts(true);
 
-    return $header->render() . $actions->render() . $properties->render();
+    return hsprintf(
+      '%s%s%s',
+      $header->render(),
+      $actions->render(),
+      $properties->render());
   }
 
   private function renderHeader(DifferentialRevision $revision) {
     $view = id(new PhabricatorHeaderView())
-      ->setObjectName('D'.$revision->getID())
-      ->setHeader($revision->getTitle());
+      ->setHeader($revision->getTitle($revision));
+
+    $view->addTag(self::renderTagForRevision($revision));
+
+    return $view;
+  }
+
+  public static function renderTagForRevision(
+    DifferentialRevision $revision) {
 
     $status = $revision->getStatus();
     $status_name =
@@ -100,13 +126,9 @@ final class DifferentialRevisionDetailView extends AphrontView {
     $status_color =
       DifferentialRevisionStatus::getRevisionStatusTagColor($status);
 
-    $view->addTag(
-      id(new PhabricatorTagView())
+    return id(new PhabricatorTagView())
       ->setType(PhabricatorTagView::TYPE_STATE)
       ->setName($status_name)
-      ->setBackgroundColor($status_color)
-    );
-
-    return $view;
+      ->setBackgroundColor($status_color);
   }
 }

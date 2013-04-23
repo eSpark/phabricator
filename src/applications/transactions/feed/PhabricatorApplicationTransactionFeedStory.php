@@ -32,7 +32,7 @@ class PhabricatorApplicationTransactionFeedStory
   }
 
   public function renderView() {
-    $view = new PhabricatorFeedStoryView();
+    $view = new PHUIFeedStoryView();
     $view->setViewed($this->getHasViewed());
 
     $href = $this->getHandle($this->getPrimaryObjectPHID())->getURI();
@@ -43,9 +43,13 @@ class PhabricatorApplicationTransactionFeedStory
 
     $xaction->setHandles($this->getHandles());
     $view->setTitle($xaction->getTitleForFeed());
-    $view->setOneLineStory(true);
 
     return $view;
+  }
+
+  public function renderText() {
+    // TODO: This is grotesque; the feed notification handler relies on it.
+    return strip_tags($this->renderView()->render());
   }
 
 }

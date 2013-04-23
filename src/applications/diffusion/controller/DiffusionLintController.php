@@ -71,11 +71,10 @@ final class DiffusionLintController extends DiffusionController {
           '<a href="%s">%s</a>',
           $drequest->generateURI(array('action' => 'lint')),
           $drequest->getCallsign()),
-        phutil_escape_html(ArcanistLintSeverity::getStringForSeverity(
-          $code['maxSeverity'])),
-        phutil_escape_html($code['code']),
-        phutil_escape_html($code['maxName']),
-        phutil_escape_html($code['maxDescription']),
+        ArcanistLintSeverity::getStringForSeverity($code['maxSeverity']),
+        $code['code'],
+        $code['maxName'],
+        $code['maxDescription'],
       );
     }
 
@@ -161,38 +160,39 @@ final class DiffusionLintController extends DiffusionController {
       $where[] = qsprintf($conn, 'branchID = %d', $branch->getID());
 
       if ($drequest->getPath() != '') {
-        $is_dir = (substr($drequest->getPath(), -1) == '/');
-        $where[] = qsprintf(
-          $conn,
-          'path '.($is_dir ? 'LIKE %>' : '= %s'),
-          '/'.$drequest->getPath());
+        $path = '/'.$drequest->getPath();
+        $is_dir = (substr($path, -1) == '/');
+        $where[] = ($is_dir
+          ? qsprintf($conn, 'path LIKE %>', $path)
+          : qsprintf($conn, 'path = %s', $path));
       }
     }
 
     if ($owner_phids) {
+      $or = array();
+      $or[] = qsprintf($conn, 'authorPHID IN (%Ls)', $owner_phids);
+
+      $paths = array();
       $packages = id(new PhabricatorOwnersOwner())
         ->loadAllWhere('userPHID IN (%Ls)', $owner_phids);
-      if (!$packages) {
-        return array();
+      if ($packages) {
+        $paths = id(new PhabricatorOwnersPath())->loadAllWhere(
+          'packageID IN (%Ld)',
+          mpull($packages, 'getPackageID'));
       }
 
-      $paths = id(new PhabricatorOwnersPath())
-        ->loadAllWhere('packageID IN (%Ld)', array_keys($packages));
-      if (!$paths) {
-        return array();
+      if ($paths) {
+        $repositories = id(new PhabricatorRepository())->loadAllWhere(
+          'phid IN (%Ls)',
+          array_unique(mpull($paths, 'getRepositoryPHID')));
+        $repositories = mpull($repositories, 'getID', 'getPHID');
+
+        $branches = id(new PhabricatorRepositoryBranch())->loadAllWhere(
+          'repositoryID IN (%Ld)',
+          $repositories);
+        $branches = mgroup($branches, 'getRepositoryID');
       }
 
-      $repositories = id(new PhabricatorRepository())->loadAllWhere(
-        'phid IN (%Ls)',
-        array_unique(mpull($paths, 'getRepositoryPHID')));
-      $repositories = mpull($repositories, 'getID', 'getPHID');
-
-      $branches = id(new PhabricatorRepositoryBranch())->loadAllWhere(
-        'repositoryID IN (%Ld)',
-        $repositories);
-      $branches = mgroup($branches, 'getRepositoryID');
-
-      $or = array();
       foreach ($paths as $path) {
         $branch = idx($branches, $repositories[$path->getRepositoryPHID()]);
         if ($branch) {
@@ -207,9 +207,6 @@ final class DiffusionLintController extends DiffusionController {
             $or[] = $condition;
           }
         }
-      }
-      if (!$or) {
-        return array();
       }
       $where[] = '('.implode(' OR ', $or).')';
     }
