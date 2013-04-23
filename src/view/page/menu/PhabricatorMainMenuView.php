@@ -239,13 +239,7 @@ final class PhabricatorMainMenuView extends AphrontView {
       array(
         'class' => 'phabricator-main-menu-logo',
         'href'  => '/',
-      ),
-      phutil_tag(
-        'span',
-        array(
-          'class' => 'sprite-menu phabricator-main-menu-logo-image',
-        ),
-        ''));
+            ));
   }
 
   private function renderNotificationMenu() {
