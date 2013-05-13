@@ -57,7 +57,6 @@ return array(
              'phabricator.uninstalled-applications' =>
              array('PhabricatorApplicationManiphest' => true,
                    'PhabricatorApplicationOwners' => true,
-                   'PhabricatorApplicationProject' => true,
                    'PhabricatorApplicationFlags' => true,
                    'PhabricatorApplicationDiviner' => true)
 
