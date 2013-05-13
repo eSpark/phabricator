@@ -53,7 +53,6 @@ return array(
 	     'google.registration-enabled' => true,
 	     'google.auth-permanent' => false,
 
-             'maniphest.enabled' => false,
              'phabricator.uninstalled-applications' =>
              array('PhabricatorApplicationManiphest' => true,
                    'PhabricatorApplicationOwners' => true,
