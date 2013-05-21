@@ -43,8 +43,9 @@ return array(
 
              // These are automated files in Xcode
              'differential.generated-paths' => array('/.xib$/', // generated graphically in IB
-                                                     '/.project.pbxproj$/'), // project metadata
-	     
+                                                     '/.project.pbxproj$/', // project metadata
+                                                     '|spec/fixtures/vcr_cassettes|'),
+
 	     // Google OAuth configuration
 	     // This project is owned by luke@esparklearning.com
 	     'google.auth-enabled' => true,
