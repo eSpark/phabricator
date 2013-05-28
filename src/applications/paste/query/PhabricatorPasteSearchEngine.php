@@ -8,8 +8,6 @@
 final class PhabricatorPasteSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
-  protected $filter;
-
   /**
    * Create a saved query object from the request.
    *
@@ -17,12 +15,17 @@ final class PhabricatorPasteSearchEngine
    * @return The saved query that is built.
    */
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
-
     $saved = new PhabricatorSavedQuery();
+    $saved->setParameter(
+      'authorPHIDs',
+      array_values($request->getArr('authors')));
 
-    if ($this->filter == "my") {
-      $user = $request->getUser();
-      $saved->setParameter('authorPHIDs', array($user->getPHID()));
+    try {
+      $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
+      $saved->save();
+      unset($unguarded);
+    } catch (AphrontQueryDuplicateKeyException $ex) {
+      // Ignore, this is just a repeated search.
     }
 
     return $saved;
@@ -48,18 +51,60 @@ final class PhabricatorPasteSearchEngine
    * Builds the search form using the request.
    *
    * @param PhabricatorSavedQuery The query to populate the form with.
-   * @return void
+   * @return AphrontFormView The built form.
    */
-  public function buildSearchForm(PhabricatorSavedQuery $saved_query) {
+  public function buildSearchForm(
+    AphrontFormView $form,
+    PhabricatorSavedQuery $saved_query) {
+    $phids = $saved_query->getParameter('authorPHIDs', array());
+    $handles = id(new PhabricatorObjectHandleData($phids))
+      ->setViewer($this->requireViewer())
+      ->loadHandles();
+    $author_tokens = mpull($handles, 'getFullName', 'getPHID');
+
+    $form->appendChild(
+      id(new AphrontFormTokenizerControl())
+        ->setDatasource('/typeahead/common/users/')
+        ->setName('authors')
+        ->setLabel(pht('Authors'))
+        ->setValue($author_tokens));
   }
 
-  public function setPasteSearchFilter($filter) {
-    $this->filter = $filter;
-    return $this;
+  public function getQueryResultsPageURI($query_key) {
+    return '/paste/query/'.$query_key.'/';
   }
 
-  public function getPasteSearchFilter() {
-    return $this->filter;
+  public function getQueryManagementURI() {
+    return '/paste/savedqueries/';
+  }
+
+  public function getBuiltinQueryNames() {
+    $names = array(
+      'all'       => pht('All Pastes'),
+    );
+
+    if ($this->requireViewer()->isLoggedIn()) {
+      $names['authored'] = pht('Authored');
+    }
+
+    return $names;
+  }
+
+  public function buildSavedQueryFromBuiltin($query_key) {
+
+    $query = $this->newSavedQuery();
+    $query->setQueryKey($query_key);
+
+    switch ($query_key) {
+      case 'all':
+        return $query;
+      case 'authored':
+        return $query->setParameter(
+          'authorPHIDs',
+          array($this->requireViewer()->getPHID()));
+    }
+
+    return parent::buildSavedQueryFromBuiltin($query_key);
   }
 
 }

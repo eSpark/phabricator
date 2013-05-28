@@ -73,37 +73,18 @@ final class ConpherenceNewController extends ConpherenceController {
             id(new ConpherenceTransactionComment())
             ->setContent($message)
             ->setConpherencePHID($conpherence->getPHID()));
-        $content_source = PhabricatorContentSource::newForSource(
-          PhabricatorContentSource::SOURCE_WEB,
-          array(
-            'ip' => $request->getRemoteAddr()
-          ));
+
         id(new ConpherenceEditor())
-          ->setContentSource($content_source)
+          ->setContentSourceFromRequest($request)
           ->setContinueOnNoEffect(true)
           ->setActor($user)
           ->applyTransactions($conpherence, $xactions);
 
         $conpherence->saveTransaction();
 
-        if ($request->isAjax()) {
-          $dialog = id(new AphrontDialogView())
-            ->setUser($user)
-            ->setTitle('Success')
-            ->addCancelButton('#', 'Okay')
-            ->appendChild(
-              phutil_tag(
-                'p',
-                array(),
-                pht('Message sent successfully.')));
-          $response = id(new AphrontDialogResponse())
-            ->setDialog($dialog);
-        } else {
-          $uri = $this->getApplicationURI($conpherence->getID());
-          $response = id(new AphrontRedirectResponse())
-            ->setURI($uri);
-        }
-        return $response;
+        $uri = $this->getApplicationURI($conpherence->getID());
+        return id(new AphrontRedirectResponse())
+          ->setURI($uri);
       }
     }
 
@@ -141,6 +122,7 @@ final class ConpherenceNewController extends ConpherenceController {
 
     $form = id(new AphrontFormLayoutView())
       ->setUser($user)
+      ->setFullWidth(true)
       ->appendChild(
         id(new AphrontFormTokenizerControl())
         ->setName('participants')

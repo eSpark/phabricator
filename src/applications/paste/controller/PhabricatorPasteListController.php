@@ -2,29 +2,50 @@
 
 final class PhabricatorPasteListController extends PhabricatorPasteController {
 
-  public function shouldRequireLogin() {
-    return false;
+  private $queryKey;
+
+  public function shouldAllowPublic() {
+    return true;
   }
 
-  private $filter;
-
   public function willProcessRequest(array $data) {
-    $this->filter = idx($data, 'filter');
+    $this->queryKey = idx($data, 'queryKey', 'all');
   }
 
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $saved_query = new PhabricatorSavedQuery();
-
-    $nav = $this->buildSideNavView($this->filter);
-    $filter = $nav->getSelectedFilter();
-
     $engine = id(new PhabricatorPasteSearchEngine())
-      ->setPasteSearchFilter($filter);
-    $saved_query = $engine->buildSavedQueryFromRequest($request);
-    $query = $engine->buildQueryFromSavedQuery($saved_query);
+      ->setViewer($user);
+
+    if ($request->isFormPost()) {
+      return id(new AphrontRedirectResponse())->setURI(
+        $engine->getQueryResultsPageURI(
+          $engine->buildSavedQueryFromRequest($request)->getQueryKey()));
+    }
+
+    $nav = $this->buildSideNavView();
+
+    if ($engine->isBuiltinQuery($this->queryKey)) {
+      $saved_query = $engine->buildSavedQueryFromBuiltin($this->queryKey);
+    } else {
+      $saved_query = id(new PhabricatorSavedQueryQuery())
+        ->setViewer($user)
+        ->withQueryKeys(array($this->queryKey))
+        ->executeOne();
+
+      if (!$saved_query) {
+        return new Aphront404Response();
+      }
+    }
+
+    $query = id(new PhabricatorPasteSearchEngine())
+      ->buildQueryFromSavedQuery($saved_query);
+
+    $filter = $nav->selectFilter(
+      'query/'.$saved_query->getQueryKey(),
+      'filter/advanced');
 
     $pager = new AphrontCursorPagerView();
     $pager->readFromRequest($request);
@@ -36,10 +57,29 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
     $list->setPager($pager);
     $list->setNoDataString(pht("No results found for this query."));
 
-    $nav->appendChild(
-      array(
-        $list,
-      ));
+    if ($this->queryKey !== null || $filter == "filter/advanced") {
+      $form = id(new AphrontFormView())
+        ->setNoShading(true)
+        ->setUser($user);
+
+      $engine->buildSearchForm($form, $saved_query);
+
+      $submit = id(new AphrontFormSubmitControl())
+        ->setValue(pht('Execute Query'));
+
+      if ($filter == 'filter/advanced') {
+        $submit->addCancelButton(
+          '/search/edit/'.$saved_query->getQueryKey().'/',
+          pht('Save Custom Query...'));
+      }
+
+      $form->appendChild($submit);
+
+      $filter_view = id(new AphrontListFilterView())->appendChild($form);
+      $nav->appendChild($filter_view);
+    }
+
+    $nav->appendChild($list);
 
     $crumbs = $this
       ->buildApplicationCrumbs($nav)
