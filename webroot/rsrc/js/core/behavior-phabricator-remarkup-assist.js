@@ -3,13 +3,14 @@
  * @requires javelin-behavior
  *           javelin-stratcom
  *           javelin-dom
+ *           phabricator-phtize
  *           phabricator-textareautils
  *           javelin-workflow
- *           phabricator-notification
  *           javelin-vector
  */
 
 JX.behavior('phabricator-remarkup-assist', function(config) {
+  var pht = JX.phtize(config.pht);
 
   var edit_mode = 'normal';
   var edit_root = null;
@@ -21,11 +22,9 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
 
     // First, disable any active mode.
     if (edit_root) {
-      if (edit_mode == 'order') {
-        JX.DOM.alterClass(edit_root, 'remarkup-control-order-mode', false);
-      }
-      if (edit_mode == 'chaos') {
-        JX.DOM.alterClass(edit_root, 'remarkup-control-chaos-mode', false);
+      if (edit_mode == 'fa-arrows-alt') {
+        JX.DOM.alterClass(edit_root, 'remarkup-control-fullscreen-mode', false);
+        JX.DOM.alterClass(document.body, 'remarkup-fullscreen-mode', false);
       }
       JX.DOM.find(edit_root, 'textarea').style.height = '';
     }
@@ -34,13 +33,10 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
     edit_mode = mode;
 
     // Now, apply the new mode.
-    if (mode == 'order') {
-      JX.DOM.alterClass(edit_root, 'remarkup-control-order-mode', true);
+    if (mode == 'fa-arrows-alt') {
+      JX.DOM.alterClass(edit_root, 'remarkup-control-fullscreen-mode', true);
+      JX.DOM.alterClass(document.body, 'remarkup-fullscreen-mode', true);
       resizearea();
-    }
-
-    if (mode == 'chaos') {
-      JX.DOM.alterClass(edit_root, 'remarkup-control-chaos-mode', true);
     }
 
     JX.DOM.focus(JX.DOM.find(edit_root, 'textarea'));
@@ -50,7 +46,7 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
     if (!edit_root) {
       return;
     }
-    if (edit_mode != 'order') {
+    if (edit_mode != 'fa-arrows-alt') {
       return;
     }
 
@@ -71,46 +67,17 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
 
 
   JX.Stratcom.listen('keydown', null, function(e) {
-    if (edit_mode == 'chaos') {
-      cause_chaos();
-    }
-
     if (e.getSpecialKey() != 'esc') {
       return;
     }
 
-    if (edit_mode != 'order') {
+    if (edit_mode != 'fa-arrows-alt') {
       return;
     }
 
     e.kill();
     set_edit_mode(edit_root, 'normal');
   });
-
-  var chaos_states = [];
-  function cause_chaos() {
-    for (var ii = 0; ii <= 13; ii++) {
-      if (Math.random() > 0.98) {
-        chaos_states[ii] = !chaos_states[ii];
-      }
-      JX.DOM.alterClass(
-        edit_root,
-        'remarkup-control-chaos-mode-' + ii,
-        !!chaos_states[ii]);
-    }
-
-    if (Math.random() > 0.98) {
-      var n = new JX.Notification()
-        .setContent("Hey, listen!")
-        .setDuration(1000 + Math.random() * 6000);
-
-      if (Math.random() > 0.75) {
-        n.alterClassName('jx-notification-alert', true);
-      }
-
-      n.show();
-    }
-  }
 
   function update(area, l, m, r) {
     // Replace the selection with the entire assisted text.
@@ -134,36 +101,44 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
     var r = JX.TextAreaUtils.getSelectionRange(area);
 
     switch (action) {
-      case 'b':
-        update(area, '**', sel || 'bold text', '**');
+      case 'fa-bold':
+        update(area, '**', sel || pht('bold text'), '**');
         break;
-      case 'i':
-        update(area, '//', sel || 'italic text', '//');
+      case 'fa-italic':
+        update(area, '//', sel || pht('italic text'), '//');
         break;
-      case 'tt':
-        update(area, '`', sel || 'monospaced text', '`');
-        break;
-      case 'ul':
-      case 'ol':
-        var ch = (action == 'ol') ? '  # ' : '  - ';
-        if (sel) {
-          sel = sel.split("\n");
+      case 'fa-link':
+        var name = pht('name');
+        if (/^https?:/i.test(sel)) {
+          update(area, '[[ ' + sel + ' | ', name, ' ]]');
         } else {
-          sel = ["List Item"];
+          update(area, '[[ ', pht('URL'), ' | ' + (sel || name) + ' ]]');
         }
-        sel = sel.join("\n" + ch);
-        update(area, ((r.start === 0) ? "" : "\n\n") + ch, sel, "\n\n");
         break;
-      case 'code':
-        sel = sel || "foreach ($list as $item) {\n  work_miracles($item);\n}";
-        sel = sel.split("\n");
-        sel = "  " + sel.join("\n  ");
-        update(area, ((r.start === 0) ? "" : "\n\n"), sel, "\n\n");
+      case 'fa-text-width':
+        update(area, '`', sel || pht('monospaced text'), '`');
         break;
-      case 'table':
-        update(area, (r.start === 0 ? '' : '\n\n') + '| ', sel || 'data', ' |');
+      case 'fa-list-ul':
+      case 'fa-list-ol':
+        var ch = (action == 'fa-list-ol') ? '  # ' : '  - ';
+        if (sel) {
+          sel = sel.split('\n');
+        } else {
+          sel = [pht('List Item')];
+        }
+        sel = sel.join('\n' + ch);
+        update(area, ((r.start === 0) ? '' : '\n\n') + ch, sel, '\n\n');
         break;
-      case 'meme':
+      case 'fa-code':
+        sel = sel || 'foreach ($list as $item) {\n  work_miracles($item);\n}';
+        var code_prefix = (r.start === 0) ? '' : '\n';
+        update(area, code_prefix + '```\n', sel, '\n```');
+        break;
+      case 'fa-table':
+        var table_prefix = (r.start === 0 ? '' : '\n\n');
+        update(area, table_prefix + '| ', sel || pht('data'), ' |');
+        break;
+      case 'fa-meh-o':
         new JX.Workflow('/macro/meme/create/')
           .setHandler(function(response) {
             update(
@@ -174,21 +149,14 @@ JX.behavior('phabricator-remarkup-assist', function(config) {
           })
           .start();
         break;
-      case 'image':
+      case 'fa-cloud-upload':
         new JX.Workflow('/file/uploaddialog/').start();
         break;
-      case 'chaos':
-        if (edit_mode == 'chaos') {
+      case 'fa-arrows-alt':
+        if (edit_mode == 'fa-arrows-alt') {
           set_edit_mode(root, 'normal');
         } else {
-          set_edit_mode(root, 'chaos');
-        }
-        break;
-      case 'order':
-        if (edit_mode == 'order') {
-          set_edit_mode(root, 'normal');
-        } else {
-          set_edit_mode(root, 'order');
+          set_edit_mode(root, 'fa-arrows-alt');
         }
         break;
     }

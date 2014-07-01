@@ -18,9 +18,9 @@ final class ConduitSSHWorkflow extends PhabricatorSSHWorkflow {
 
     $methodv = $args->getArg('method');
     if (!$methodv) {
-      throw new Exception("No Conduit method provided.");
+      throw new Exception('No Conduit method provided.');
     } else if (count($methodv) > 1) {
-      throw new Exception("Too many Conduit methods provided.");
+      throw new Exception('Too many Conduit methods provided.');
     }
 
     $method = head($methodv);
@@ -28,10 +28,10 @@ final class ConduitSSHWorkflow extends PhabricatorSSHWorkflow {
     $json = $this->readAllInput();
     $raw_params = json_decode($json, true);
     if (!is_array($raw_params)) {
-      throw new Exception("Invalid JSON input.");
+      throw new Exception('Invalid JSON input.');
     }
 
-    $params = idx($raw_params, 'params', array());
+    $params = idx($raw_params, 'params', '[]');
     $params = json_decode($params, true);
     $metadata = idx($params, '__conduit__', array());
     unset($params['__conduit__']);
@@ -72,11 +72,12 @@ final class ConduitSSHWorkflow extends PhabricatorSSHWorkflow {
     $time_end = microtime(true);
 
     $connection_id = idx($metadata, 'connectionID');
-    $log = new PhabricatorConduitMethodCallLog();
-    $log->setConnectionID($connection_id);
-    $log->setMethod($method);
-    $log->setError((string)$error_code);
-    $log->setDuration(1000000 * ($time_end - $time_start));
-    $log->save();
+    $log = id(new PhabricatorConduitMethodCallLog())
+      ->setCallerPHID($this->getUser()->getPHID())
+      ->setConnectionID($connection_id)
+      ->setMethod($method)
+      ->setError((string)$error_code)
+      ->setDuration(1000000 * ($time_end - $time_start))
+      ->save();
   }
 }

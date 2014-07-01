@@ -6,6 +6,10 @@
 final class PhabricatorRemarkupRuleYoutube
   extends PhutilRemarkupRule {
 
+  public function getPriority() {
+    return 350.0;
+  }
+
   public function apply($text) {
     $this->uri = new PhutilURI($text);
 
@@ -26,9 +30,12 @@ final class PhabricatorRemarkupRuleYoutube
     }
 
     $youtube_src = 'https://www.youtube.com/embed/'.$v;
-    $iframe = hsprintf(
-      '<div class="embedded-youtube-video">%s</div>',
-      phutil_tag(
+    $iframe = $this->newTag(
+      'div',
+      array(
+        'class' => 'embedded-youtube-video',
+      ),
+      $this->newTag(
         'iframe',
         array(
           'width'       => '650',

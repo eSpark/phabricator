@@ -13,7 +13,7 @@ abstract class PhortuneController extends PhabricatorController {
     } else if (count($accounts) == 1) {
       return head($accounts);
     } else {
-      throw new Exception("TODO: No account selection yet.");
+      throw new Exception('TODO: No account selection yet.');
     }
   }
 
@@ -35,7 +35,8 @@ abstract class PhortuneController extends PhabricatorController {
           '=' => array($user->getPHID() => $user->getPHID()),
         ));
 
-    $account = new PhortuneAccount();
+    $account = id(new PhortuneAccount())
+      ->attachMemberPHIDs(array());
 
     $editor = id(new PhortuneAccountEditor())
       ->setActor($user)

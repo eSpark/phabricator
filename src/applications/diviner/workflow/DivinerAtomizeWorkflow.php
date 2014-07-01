@@ -30,13 +30,13 @@ final class DivinerAtomizeWorkflow extends DivinerWorkflow {
   }
 
   public function execute(PhutilArgumentParser $args) {
-    $this->readBookConfiguration($args);
+    $this->readBookConfiguration($args->getArg('book'));
 
     $console = PhutilConsole::getConsole();
 
     $atomizer_class = $args->getArg('atomizer');
     if (!$atomizer_class) {
-      throw new Exception("Specify an atomizer class with --atomizer.");
+      throw new Exception('Specify an atomizer class with --atomizer.');
     }
 
     $symbols = id(new PhutilSymbolLoader())
@@ -54,7 +54,7 @@ final class DivinerAtomizeWorkflow extends DivinerWorkflow {
 
     $files = $args->getArg('files');
     if (!$files) {
-      throw new Exception("Specify one or more files to atomize.");
+      throw new Exception('Specify one or more files to atomize.');
     }
 
     $file_atomizer = new DivinerFileAtomizer();
@@ -63,7 +63,18 @@ final class DivinerAtomizeWorkflow extends DivinerWorkflow {
       $configure->setBook($this->getConfig('name'));
     }
 
+    $group_rules = array();
+    foreach ($this->getConfig('groups', array()) as $group => $spec) {
+      $include = (array)idx($spec, 'include', array());
+      foreach ($include as $pattern) {
+        $group_rules[$pattern] = $group;
+      }
+    }
+
     $all_atoms = array();
+    $context = array(
+      'group' => null,
+    );
     foreach ($files as $file) {
       $abs_path = Filesystem::resolvePath($file, $this->getConfig('root'));
       $data = Filesystem::readFile($abs_path);
@@ -75,18 +86,28 @@ final class DivinerAtomizeWorkflow extends DivinerWorkflow {
         $console->writeLog("Atomizing %s...\n", $file);
       }
 
-      $file_atoms = $file_atomizer->atomize($file, $data);
+      $context['group'] = null;
+      foreach ($group_rules as $rule => $group) {
+        if (preg_match($rule, $file)) {
+          $context['group'] = $group;
+          break;
+        }
+      }
+
+      $file_atoms = $file_atomizer->atomize($file, $data, $context);
       $all_atoms[] = $file_atoms;
 
       if (count($file_atoms) !== 1) {
-        throw new Exception("Expected exactly one atom from file atomizer.");
+        throw new Exception('Expected exactly one atom from file atomizer.');
       }
       $file_atom = head($file_atoms);
 
-      $atoms = $atomizer->atomize($file, $data);
+      $atoms = $atomizer->atomize($file, $data, $context);
 
       foreach ($atoms as $atom) {
-        $file_atom->addChild($atom);
+        if (!$atom->hasParent()) {
+          $file_atom->addChild($atom);
+        }
       }
 
       $all_atoms[] = $atoms;

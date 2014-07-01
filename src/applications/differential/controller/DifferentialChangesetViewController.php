@@ -2,8 +2,8 @@
 
 final class DifferentialChangesetViewController extends DifferentialController {
 
-  public function shouldRequireLogin() {
-    return !$this->allowsAnonymousAccess();
+  public function shouldAllowPublic() {
+    return true;
   }
 
   public function processRequest() {
@@ -23,14 +23,33 @@ final class DifferentialChangesetViewController extends DifferentialController {
     $id = (int)$id;
     $vs = (int)$vs;
 
-    $changeset = id(new DifferentialChangeset())->load($id);
+    $load_ids = array($id);
+    if ($vs && ($vs != -1)) {
+      $load_ids[] = $vs;
+    }
+
+    $changesets = id(new DifferentialChangesetQuery())
+      ->setViewer($request->getUser())
+      ->withIDs($load_ids)
+      ->needHunks(true)
+      ->execute();
+    $changesets = mpull($changesets, null, 'getID');
+
+    $changeset = idx($changesets, $id);
     if (!$changeset) {
       return new Aphront404Response();
     }
 
+    $vs_changeset = null;
+    if ($vs && ($vs != -1)) {
+      $vs_changeset = idx($changesets, $vs);
+      if (!$vs_changeset) {
+        return new Aphront404Response();
+      }
+    }
+
     $view = $request->getStr('view');
     if ($view) {
-      $changeset->attachHunks($changeset->loadHunks());
       $phid = idx($changeset->getMetadata(), "$view:binary-phid");
       if ($phid) {
         return id(new AphrontRedirectResponse())->setURI("/file/info/$phid/");
@@ -39,23 +58,12 @@ final class DifferentialChangesetViewController extends DifferentialController {
         case 'new':
           return $this->buildRawFileResponse($changeset, $is_new = true);
         case 'old':
-          if ($vs && ($vs != -1)) {
-            $vs_changeset = id(new DifferentialChangeset())->load($vs);
-            if ($vs_changeset) {
-              $vs_changeset->attachHunks($vs_changeset->loadHunks());
-              return $this->buildRawFileResponse($vs_changeset, $is_new = true);
-            }
+          if ($vs_changeset) {
+            return $this->buildRawFileResponse($vs_changeset, $is_new = true);
           }
           return $this->buildRawFileResponse($changeset, $is_new = false);
         default:
           return new Aphront400Response();
-      }
-    }
-
-    if ($vs && ($vs != -1)) {
-      $vs_changeset = id(new DifferentialChangeset())->load($vs);
-      if (!$vs_changeset) {
-        return new Aphront404Response();
       }
     }
 
@@ -92,15 +100,6 @@ final class DifferentialChangesetViewController extends DifferentialController {
     }
 
     if ($left) {
-      $left->attachHunks($left->loadHunks());
-    }
-
-    if ($right) {
-      $right->attachHunks($right->loadHunks());
-    }
-
-    if ($left) {
-
       $left_data = $left->makeNewFile();
       if ($right) {
         $right_data = $right->makeNewFile();
@@ -156,6 +155,8 @@ final class DifferentialChangesetViewController extends DifferentialController {
     $parser->setRightSideCommentMapping($right_source, $right_new);
     $parser->setLeftSideCommentMapping($left_source, $left_new);
     $parser->setWhitespaceMode($request->getStr('whitespace'));
+    $parser->setCharacterEncoding($request->getStr('encoding'));
+    $parser->setHighlightAs($request->getStr('highlight'));
 
     if ($request->getStr('renderer') == '1up') {
       $parser->setRenderer(new DifferentialChangesetOneUpRenderer());
@@ -253,12 +254,34 @@ final class DifferentialChangesetViewController extends DifferentialController {
       ),
       $detail->render()));
 
-    return $this->buildStandardPageResponse(
+    $crumbs = $this->buildApplicationCrumbs();
+
+    $revision_id = $changeset->getDiff()->getRevisionID();
+    if ($revision_id) {
+      $crumbs->addTextCrumb('D'.$revision_id, '/D'.$revision_id);
+    }
+
+    $diff_id = $changeset->getDiff()->getID();
+    if ($diff_id) {
+      $crumbs->addTextCrumb(
+        pht('Diff %d', $diff_id),
+        $this->getApplicationURI('diff/'.$diff_id));
+    }
+
+    $crumbs->addTextCrumb($changeset->getDisplayFilename());
+
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Standalone View'))
+      ->appendChild($panel);
+
+    return $this->buildApplicationPage(
       array(
-        $panel
+        $crumbs,
+        $box,
       ),
       array(
         'title' => pht('Changeset View'),
+        'device' => false,
       ));
   }
 
@@ -268,15 +291,16 @@ final class DifferentialChangesetViewController extends DifferentialController {
       return;
     }
 
-    return id(new DifferentialInlineComment())->loadAllWhere(
-      'changesetID IN (%Ld) AND (commentID IS NOT NULL OR authorPHID = %s)',
-      $changeset_ids,
-      $author_phid);
+    return id(new DifferentialInlineCommentQuery())
+      ->withViewerAndChangesetIDs($author_phid, $changeset_ids)
+      ->execute();
   }
 
   private function buildRawFileResponse(
     DifferentialChangeset $changeset,
     $is_new) {
+
+    $viewer = $this->getRequest()->getUser();
 
     if ($is_new) {
       $key = 'raw:new:phid';
@@ -289,9 +313,13 @@ final class DifferentialChangesetViewController extends DifferentialController {
     $file = null;
     $phid = idx($metadata, $key);
     if ($phid) {
-      $file = id(new PhabricatorFile())->loadOneWhere(
-        'phid = %s',
-        $phid);
+      $file = id(new PhabricatorFileQuery())
+        ->setViewer($viewer)
+        ->withPHIDs(array($phid))
+        ->execute();
+      if ($file) {
+        $file = head($file);
+      }
     }
 
     if (!$file) {
@@ -340,7 +368,7 @@ final class DifferentialChangesetViewController extends DifferentialController {
       }
       $inline = new DifferentialInlineComment();
       $inline->setChangesetID($changeset->getID());
-      $inline->setIsNewFile(true);
+      $inline->setIsNewFile(1);
       $inline->setSyntheticAuthor('Lint: '.$msg['name']);
       $inline->setLineNumber($msg['line']);
       $inline->setLineLength(0);

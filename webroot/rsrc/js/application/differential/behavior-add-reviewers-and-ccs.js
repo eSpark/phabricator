@@ -18,7 +18,8 @@ JX.behavior('differential-add-reviewers-and-ccs', function(config) {
     dynamic[k] = {
       row : JX.$(props.row),
       tokenizer : tokenizer,
-      actions : props.actions
+      actions : props.actions,
+      labels: props.labels
     };
   }
 
@@ -26,11 +27,17 @@ JX.behavior('differential-add-reviewers-and-ccs', function(config) {
     JX.$(config.select),
     'change',
     null,
-    function(e) {
+    function() {
       var v = JX.$(config.select).value;
       for (var k in dynamic) {
         if (dynamic[k].actions[v]) {
           JX.DOM.show(dynamic[k].row);
+          if (dynamic[k].labels) {
+            var label_node = JX.DOM.find(dynamic[k].row, 'label');
+            if (label_node) {
+              JX.DOM.setContent(label_node, dynamic[k].labels[v]);
+            }
+          }
           dynamic[k].tokenizer.refresh();
         } else {
           JX.DOM.hide(dynamic[k].row);
@@ -38,4 +45,3 @@ JX.behavior('differential-add-reviewers-and-ccs', function(config) {
       }
     });
 });
-

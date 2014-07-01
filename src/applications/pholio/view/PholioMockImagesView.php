@@ -1,15 +1,29 @@
 <?php
 
+/**
+ * @group pholio
+ */
 final class PholioMockImagesView extends AphrontView {
 
   private $mock;
   private $imageID;
   private $requestURI;
+  private $commentFormID;
+
+  public function setCommentFormID($comment_form_id) {
+    $this->commentFormID = $comment_form_id;
+    return $this;
+  }
+
+  public function getCommentFormID() {
+    return $this->commentFormID;
+  }
 
   public function setRequestURI(PhutilURI $request_uri) {
     $this->requestURI = $request_uri;
     return $this;
   }
+
   public function getRequestURI() {
     return $this->requestURI;
   }
@@ -30,7 +44,7 @@ final class PholioMockImagesView extends AphrontView {
 
   public function render() {
     if (!$this->mock) {
-      throw new Exception("Call setMock() before render()!");
+      throw new Exception('Call setMock() before render()!');
     }
 
     $mock = $this->mock;
@@ -48,23 +62,63 @@ final class PholioMockImagesView extends AphrontView {
       $selected_id = head_key($ids);
     }
 
-    foreach ($mock->getImages() as $image) {
+    // TODO: We could maybe do a better job with tailoring this, which is the
+    // image shown on the review stage.
+    $nonimage_uri = celerity_get_resource_uri(
+      'rsrc/image/icon/fatcow/thumbnails/default.p100.png');
+
+    $engine = id(new PhabricatorMarkupEngine())
+      ->setViewer($this->getUser());
+    foreach ($mock->getAllImages() as $image) {
+      $engine->addObject($image, 'default');
+    }
+    $engine->process();
+    $current_set = 0;
+    foreach ($mock->getAllImages() as $image) {
       $file = $image->getFile();
       $metadata = $file->getMetadata();
       $x = idx($metadata, PhabricatorFile::METADATA_IMAGE_WIDTH);
       $y = idx($metadata, PhabricatorFile::METADATA_IMAGE_HEIGHT);
 
+      $is_obs = (bool)$image->getIsObsolete();
+      if (!$is_obs) {
+        $current_set++;
+      }
+
+      $history_uri = '/pholio/image/history/'.$image->getID().'/';
       $images[] = array(
-        'id'      => $image->getID(),
-        'fullURI' => $image->getFile()->getBestURI(),
-        'pageURI' => '/M'.$mock->getID().'/'.$image->getID().'/',
-        'width'   => $x,
-        'height'  => $y,
-        'title'   => $file->getName(),
-        'desc'    => 'Lorem ipsum dolor sit amet: there is no way to set any '.
-                     'descriptive text yet; were there, it would appear here.',
+        'id' => $image->getID(),
+        'fullURI' => $file->getBestURI(),
+        'stageURI' => ($file->isViewableImage()
+          ? $file->getBestURI()
+          : $nonimage_uri),
+        'pageURI' => $this->getImagePageURI($image, $mock),
+        'downloadURI' => $file->getDownloadURI(),
+        'historyURI' => $history_uri,
+        'width' => $x,
+        'height' => $y,
+        'title' => $image->getName(),
+        'descriptionMarkup' => $engine->getOutput($image, 'default'),
+        'isObsolete' => (bool)$image->getIsObsolete(),
+        'isImage' => $file->isViewableImage(),
+        'isViewable' => $file->isViewableInBrowser(),
       );
     }
+
+    $navsequence = array();
+    foreach ($mock->getImages() as $image) {
+      $navsequence[] = $image->getID();
+    }
+
+    $full_icon = array(
+      javelin_tag('span', array('aural' => true), pht('View Raw File')),
+      id(new PHUIIconView())->setIconFont('fa-file-image-o'),
+    );
+
+    $download_icon = array(
+      javelin_tag('span', array('aural' => true), pht('Download File')),
+      id(new PHUIIconView())->setIconFont('fa-download'),
+    );
 
     $login_uri = id(new PhutilURI('/login/'))
       ->setQueryParam('next', (string) $this->getRequestURI());
@@ -72,10 +126,15 @@ final class PholioMockImagesView extends AphrontView {
       'mockID' => $mock->getID(),
       'panelID' => $panel_id,
       'viewportID' => $viewport_id,
+      'commentFormID' => $this->getCommentFormID(),
       'images' => $images,
       'selectedID' => $selected_id,
       'loggedIn' => $this->getUser()->isLoggedIn(),
-      'logInLink' => (string) $login_uri
+      'logInLink' => (string) $login_uri,
+      'navsequence' => $navsequence,
+      'fullIcon' => hsprintf('%s', $full_icon),
+      'downloadIcon' => hsprintf('%s', $download_icon),
+      'currentSetSize' => $current_set,
     );
     Javelin::initBehavior('pholio-mock-view', $config);
 
@@ -90,6 +149,14 @@ final class PholioMockImagesView extends AphrontView {
       ),
       '');
 
+    $image_header = javelin_tag(
+      'div',
+      array(
+        'id' => 'mock-image-header',
+        'class' => 'pholio-mock-image-header',
+      ),
+      '');
+
     $mock_wrapper = javelin_tag(
       'div',
       array(
@@ -97,58 +164,19 @@ final class PholioMockImagesView extends AphrontView {
         'sigil' => 'mock-panel touchable',
         'class' => 'pholio-mock-image-panel',
       ),
-      $mock_wrapper);
+      array(
+        $image_header,
+        $mock_wrapper,
+      ));
 
     $inline_comments_holder = javelin_tag(
       'div',
       array(
-        'id' => 'mock-inline-comments',
-        'sigil' => 'mock-inline-comments',
-        'class' => 'pholio-mock-inline-comments'
+        'id' => 'mock-image-description',
+        'sigil' => 'mock-image-description',
+        'class' => 'mock-image-description'
       ),
       '');
-
-    $carousel_holder = '';
-    if (count($mock->getImages()) > 0) {
-      $thumbnails = array();
-      foreach ($mock->getImages() as $image) {
-        $thumbfile = $image->getFile();
-
-        $dimensions = PhabricatorImageTransformer::getPreviewDimensions(
-          $thumbfile,
-          140);
-
-        $tag = phutil_tag(
-          'img',
-          array(
-            'width' => $dimensions['sdx'],
-            'height' => $dimensions['sdy'],
-            'src' => $thumbfile->getPreview140URI(),
-            'class' => 'pholio-mock-carousel-thumbnail',
-            'style' => 'top: '.floor((140 - $dimensions['sdy'] ) / 2).'px',
-        ));
-
-        $thumbnails[] = javelin_tag(
-          'a',
-          array(
-            'sigil' => 'mock-thumbnail',
-            'class' => 'pholio-mock-carousel-thumb-item',
-            'href' => '/M'.$mock->getID().'/'.$image->getID().'/',
-            'meta' => array(
-              'imageID' => $image->getID(),
-            ),
-          ),
-          $tag);
-      }
-
-      $carousel_holder = phutil_tag(
-        'div',
-        array(
-          'id' => 'pholio-mock-carousel',
-          'class' => 'pholio-mock-carousel',
-        ),
-        $thumbnails);
-    }
 
     $mockview[] = phutil_tag(
       'div',
@@ -156,8 +184,13 @@ final class PholioMockImagesView extends AphrontView {
           'class' => 'pholio-mock-image-container',
           'id' => 'pholio-mock-image-container'
         ),
-      array($mock_wrapper, $carousel_holder, $inline_comments_holder));
+      array($mock_wrapper, $inline_comments_holder));
 
     return $mockview;
+  }
+
+  private function getImagePageURI(PholioImage $image, PholioMock $mock) {
+    $uri = '/M'.$mock->getID().'/'.$image->getID().'/';
+    return $uri;
   }
 }

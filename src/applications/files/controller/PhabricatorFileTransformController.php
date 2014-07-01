@@ -7,19 +7,26 @@ final class PhabricatorFileTransformController
   private $phid;
   private $key;
 
+  public function shouldRequireLogin() {
+    return false;
+  }
+
   public function willProcessRequest(array $data) {
     $this->transform = $data['transform'];
     $this->phid      = $data['phid'];
     $this->key       = $data['key'];
   }
 
-  public function shouldRequireLogin() {
-    return false;
-  }
-
   public function processRequest() {
+    $viewer = $this->getRequest()->getUser();
 
-    $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $this->phid);
+    // NOTE: This is a public/CDN endpoint, and permission to see files is
+    // controlled by knowing the secret key, not by authentication.
+
+    $file = id(new PhabricatorFileQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($this->phid))
+      ->executeOne();
     if (!$file) {
       return new Aphront404Response();
     }
@@ -49,14 +56,17 @@ final class PhabricatorFileTransformController
     $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
 
     switch ($this->transform) {
+      case 'thumb-profile':
+        $xformed_file = $this->executeThumbTransform($file, 50, 50);
+        break;
       case 'thumb-280x210':
         $xformed_file = $this->executeThumbTransform($file, 280, 210);
         break;
       case 'thumb-220x165':
         $xformed_file = $this->executeThumbTransform($file, 220, 165);
         break;
-      case 'preview-140':
-        $xformed_file = $this->executePreviewTransform($file, 140);
+      case 'preview-100':
+        $xformed_file = $this->executePreviewTransform($file, 100);
         break;
       case 'preview-220':
         $xformed_file = $this->executePreviewTransform($file, 220);
@@ -102,18 +112,24 @@ final class PhabricatorFileTransformController
     }
 
     switch ($this->transform) {
+      case 'thumb-280x210':
+        $suffix = '280x210';
+        break;
       case 'thumb-160x120':
         $suffix = '160x120';
         break;
       case 'thumb-60x45':
         $suffix = '60x45';
         break;
+      case 'preview-100':
+        $suffix = '.p100';
+        break;
       default:
-        throw new Exception("Unsupported transformation type!");
+        throw new Exception('Unsupported transformation type!');
     }
 
     $path = celerity_get_resource_uri(
-      "/rsrc/image/icon/fatcow/thumbnails/{$prefix}{$suffix}.png");
+      "rsrc/image/icon/fatcow/thumbnails/{$prefix}{$suffix}.png");
 
     return id(new AphrontRedirectResponse())
       ->setURI($path);
@@ -122,20 +138,17 @@ final class PhabricatorFileTransformController
   private function buildTransformedFileResponse(
     PhabricatorTransformedFile $xform) {
 
-    $file = id(new PhabricatorFile())->loadOneWhere(
-      'phid = %s',
-      $xform->getTransformedPHID());
-    if ($file) {
-      $uri = $file->getBestURI();
-    } else {
-      $bad_phid = $xform->getTransformedPHID();
-      throw new Exception(
-        "Unable to load file with phid {$bad_phid}."
-      );
+    $file = id(new PhabricatorFileQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($xform->getTransformedPHID()))
+      ->executeOne();
+    if (!$file) {
+      return new Aphront404Response();
     }
 
     // TODO: We could just delegate to the file view controller instead,
     // which would save the client a roundtrip, but is slightly more complex.
+    $uri = $file->getBestURI();
     return id(new AphrontRedirectResponse())->setURI($uri);
   }
 

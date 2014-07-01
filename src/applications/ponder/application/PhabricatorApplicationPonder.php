@@ -7,7 +7,7 @@ final class PhabricatorApplicationPonder extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Find Answers');
+    return pht('Questions and Answers');
   }
 
   public function getIconName() {
@@ -37,10 +37,6 @@ final class PhabricatorApplicationPonder extends PhabricatorApplication {
     );
   }
 
-  public function getApplicationGroup() {
-    return self::GROUP_COMMUNICATION;
-  }
-
   public function isBeta() {
     return true;
   }
@@ -49,16 +45,18 @@ final class PhabricatorApplicationPonder extends PhabricatorApplication {
     return array(
       '/Q(?P<id>[1-9]\d*)' => 'PonderQuestionViewController',
       '/ponder/' => array(
-        '(?P<page>feed/)?' => 'PonderFeedController',
-        '(?P<page>questions)/' => 'PonderFeedController',
-        '(?P<page>answers)/' => 'PonderFeedController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'PonderQuestionListController',
         'answer/add/' => 'PonderAnswerSaveController',
-        'answer/preview/' => 'PonderAnswerPreviewController',
-        'question/ask/' => 'PonderQuestionAskController',
-        'question/preview/' => 'PonderQuestionPreviewController',
-        'comment/add/' => 'PonderCommentSaveController',
-        '(?P<kind>question)/vote/' => 'PonderVoteSaveController',
-        '(?P<kind>answer)/vote/' => 'PonderVoteSaveController'
+        'answer/edit/(?P<id>\d+)/' => 'PonderAnswerEditController',
+        'answer/comment/(?P<id>\d+)/' => 'PonderAnswerCommentController',
+        'answer/history/(?P<id>\d+)/' => 'PonderAnswerHistoryController',
+        'question/edit/(?:(?P<id>\d+)/)?' => 'PonderQuestionEditController',
+        'question/comment/(?P<id>\d+)/' => 'PonderQuestionCommentController',
+        'question/history/(?P<id>\d+)/' => 'PonderQuestionHistoryController',
+        'preview/' => 'PhabricatorMarkupPreviewController',
+        'question/(?P<status>open|close)/(?P<id>[1-9]\d*)/' =>
+          'PonderQuestionStatusController',
+        'vote/' => 'PonderVoteSaveController',
       ),
     );
   }

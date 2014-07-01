@@ -19,12 +19,15 @@ final class PhabricatorInlineSummaryView extends AphrontView {
   }
 
   private function renderHeader() {
-    return phutil_tag(
-      'div',
+    $icon = id(new PHUIIconView())
+      ->setIconFont('fa-comment bluegrey msr');
+
+    $header = phutil_tag_div(
+      'phabricator-inline-summary',
       array(
-        'class' => 'phabricator-inline-summary',
-      ),
-      'Inline Comments');
+        $icon,
+        pht('Inline Comments')));
+    return $header;
   }
 
   private function renderTable() {
@@ -39,12 +42,12 @@ final class PhabricatorInlineSummaryView extends AphrontView {
         }
       }
 
-      $rows[] = hsprintf('<tr><th colspan="3">%s</th></tr>', $group);
+      $rows[] = phutil_tag(
+        'tr',
+        array(),
+        phutil_tag('th', array('colspan' => 3), $group));
 
       foreach ($items as $item) {
-
-        $items = isort($items, 'line');
-
         $line = $item['line'];
         $length = $item['length'];
         if ($length) {
@@ -64,6 +67,9 @@ final class PhabricatorInlineSummaryView extends AphrontView {
         }
 
         if ($href) {
+          $icon = id(new PHUIIconView())
+            ->setIconFont('fa-share white msr');
+
           $lines = phutil_tag(
             'a',
             array(
@@ -72,6 +78,7 @@ final class PhabricatorInlineSummaryView extends AphrontView {
               'class'   => 'num',
             ),
             array(
+              $icon,
               $lines,
               $tail,
             ));
@@ -80,25 +87,21 @@ final class PhabricatorInlineSummaryView extends AphrontView {
         $where = idx($item, 'where');
 
         $colspan = ($has_where ? null : 2);
-        $rows[] = hsprintf(
-          '<tr>'.
-            '<td class="inline-line-number">%s</td>'.
-            '%s'.
-            '%s'.
-          '</tr>',
-          $lines,
-          ($has_where
-            ? hsprintf('<td class="inline-which-diff">%s</td>', $where)
-            : null),
-          phutil_tag(
-            'td',
-            array(
-              'class' => 'inline-summary-content',
-              'colspan' => $colspan,
-            ),
-            hsprintf(
-              '<div class="phabricator-remarkup">%s</div>',
-              $item['content'])));
+        $rows[] = phutil_tag(
+          'tr',
+          array(),
+          array(
+            phutil_tag('td', array('class' => 'inline-line-number'), $lines),
+            ($has_where
+              ? phutil_tag('td', array('class' => 'inline-which-diff'), $where)
+              : null),
+            phutil_tag(
+              'td',
+              array(
+                'class' => 'inline-summary-content',
+                'colspan' => $colspan,
+              ),
+              phutil_tag_div('phabricator-remarkup', $item['content']))));
       }
     }
 

@@ -11,7 +11,7 @@ final class ConduitAPI_feed_query_Method
   }
 
   public function getMethodDescription() {
-    return "Query the feed for stories";
+    return 'Query the feed for stories';
   }
 
   private function getDefaultLimit() {
@@ -23,16 +23,17 @@ final class ConduitAPI_feed_query_Method
       'filterPHIDs' => 'optional list <phid>',
       'limit' => 'optional int (default '.$this->getDefaultLimit().')',
       'after' => 'optional int',
+      'before' => 'optional int',
       'view' => 'optional string (data, html, html-summary, text)',
     );
   }
 
   private function getSupportedViewTypes() {
     return array(
-        'html' => 'Full HTML presentation of story',
-        'data' => 'Dictionary with various data of the story',
-        'html-summary' => 'Story contains only the title of the story',
-        'text' => 'Simple one-line plain text representation of story',
+      'html' => 'Full HTML presentation of story',
+      'data' => 'Dictionary with various data of the story',
+      'html-summary' => 'Story contains only the title of the story',
+      'text' => 'Simple one-line plain text representation of story',
     );
   }
 
@@ -43,7 +44,7 @@ final class ConduitAPI_feed_query_Method
 
     return array(
       'ERR-UNKNOWN-TYPE' =>
-        'Unsupported view type, possibles are: ' . $view_types
+        'Unsupported view type, possibles are: '.$view_types
     );
   }
 
@@ -69,13 +70,22 @@ final class ConduitAPI_feed_query_Method
     if (!$filter_phids) {
       $filter_phids = array();
     }
-    $after = $request->getValue('after');
 
     $query = id(new PhabricatorFeedQuery())
       ->setLimit($limit)
       ->setFilterPHIDs($filter_phids)
-      ->setViewer($user)
-      ->setAfterID($after);
+      ->setViewer($user);
+
+    $after = $request->getValue('after');
+    if (strlen($after)) {
+      $query->setAfterID($after);
+    }
+
+    $before = $request->getValue('before');
+    if (strlen($before)) {
+      $query->setBeforeID($before);
+    }
+
     $stories = $query->execute();
 
     if ($stories) {
@@ -85,7 +95,14 @@ final class ConduitAPI_feed_query_Method
 
         $data = null;
 
-        $view = $story->renderView();
+        try {
+          $view = $story->renderView();
+        } catch (Exception $ex) {
+          // When stories fail to render, just fail that story.
+          phlog($ex);
+          continue;
+        }
+
         $view->setEpoch($story->getEpoch());
         $view->setUser($user);
 
@@ -111,6 +128,7 @@ final class ConduitAPI_feed_query_Method
               'epoch' => $story_data->getEpoch(),
               'authorPHID' => $story_data->getAuthorPHID(),
               'chronologicalKey' => $story_data->getChronologicalKey(),
+              'objectPHID' => $story->getPrimaryObjectPHID(),
               'text' => $story->renderText()
             );
           break;

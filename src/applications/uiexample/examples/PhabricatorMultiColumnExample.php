@@ -31,14 +31,14 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
         ),
         'Army of Darkness');
 
-    $head1 = id(new PhabricatorHeaderView())
+    $head1 = id(new PHUIHeaderView())
       ->setHeader(pht('2 Column Fixed'));
     $layout1 = id(new AphrontMultiColumnView())
       ->addColumn($column1)
       ->addColumn($column2)
       ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
 
-    $head2 = id(new PhabricatorHeaderView())
+    $head2 = id(new PHUIHeaderView())
       ->setHeader(pht('2 Column Fluid'));
     $layout2 = id(new AphrontMultiColumnView())
       ->addColumn($column1)
@@ -46,7 +46,7 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
       ->setFluidLayout(true)
       ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
 
-    $head3 = id(new PhabricatorHeaderView())
+    $head3 = id(new PHUIHeaderView())
       ->setHeader(pht('4 Column Fixed'));
     $layout3 = id(new AphrontMultiColumnView())
       ->addColumn($column1)
@@ -55,7 +55,7 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
       ->addColumn($column2)
       ->setGutter(AphrontMultiColumnView::GUTTER_SMALL);
 
-    $head4 = id(new PhabricatorHeaderView())
+    $head4 = id(new PHUIHeaderView())
       ->setHeader(pht('4 Column Fluid'));
     $layout4 = id(new AphrontMultiColumnView())
       ->addColumn($column1)
@@ -86,7 +86,7 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
     $saturday = hsprintf('<strong>Saturday</strong><br /><br />StarCraft II'.
       '<br />All<br />Damn<br />Day');
 
-    $head5 = id(new PhabricatorHeaderView())
+    $head5 = id(new PHUIHeaderView())
       ->setHeader(pht('7 Column Fluid'));
     $layout5 = id(new AphrontMultiColumnView())
       ->addColumn($sunday)
@@ -97,9 +97,9 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
       ->addColumn($friday)
       ->addColumn($saturday)
       ->setFluidLayout(true)
-      ->setShadow(true);
+      ->setBorder(true);
 
-    $shipping = id(new AphrontFormLayoutView())
+    $shipping = id(new PHUIFormLayoutView())
       ->setUser($user)
       ->setFullWidth(true)
       ->appendChild(
@@ -128,7 +128,7 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
         ->setDisableAutocomplete(true)
         ->setSigil('postal-input'));
 
-    $cc = id(new AphrontFormLayoutView())
+    $cc = id(new PHUIFormLayoutView())
       ->setUser($user)
       ->setFullWidth(true)
       ->appendChild(
@@ -153,14 +153,14 @@ final class PhabricatorMultiColumnExample extends PhabricatorUIExample {
     $billing_title = pht('Billing Address');
     $cc_title = pht('Payment Information');
 
-    $head6 = id(new PhabricatorHeaderView())
+    $head6 = id(new PHUIHeaderView())
       ->setHeader(pht('Let\'s Go Shopping'));
     $layout6 = id(new AphrontMultiColumnView())
       ->addColumn(hsprintf('<h1>%s</h1>%s', $shipping_title, $shipping))
       ->addColumn(hsprintf('<h1>%s</h1>%s', $billing_title, $shipping))
       ->addColumn(hsprintf('<h1>%s</h1>%s', $cc_title, $cc))
       ->setFluidLayout(true)
-      ->setShadow(true);
+      ->setBorder(true);
 
     $wrap1 = phutil_tag(
       'div',

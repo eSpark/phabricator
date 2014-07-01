@@ -45,15 +45,13 @@ abstract class PhabricatorOwnersController extends PhabricatorController {
     }
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName($title));
+    $crumbs->addTextCrumb($title);
 
     $crumbs->addAction(
-      id(new PhabricatorMenuItemView())
+      id(new PHUIListItemView())
         ->setName(pht('Create Package'))
         ->setHref('/owners/new/')
-        ->setIcon('create'));
+        ->setIcon('fa-plus-square'));
 
     $nav->setCrumbs($crumbs);
 

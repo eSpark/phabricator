@@ -1,13 +1,13 @@
 <?php
 
-/**
- * @group phriction
- */
 final class PhrictionDocumentQuery
   extends PhabricatorCursorPagedPolicyAwareQuery {
 
   private $ids;
   private $phids;
+  private $slugs;
+
+  private $needContent;
 
   private $status       = 'status-any';
   const STATUS_ANY      = 'status-any';
@@ -28,8 +28,18 @@ final class PhrictionDocumentQuery
     return $this;
   }
 
+  public function withSlugs(array $slugs) {
+    $this->slugs = $slugs;
+    return $this;
+  }
+
   public function withStatus($status) {
     $this->status = $status;
+    return $this;
+  }
+
+  public function needContent($need_content) {
+    $this->needContent = $need_content;
     return $this;
   }
 
@@ -39,36 +49,114 @@ final class PhrictionDocumentQuery
   }
 
   protected function loadPage() {
-    $document = new PhrictionDocument();
-    $conn_r = $document->establishConnection('r');
+    $table = new PhrictionDocument();
+    $conn_r = $table->establishConnection('r');
 
     $rows = queryfx_all(
       $conn_r,
       'SELECT * FROM %T %Q %Q %Q',
-      $document->getTableName(),
+      $table->getTableName(),
       $this->buildWhereClause($conn_r),
       $this->buildOrderClause($conn_r),
       $this->buildLimitClause($conn_r));
 
-    return $document->loadAllFromArray($rows);
+    $documents = $table->loadAllFromArray($rows);
+
+    if ($documents) {
+      $ancestor_slugs = array();
+      foreach ($documents as $key => $document) {
+        $document_slug = $document->getSlug();
+        foreach (PhabricatorSlug::getAncestry($document_slug) as $ancestor) {
+          $ancestor_slugs[$ancestor][] = $key;
+        }
+      }
+
+      if ($ancestor_slugs) {
+        $ancestors = queryfx_all(
+          $conn_r,
+          'SELECT * FROM %T WHERE slug IN (%Ls)',
+          $document->getTableName(),
+          array_keys($ancestor_slugs));
+        $ancestors = $table->loadAllFromArray($ancestors);
+        $ancestors = mpull($ancestors, null, 'getSlug');
+
+        foreach ($ancestor_slugs as $ancestor_slug => $document_keys) {
+          $ancestor = idx($ancestors, $ancestor_slug);
+          foreach ($document_keys as $document_key) {
+            $documents[$document_key]->attachAncestor(
+              $ancestor_slug,
+              $ancestor);
+          }
+        }
+      }
+    }
+
+    return $documents;
   }
 
   protected function willFilterPage(array $documents) {
-    if (!$documents) {
-      return array();
+    // To view a Phriction document, you must also be able to view all of the
+    // ancestor documents. Filter out documents which have ancestors that are
+    // not visible.
+
+    $document_map = array();
+    foreach ($documents as $document) {
+      $document_map[$document->getSlug()] = $document;
+      foreach ($document->getAncestors() as $key => $ancestor) {
+        if ($ancestor) {
+          $document_map[$key] = $ancestor;
+        }
+      }
     }
 
-    $contents = id(new PhrictionContent())->loadAllWhere(
-      'id IN (%Ld)',
-      mpull($documents, 'getContentID'));
+    $filtered_map = $this->applyPolicyFilter(
+      $document_map,
+      array(PhabricatorPolicyCapability::CAN_VIEW));
 
-    foreach ($documents as $key => $document) {
-      $content_id = $document->getContentID();
-      if (empty($contents[$content_id])) {
-        unset($documents[$key]);
+    // Filter all of the documents where a parent is not visible.
+    foreach ($documents as $document_key => $document) {
+      // If the document itself is not visible, filter it.
+      if (!isset($filtered_map[$document->getSlug()])) {
+        $this->didRejectResult($documents[$document_key]);
+        unset($documents[$document_key]);
         continue;
       }
-      $document->attachContent($contents[$content_id]);
+
+      // If an ancestor exists but is not visible, filter the document.
+      foreach ($document->getAncestors() as $ancestor_key => $ancestor) {
+        if (!$ancestor) {
+          continue;
+        }
+
+        if (!isset($filtered_map[$ancestor_key])) {
+          $this->didRejectResult($documents[$document_key]);
+          unset($documents[$document_key]);
+          break;
+        }
+      }
+    }
+
+    if (!$documents) {
+      return $documents;
+    }
+
+    if ($this->needContent) {
+      $contents = id(new PhrictionContent())->loadAllWhere(
+        'id IN (%Ld)',
+        mpull($documents, 'getContentID'));
+
+      foreach ($documents as $key => $document) {
+        $content_id = $document->getContentID();
+        if (empty($contents[$content_id])) {
+          unset($documents[$key]);
+          continue;
+        }
+        $document->attachContent($contents[$content_id]);
+      }
+    }
+
+    foreach ($documents as $document) {
+      $document->attachProject(null);
     }
 
     $project_slugs = array();
@@ -115,8 +203,15 @@ final class PhrictionDocumentQuery
     if ($this->phids) {
       $where[] = qsprintf(
         $conn,
-        'id IN (%Ld)',
+        'phid IN (%Ls)',
         $this->phids);
+    }
+
+    if ($this->slugs) {
+      $where[] = qsprintf(
+        $conn,
+        'slug IN (%Ls)',
+        $this->slugs);
     }
 
     switch ($this->status) {
@@ -170,6 +265,11 @@ final class PhrictionDocumentQuery
       default:
         throw new Exception("Unknown order '{$this->order}'!");
     }
+  }
+
+
+  public function getQueryApplicationClass() {
+    return 'PhabricatorApplicationPhriction';
   }
 
 }

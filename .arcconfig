@@ -1,11 +1,6 @@
 {
   "project_id" : "phabricator",
-  "conduit_uri" : "http://ph.esparklearning.com/",
-  "lint.engine" : "PhabricatorLintEngine",
+  "phabricator.uri" : "http://ph.esparklearning.com/",
   "unit.engine" : "PhutilUnitTestEngine",
-  "phutil_libraries" : {
-    "phabricator" : "src/"
-  },
-  "lint.xhpast.naminghook" : "PhabricatorSymbolNameLinter",
-  "lint.jshint.config" : "support/jshint/jshintconfig"
+  "load" : ["src/"]
 }

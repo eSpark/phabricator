@@ -2,6 +2,10 @@
 
 final class PhabricatorTokenGivenController extends PhabricatorTokenController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
@@ -18,9 +22,10 @@ final class PhabricatorTokenGivenController extends PhabricatorTokenController {
       $object_phids = mpull($tokens_given, 'getObjectPHID');
       $user_phids = mpull($tokens_given, 'getAuthorPHID');
       $handle_phids = array_merge($object_phids, $user_phids);
-      $handles = id(new PhabricatorObjectHandleData($handle_phids))
+      $handles = id(new PhabricatorHandleQuery())
         ->setViewer($user)
-        ->loadHandles();
+        ->withPHIDs($handle_phids)
+        ->execute();
     }
 
     $tokens = array();
@@ -33,12 +38,12 @@ final class PhabricatorTokenGivenController extends PhabricatorTokenController {
       $tokens = mpull($tokens, null, 'getPHID');
     }
 
-    $list = new PhabricatorObjectItemListView();
+    $list = new PHUIObjectItemListView();
     foreach ($tokens_given as $token_given) {
       $handle = $handles[$token_given->getObjectPHID()];
       $token = idx($tokens, $token_given->getTokenPHID());
 
-      $item = id(new PhabricatorObjectItemView());
+      $item = id(new PHUIObjectItemView());
       $item->setHeader($handle->getFullName());
       $item->setHref($handle->getURI());
 
@@ -59,9 +64,7 @@ final class PhabricatorTokenGivenController extends PhabricatorTokenController {
     $nav = $this->buildSideNav();
     $nav->setCrumbs(
       $this->buildApplicationCrumbs()
-        ->addCrumb(
-          id(new PhabricatorCrumbView())
-            ->setName($title)));
+        ->addTextCrumb($title));
     $nav->selectFilter('given/');
 
     $nav->appendChild($list);
@@ -70,8 +73,6 @@ final class PhabricatorTokenGivenController extends PhabricatorTokenController {
       $nav,
       array(
         'title' => $title,
-        'device' => true,
-        'dust' => true,
       ));
   }
 

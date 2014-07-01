@@ -79,45 +79,94 @@ final class AphrontCursorPagerView extends AphrontView {
     return $results;
   }
 
+  public function willShowPagingControls() {
+    return $this->prevPageID ||
+           $this->nextPageID ||
+           $this->afterID ||
+           ($this->beforeID && $this->moreResults);
+  }
+
+  public function getFirstPageURI() {
+    if (!$this->uri) {
+      throw new Exception(
+        pht('You must call setURI() before you can call getFirstPageURI().'));
+    }
+
+    if (!$this->afterID && !($this->beforeID && $this->moreResults)) {
+      return null;
+    }
+
+    return $this->uri
+      ->alter('before', null)
+      ->alter('after', null);
+  }
+
+  public function getPrevPageURI() {
+    if (!$this->uri) {
+      throw new Exception(
+        pht('You must call setURI() before you can call getPrevPageURI().'));
+    }
+
+    if (!$this->prevPageID) {
+      return null;
+    }
+
+    return $this->uri
+      ->alter('after', null)
+      ->alter('before', $this->prevPageID);
+  }
+
+  public function getNextPageURI() {
+    if (!$this->uri) {
+      throw new Exception(
+        pht('You must call setURI() before you can call getNextPageURI().'));
+    }
+
+    if (!$this->nextPageID) {
+      return null;
+    }
+
+    return $this->uri
+      ->alter('after', $this->nextPageID)
+      ->alter('before', null);
+  }
+
   public function render() {
     if (!$this->uri) {
       throw new Exception(
-        pht("You must call setURI() before you can call render()."));
+        pht('You must call setURI() before you can call render().'));
     }
 
     $links = array();
 
-    if ($this->afterID || ($this->beforeID && $this->moreResults)) {
+    $first_uri = $this->getFirstPageURI();
+    if ($first_uri) {
       $links[] = phutil_tag(
         'a',
         array(
-          'href' => $this->uri
-            ->alter('before', null)
-            ->alter('after', null),
+          'href' => $first_uri,
         ),
-        "\xC2\xAB ". pht("First"));
+        "\xC2\xAB ".pht('First'));
     }
 
-    if ($this->prevPageID) {
+    $prev_uri = $this->getPrevPageURI();
+    if ($prev_uri) {
       $links[] = phutil_tag(
         'a',
         array(
-          'href' => $this->uri
-            ->alter('after', null)
-            ->alter('before', $this->prevPageID),
+          'href' => $prev_uri,
         ),
-        "\xE2\x80\xB9 " . pht("Prev"));
+        "\xE2\x80\xB9 ".pht('Prev'));
     }
 
-    if ($this->nextPageID) {
+    $next_uri = $this->getNextPageURI();
+    if ($next_uri) {
       $links[] = phutil_tag(
         'a',
         array(
-          'href' => $this->uri
-            ->alter('after', $this->nextPageID)
-            ->alter('before', null),
+          'href' => $next_uri,
         ),
-        "Next \xE2\x80\xBA");
+        pht('Next')." \xE2\x80\xBA");
     }
 
     return phutil_tag(

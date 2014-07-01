@@ -32,17 +32,29 @@ final class PhabricatorSubscriptionsEditController
     $user = $request->getUser();
     $phid = $this->phid;
 
-    // TODO: This is a policy test because `loadObjects()` is not currently
-    // policy-aware. Once it is, we can collapse this.
-    $handle = PhabricatorObjectHandleData::loadOneHandle($phid, $user);
-    if (!$handle->isComplete()) {
-      return new Aphront404Response();
-    }
-
-    $objects = id(new PhabricatorObjectHandleData(array($phid)))
+    $handle = id(new PhabricatorHandleQuery())
       ->setViewer($user)
-      ->loadObjects();
-    $object = idx($objects, $phid);
+      ->withPHIDs(array($phid))
+      ->executeOne();
+
+    if (phid_get_type($phid) == PhabricatorProjectPHIDTypeProject::TYPECONST) {
+      // TODO: This is a big hack, but a weak argument for adding some kind
+      // of "load for role" feature to ObjectQuery, and also not a really great
+      // argument for adding some kind of "load extra stuff" feature to
+      // SubscriberInterface. Do this for now and wait for the best way forward
+      // to become more clear?
+
+      $object = id(new PhabricatorProjectQuery())
+        ->setViewer($user)
+        ->withPHIDs(array($phid))
+        ->needWatchers(true)
+        ->executeOne();
+    } else {
+      $object = id(new PhabricatorObjectQuery())
+        ->setViewer($user)
+        ->withPHIDs(array($phid))
+        ->executeOne();
+    }
 
     if (!($object instanceof PhabricatorSubscribableInterface)) {
       return $this->buildErrorResponse(
@@ -58,6 +70,13 @@ final class PhabricatorSubscriptionsEditController
         $handle->getURI());
     }
 
+    if (!$object->shouldAllowSubscription($user->getPHID())) {
+      return $this->buildErrorResponse(
+        pht('You Can Not Subscribe'),
+        pht('You can not subscribe to this object.'),
+        $handle->getURI());
+    }
+
     if ($object instanceof PhabricatorApplicationTransactionInterface) {
       if ($is_add) {
         $xaction_value = array(
@@ -69,7 +88,7 @@ final class PhabricatorSubscriptionsEditController
         );
       }
 
-      $xaction = id($object->getApplicationTransactionObject())
+      $xaction = id($object->getApplicationTransactionTemplate())
         ->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS)
         ->setNewValue($xaction_value);
 
@@ -78,7 +97,9 @@ final class PhabricatorSubscriptionsEditController
         ->setContinueOnNoEffect(true)
         ->setContentSourceFromRequest($request);
 
-      $editor->applyTransactions($object, array($xaction));
+      $editor->applyTransactions(
+        $object->getApplicationTransactionObject(),
+        array($xaction));
     } else {
 
       // TODO: Eventually, get rid of this once everything implements

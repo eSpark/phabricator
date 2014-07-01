@@ -15,21 +15,18 @@ final class PhabricatorConfigListController
 
     $title = pht('Phabricator Configuration');
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->appendChild($list);
 
     $nav->appendChild(
       array(
-        $header,
-        $list,
+        $box
       ));
 
     $crumbs = $this
       ->buildApplicationCrumbs()
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName(pht('Config'))
-          ->setHref($this->getApplicationURI()));
+      ->addTextCrumb(pht('Config'), $this->getApplicationURI());
 
     $nav->setCrumbs($crumbs);
 
@@ -37,19 +34,17 @@ final class PhabricatorConfigListController
       $nav,
       array(
         'title' => $title,
-        'device' => true,
-        'dust' => true,
       ));
   }
 
   private function buildConfigOptionsList(array $groups) {
     assert_instances_of($groups, 'PhabricatorApplicationConfigOptions');
 
-    $list = new PhabricatorObjectItemListView();
+    $list = new PHUIObjectItemListView();
     $list->setStackable(true);
     $groups = msort($groups, 'getName');
     foreach ($groups as $group) {
-      $item = id(new PhabricatorObjectItemView())
+      $item = id(new PHUIObjectItemView())
         ->setHeader($group->getName())
         ->setHref('/config/group/'.$group->getKey().'/')
         ->addAttribute($group->getDescription());

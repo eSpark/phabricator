@@ -6,19 +6,23 @@
 final class ConpherenceThread extends ConpherenceDAO
   implements PhabricatorPolicyInterface {
 
-  protected $id;
-  protected $phid;
   protected $title;
   protected $messageCount;
   protected $recentParticipantPHIDs = array();
   protected $mailKey;
 
-  private $participants;
-  private $transactions;
-  private $handles;
-  private $filePHIDs;
-  private $widgetData;
+  private $participants = self::ATTACHABLE;
+  private $transactions = self::ATTACHABLE;
+  private $handles = self::ATTACHABLE;
+  private $filePHIDs = self::ATTACHABLE;
+  private $widgetData = self::ATTACHABLE;
   private $images = array();
+
+  public static function initializeNewThread(PhabricatorUser $sender) {
+    return id(new ConpherenceThread())
+      ->setMessageCount(0)
+      ->setTitle('');
+  }
 
   public function getConfiguration() {
     return array(
@@ -31,7 +35,7 @@ final class ConpherenceThread extends ConpherenceDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_CONP);
+      PhabricatorConpherencePHIDTypeThread::TYPECONST);
   }
 
   public function save() {
@@ -47,12 +51,7 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this;
   }
   public function getParticipants() {
-    if ($this->participants === null) {
-      throw new Exception(
-        'You must attachParticipants first!'
-      );
-    }
-    return $this->participants;
+    return $this->assertAttached($this->participants);
   }
   public function getParticipant($phid) {
     $participants = $this->getParticipants();
@@ -69,12 +68,7 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this;
   }
   public function getHandles() {
-    if ($this->handles === null) {
-      throw new Exception(
-        'You must attachHandles first!'
-      );
-    }
-    return $this->handles;
+    return $this->assertAttached($this->handles);
   }
 
   public function attachTransactions(array $transactions) {
@@ -83,26 +77,14 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this;
   }
   public function getTransactions() {
-    if ($this->transactions === null) {
-      throw new Exception(
-        'You must attachTransactions first!'
-      );
-    }
-    return $this->transactions;
+    return $this->assertAttached($this->transactions);
   }
 
   public function getTransactionsFrom($begin = 0, $amount = null) {
     $length = count($this->transactions);
-    if ($amount === null) {
-      $amount === $length;
-    }
-    if ($this->transactions === null) {
-      throw new Exception(
-        'You must attachTransactions first!'
-      );
-    }
+
     return array_slice(
-      $this->transactions,
+      $this->getTransactions(),
       $length - $begin - $amount,
       $amount);
   }
@@ -112,12 +94,7 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this;
   }
   public function getFilePHIDs() {
-    if ($this->filePHIDs === null) {
-      throw new Exception(
-        'You must attachFilePHIDs first!'
-      );
-    }
-    return $this->filePHIDs;
+    return $this->assertAttached($this->filePHIDs);
   }
 
   public function attachWidgetData(array $widget_data) {
@@ -125,15 +102,10 @@ final class ConpherenceThread extends ConpherenceDAO
     return $this;
   }
   public function getWidgetData() {
-    if ($this->widgetData === null) {
-      throw new Exception(
-        'You must attachWidgetData first!'
-      );
-    }
-    return $this->widgetData;
+    return $this->assertAttached($this->widgetData);
   }
 
-  public function getDisplayData(PhabricatorUser $user, $size) {
+  public function getDisplayData(PhabricatorUser $user) {
     $recent_phids = $this->getRecentParticipantPHIDs();
     $handles = $this->getHandles();
 
@@ -160,7 +132,7 @@ final class ConpherenceThread extends ConpherenceDAO
     $title = $js_title = $this->getTitle();
     if (!$title) {
       $title = $lucky_handle->getName();
-      $js_title = pht('Conpherence');
+      $js_title = pht('[No Title]');
     }
     $img_src = $lucky_handle->getImageURI();
 
@@ -213,8 +185,16 @@ final class ConpherenceThread extends ConpherenceDAO
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
+    // this bad boy isn't even created yet so go nuts $user
+    if (!$this->getID()) {
+      return true;
+    }
     $participants = $this->getParticipants();
     return isset($participants[$user->getPHID()]);
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return pht('Participants in a thread can always view and edit it.');
   }
 
 }

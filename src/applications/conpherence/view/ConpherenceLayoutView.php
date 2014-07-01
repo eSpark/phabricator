@@ -51,46 +51,76 @@ final class ConpherenceLayoutView extends AphrontView {
 
   public function render() {
     require_celerity_resource('conpherence-menu-css');
+    require_celerity_resource('conpherence-message-pane-css');
+    require_celerity_resource('conpherence-widget-pane-css');
 
     $layout_id = celerity_generate_unique_node_id();
 
-    Javelin::initBehavior('conpherence-menu',
+    $selected_id = null;
+    $selected_thread_id = null;
+    if ($this->thread) {
+      $selected_id = $this->thread->getPHID().'-nav-item';
+      $selected_thread_id = $this->thread->getID();
+    }
+    $this->initBehavior('conpherence-menu',
       array(
-        'base_uri' => $this->baseURI,
+        'baseURI' => $this->baseURI,
         'layoutID' => $layout_id,
-        'selectedID' => ($this->thread ? $this->thread->getID() : null),
+        'selectedID' => $selected_id,
+        'selectedThreadID' => $selected_thread_id,
         'role' => $this->role,
         'hasThreadList' => (bool)$this->threadView,
         'hasThread' => (bool)$this->messages,
         'hasWidgets' => false,
       ));
 
-    Javelin::initBehavior(
+    $this->initBehavior(
       'conpherence-widget-pane',
       array(
-        'selectChar' => "\xE2\x96\xBC",
+        'widgetBaseUpdateURI' => $this->baseURI.'update/',
         'widgetRegistry' => array(
           'conpherence-message-pane' => array(
             'name' => pht('Thread'),
+            'icon' => 'fa-comment',
             'deviceOnly' => true,
+            'hasCreate' => false
           ),
           'widgets-people' => array(
             'name' => pht('Participants'),
+            'icon' => 'fa-users',
             'deviceOnly' => false,
+            'hasCreate' => true,
+            'createData' => array(
+              'refreshFromResponse' => true,
+              'action' => ConpherenceUpdateActions::ADD_PERSON,
+              'customHref' => null
+            )
           ),
           'widgets-files' => array(
             'name' => pht('Files'),
+            'icon' => 'fa-files-o',
             'deviceOnly' => false,
+            'hasCreate' => false
           ),
           'widgets-calendar' => array(
             'name' => pht('Calendar'),
+            'icon' => 'fa-calendar',
             'deviceOnly' => false,
+            'hasCreate' => true,
+            'createData' => array(
+              'refreshFromResponse' => false,
+              'action' => ConpherenceUpdateActions::ADD_STATUS,
+              'customHref' => '/calendar/event/create/'
+            )
           ),
           'widgets-settings' => array(
             'name' => pht('Settings'),
+            'icon' => 'fa-wrench',
             'deviceOnly' => false,
+            'hasCreate' => false
           ),
         )));
+
 
     return javelin_tag(
       'div',
@@ -114,13 +144,21 @@ final class ConpherenceLayoutView extends AphrontView {
             'class' => 'conpherence-menu-pane phabricator-side-menu',
             'sigil' => 'conpherence-menu-pane',
           ),
-          nonempty($this->threadView, '')),
+          $this->threadView),
         javelin_tag(
           'div',
           array(
             'class' => 'conpherence-content-pane',
           ),
           array(
+            javelin_tag(
+              'div',
+              array(
+                'class' => 'conpherence-header-pane',
+                'id' => 'conpherence-header-pane',
+                'sigil' => 'conpherence-header-pane',
+              ),
+              nonempty($this->header, '')),
             javelin_tag(
               'div',
               array(
@@ -139,7 +177,7 @@ final class ConpherenceLayoutView extends AphrontView {
                   'a',
                   array(
                     'href' => '/conpherence/new/',
-                    'class' => 'button',
+                    'class' => 'button grey',
                     'sigil' => 'workflow',
                   ),
                   pht('Send a Message'))
@@ -147,24 +185,29 @@ final class ConpherenceLayoutView extends AphrontView {
             javelin_tag(
               'div',
               array(
-                'class' => 'conpherence-header-pane',
-                'id' => 'conpherence-header-pane',
-                'sigil' => 'conpherence-header-pane',
-              ),
-              nonempty($this->header, '')),
-            javelin_tag(
-              'div',
-              array(
                 'class' => 'conpherence-widget-pane',
                 'id' => 'conpherence-widget-pane',
                 'sigil' => 'conpherence-widget-pane',
               ),
-              ''),
+              array(
+                phutil_tag(
+                  'div',
+                  array(
+                    'class' => 'widgets-loading-mask'
+                  ),
+                  ''),
+                javelin_tag(
+                  'div',
+                  array(
+                    'sigil' => 'conpherence-widgets-holder'
+                  ),
+                  ''))),
             javelin_tag(
               'div',
               array(
                 'class' => 'conpherence-message-pane',
-                'id' => 'conpherence-message-pane'
+                'id' => 'conpherence-message-pane',
+                'sigil' => 'conpherence-message-pane'
               ),
               array(
                 javelin_tag(
@@ -175,6 +218,12 @@ final class ConpherenceLayoutView extends AphrontView {
                     'sigil' => 'conpherence-messages',
                   ),
                   nonempty($this->messages, '')),
+                phutil_tag(
+                  'div',
+                  array(
+                    'class' => 'messages-loading-mask',
+                  ),
+                  ''),
                 javelin_tag(
                   'div',
                   array(

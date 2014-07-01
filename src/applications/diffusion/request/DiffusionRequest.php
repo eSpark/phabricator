@@ -4,35 +4,36 @@
  * Contains logic to parse Diffusion requests, which have a complicated URI
  * structure.
  *
- *
  * @task new Creating Requests
  * @task uri Managing Diffusion URIs
- *
- * @group diffusion
  */
 abstract class DiffusionRequest {
 
   protected $callsign;
   protected $path;
   protected $line;
-  protected $symbolicCommit;
-  protected $commit;
-  protected $commitType = 'commit';
-  protected $tagContent;
   protected $branch;
   protected $lint;
+
+  protected $symbolicCommit;
+  protected $symbolicType;
+  protected $stableCommit;
 
   protected $repository;
   protected $repositoryCommit;
   protected $repositoryCommitData;
-  protected $stableCommitName;
   protected $arcanistProjects;
 
   private $initFromConduit = true;
   private $user;
+  private $branchObject = false;
 
   abstract protected function getSupportsBranches();
-  abstract protected function didInitialize();
+  abstract protected function isStableCommit($symbol);
+
+  protected function didInitialize() {
+    return null;
+  }
 
 
 /* -(  Creating Requests  )-------------------------------------------------- */
@@ -46,6 +47,7 @@ abstract class DiffusionRequest {
    * Parameters are:
    *
    *   - `callsign` Repository callsign. Provide this or `repository`.
+   *   - `user` Viewing user. Required if `callsign` is provided.
    *   - `repository` Repository object. Provide this or `callsign`.
    *   - `branch` Optional, branch name.
    *   - `path` Optional, file path.
@@ -63,14 +65,19 @@ abstract class DiffusionRequest {
     } else if (!isset($data['repository']) && !isset($data['callsign'])) {
       throw new Exception(
         "One of 'repository' and 'callsign' is required.");
+    } else if (isset($data['callsign']) && empty($data['user'])) {
+      throw new Exception(
+        "Parameter 'user' is required if 'callsign' is provided.");
     }
 
     if (isset($data['repository'])) {
       $object = self::newFromRepository($data['repository']);
     } else {
-      $object = self::newFromCallsign($data['callsign']);
+      $object = self::newFromCallsign($data['callsign'], $data['user']);
     }
+
     $object->initializeFromDictionary($data);
+
     return $object;
   }
 
@@ -89,7 +96,7 @@ abstract class DiffusionRequest {
     AphrontRequest $request) {
 
     $callsign = phutil_unescape_uri_path_component(idx($data, 'callsign'));
-    $object = self::newFromCallsign($callsign);
+    $object = self::newFromCallsign($callsign, $request->getUser());
 
     $use_branches = $object->getSupportsBranches();
     $parsed = self::parseRequestBlob(idx($data, 'dblob'), $use_branches);
@@ -115,13 +122,18 @@ abstract class DiffusionRequest {
    * Internal. Use @{method:newFromDictionary}, not this method.
    *
    * @param   string              Repository callsign.
+   * @param   PhabricatorUser     Viewing user.
    * @return  DiffusionRequest    New request object.
    * @task new
    */
-  final private static function newFromCallsign($callsign) {
-    $repository = id(new PhabricatorRepository())->loadOneWhere(
-      'callsign = %s',
-      $callsign);
+  final private static function newFromCallsign(
+    $callsign,
+    PhabricatorUser $viewer) {
+
+    $repository = id(new PhabricatorRepositoryQuery())
+      ->setViewer($viewer)
+      ->withCallsigns(array($callsign))
+      ->executeOne();
 
     if (!$repository) {
       throw new Exception("No such repository '{$callsign}'.");
@@ -151,7 +163,7 @@ abstract class DiffusionRequest {
     $class = idx($map, $repository->getVersionControlSystem());
 
     if (!$class) {
-      throw new Exception("Unknown version control system!");
+      throw new Exception('Unknown version control system!');
     }
 
     $object = new $class();
@@ -172,11 +184,10 @@ abstract class DiffusionRequest {
    */
   final private function initializeFromDictionary(array $data) {
     $this->path            = idx($data, 'path');
-    $this->symbolicCommit  = idx($data, 'commit');
-    $this->commit          = idx($data, 'commit');
     $this->line            = idx($data, 'line');
     $this->initFromConduit = idx($data, 'initFromConduit', true);
 
+    $this->symbolicCommit = idx($data, 'commit');
     if ($this->getSupportsBranches()) {
       $this->branch = idx($data, 'branch');
     }
@@ -227,12 +238,93 @@ abstract class DiffusionRequest {
   }
 
   public function getCommit() {
-    return $this->commit;
+
+    // TODO: Probably remove all of this.
+
+    if ($this->getSymbolicCommit() !== null) {
+      return $this->getSymbolicCommit();
+    }
+
+    return $this->getStableCommit();
   }
 
+  /**
+   * Get the symbolic commit associated with this request.
+   *
+   * A symbolic commit may be a commit hash, an abbreviated commit hash, a
+   * branch name, a tag name, or an expression like "HEAD^^^". The symbolic
+   * commit may also be absent.
+   *
+   * This method always returns the symbol present in the original request,
+   * in unmodified form.
+   *
+   * See also @{method:getStableCommit}.
+   *
+   * @return string|null  Symbolic commit, if one was present in the request.
+   */
   public function getSymbolicCommit() {
     return $this->symbolicCommit;
   }
+
+
+  /**
+   * Modify the request to move the symbolic commit elsewhere.
+   *
+   * @param string New symbolic commit.
+   * @return this
+   */
+  public function updateSymbolicCommit($symbol) {
+    $this->symbolicCommit = $symbol;
+    $this->symbolicType = null;
+    $this->stableCommit = null;
+    return $this;
+  }
+
+
+  /**
+   * Get the ref type (`commit` or `tag`) of the location associated with this
+   * request.
+   *
+   * If a symbolic commit is present in the request, this method identifies
+   * the type of the symbol. Otherwise, it identifies the type of symbol of
+   * the location the request is implicitly associated with. This will probably
+   * always be `commit`.
+   *
+   * @return string   Symbolic commit type (`commit` or `tag`).
+   */
+  public function getSymbolicType() {
+    if ($this->symbolicType === null) {
+      // As a side effect, this resolves the symbolic type.
+      $this->getStableCommit();
+    }
+    return $this->symbolicType;
+  }
+
+
+  /**
+   * Retrieve the stable, permanent commit name identifying the repository
+   * location associated with this request.
+   *
+   * This returns a non-symbolic identifier for the current commit: in Git and
+   * Mercurial, a 40-character SHA1; in SVN, a revision number.
+   *
+   * See also @{method:getSymbolicCommit}.
+   *
+   * @return string Stable commit name, like a git hash or SVN revision. Not
+   *                a symbolic commit reference.
+   */
+  public function getStableCommit() {
+    if (!$this->stableCommit) {
+      if ($this->isStableCommit($this->symbolicCommit)) {
+        $this->stableCommit = $this->symbolicCommit;
+        $this->symbolicType = 'commit';
+      } else {
+        $this->queryStableCommit();
+      }
+    }
+    return $this->stableCommit;
+  }
+
 
   public function getBranch() {
     return $this->branch;
@@ -247,24 +339,56 @@ abstract class DiffusionRequest {
   }
 
   public function loadBranch() {
-    return id(new PhabricatorRepositoryBranch())->loadOneWhere(
-      'repositoryID = %d AND name = %s',
-      $this->getRepository()->getID(),
-      $this->getArcanistBranch());
+    // TODO: Get rid of this and do real Queries on real objects.
+
+    if ($this->branchObject === false) {
+      $this->branchObject = PhabricatorRepositoryBranch::loadBranch(
+        $this->getRepository()->getID(),
+        $this->getArcanistBranch());
+    }
+
+    return $this->branchObject;
   }
 
-  public function getTagContent() {
-    return $this->tagContent;
+  public function loadCoverage() {
+    // TODO: This should also die.
+    $branch = $this->loadBranch();
+    if (!$branch) {
+      return;
+    }
+
+    $path = $this->getPath();
+    $path_map = id(new DiffusionPathIDQuery(array($path)))->loadPathIDs();
+
+    $coverage_row = queryfx_one(
+      id(new PhabricatorRepository())->establishConnection('r'),
+      'SELECT * FROM %T WHERE branchID = %d AND pathID = %d
+        ORDER BY commitID DESC LIMIT 1',
+      'repository_coverage',
+      $branch->getID(),
+      $path_map[$path]);
+
+    if (!$coverage_row) {
+      return null;
+    }
+
+    return idx($coverage_row, 'coverage');
   }
+
 
   public function loadCommit() {
     if (empty($this->repositoryCommit)) {
       $repository = $this->getRepository();
 
+      // TODO: (T603) This should be a real query, but we need to sort out
+      // the viewer.
       $commit = id(new PhabricatorRepositoryCommit())->loadOneWhere(
         'repositoryID = %d AND commitIdentifier = %s',
         $repository->getID(),
-        $this->getCommit());
+        $this->getStableCommit());
+      if ($commit) {
+        $commit->attachRepository($repository);
+      }
       $this->repositoryCommit = $commit;
     }
     return $this->repositoryCommit;
@@ -296,31 +420,6 @@ abstract class DiffusionRequest {
     return $this->repositoryCommitData;
   }
 
-  /**
-   * Retrieve a stable, permanent commit name. This returns a non-symbolic
-   * identifier for the current commit: e.g., a specific commit hash in git
-   * (NOT a symbolic name like "origin/master") or a specific revision number
-   * in SVN (NOT a symbolic name like "HEAD").
-   *
-   * @return string Stable commit name, like a git hash or SVN revision. Not
-   *                a symbolic commit reference.
-   */
-  public function getStableCommitName() {
-    if (!$this->stableCommitName) {
-      $this->queryStableCommitName();
-    }
-    return $this->stableCommitName;
-  }
-
-  final public function getRawCommit() {
-    return $this->commit;
-  }
-
-  public function setCommit($commit) {
-    $this->commit = $commit;
-    return $this;
-  }
-
 /* -(  Managing Diffusion URIs  )-------------------------------------------- */
 
 
@@ -335,9 +434,9 @@ abstract class DiffusionRequest {
    */
   public function generateURI(array $params) {
     if (empty($params['stable'])) {
-      $default_commit = $this->getRawCommit();
+      $default_commit = $this->getSymbolicCommit();
     } else {
-      $default_commit = $this->getStableCommitName();
+      $default_commit = $this->getStableCommit();
     }
 
     $defaults = array(
@@ -361,7 +460,8 @@ abstract class DiffusionRequest {
    * and formatting to the URI. Parameters are:
    *
    *   - `action` One of `history`, `browse`, `change`, `lastmodified`,
-   *     `branch` or `revision-ref`. The action specified by the URI.
+   *     `branch`, `tags`, `branches`,  or `revision-ref`. The action specified
+   *      by the URI.
    *   - `callsign` Repository callsign.
    *   - `branch` Optional if action is not `branch`, branch name.
    *   - `path` Optional, path to file.
@@ -439,11 +539,6 @@ abstract class DiffusionRequest {
         "Diffusion URI action '{$action}' requires callsign!");
     }
 
-    if ($req_branch && !strlen($branch)) {
-      throw new Exception(
-        "Diffusion URI action '{$action}' requires branch!");
-    }
-
     if ($req_commit && !strlen($commit)) {
       throw new Exception(
         "Diffusion URI action '{$action}' requires commit!");
@@ -457,10 +552,15 @@ abstract class DiffusionRequest {
       case 'tags':
       case 'branches':
       case 'lint':
+      case 'pathtree':
         $uri = "/diffusion/{$callsign}{$action}/{$path}{$commit}{$line}";
         break;
       case 'branch':
-        $uri = "/diffusion/{$callsign}repository/{$path}";
+        if (strlen($path)) {
+          $uri = "/diffusion/{$callsign}repository/{$path}";
+        } else {
+          $uri = "/diffusion/{$callsign}";
+        }
         break;
       case 'external':
         $commit = ltrim($commit, ';');
@@ -565,7 +665,7 @@ abstract class DiffusionRequest {
       // Prevent any hyjinx since we're ultimately shipping this to the
       // filesystem under a lot of workflows.
       if ($part == '..') {
-        throw new Exception("Invalid path URI.");
+        throw new Exception('Invalid path URI.');
       }
     }
 
@@ -591,8 +691,8 @@ abstract class DiffusionRequest {
     $host = php_uname('n');
     $callsign = $this->getRepository()->getCallsign();
     throw new DiffusionSetupException(
-      "The clone of this repository ('{$callsign}') on the local machine " .
-      "('{$host}') could not be read. Ensure that the repository is in a " .
+      "The clone of this repository ('{$callsign}') on the local machine ".
+      "('{$host}') could not be read. Ensure that the repository is in a ".
       "location where the web server has read permissions.");
   }
 
@@ -608,46 +708,52 @@ abstract class DiffusionRequest {
       "Guide' in the documentation for help setting up repositories.");
   }
 
-  final protected function expandCommitName() {
+  private function queryStableCommit() {
+    if ($this->symbolicCommit) {
+      $ref = $this->symbolicCommit;
+    } else {
+      if ($this->getSupportsBranches()) {
+        $ref = $this->getResolvableBranchName($this->getBranch());
+      } else {
+        $ref = 'HEAD';
+      }
+    }
+
+    $results = $this->resolveRefs(array($ref));
+
+    $matches = idx($results, $ref, array());
+    if (count($matches) !== 1) {
+      $message = pht('Ref "%s" is ambiguous or does not exist.', $ref);
+      throw id(new DiffusionRefNotFoundException($message))
+        ->setRef($ref);
+    }
+
+    $match = head($matches);
+
+    $this->stableCommit = $match['identifier'];
+    $this->symbolicType = $match['type'];
+  }
+
+  protected function getResolvableBranchName($branch) {
+    return $branch;
+  }
+
+  private function resolveRefs(array $refs) {
     if ($this->shouldInitFromConduit()) {
-      $commit_data = DiffusionQuery::callConduitWithDiffusionRequest(
+      return DiffusionQuery::callConduitWithDiffusionRequest(
         $this->getUser(),
         $this,
-        'diffusion.expandshortcommitquery',
+        'diffusion.resolverefs',
         array(
-          'commit' => $this->commit
+          'refs' => $refs,
         ));
     } else {
-      $repository = $this->getRepository();
-      $this->validateWorkingCopy($repository->getLocalPath());
-      $query = DiffusionExpandShortNameQuery::newFromRepository(
-        $repository);
-      $query->setCommit($this->commit);
-      $commit_data = $query->expand();
+      return id(new DiffusionLowLevelResolveRefsQuery())
+        ->setRepository($this->getRepository())
+        ->withRefs($refs)
+        ->execute();
     }
-
-    $this->commit = $commit_data['commit'];
-    $this->commitType = $commit_data['commitType'];
-    $this->tagContent = $commit_data['tagContent'];
   }
 
-  private function queryStableCommitName() {
-    if ($this->commit) {
-      $this->stableCommitName = $this->commit;
-    } else if ($this->shouldInitFromConduit()) {
-      $this->stableCommitName = DiffusionQuery::callConduitWithDiffusionRequest(
-        $this->getUser(),
-        $this,
-        'diffusion.stablecommitnamequery',
-        array(
-          'branch' => $this->getBranch()
-        ));
-    } else {
-      $query = DiffusionStableCommitNameQuery::newFromRepository(
-        $this->getRepository());
-      $query->setBranch($this->getBranch());
-      $this->stableCommitName = $query->load();
-    }
-    return $this->stableCommitName;
-  }
+
 }

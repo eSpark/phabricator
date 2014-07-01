@@ -1,14 +1,17 @@
 <?php
 
+/**
+ * @group pholio
+ */
 final class PhabricatorPholioConfigOptions
   extends PhabricatorApplicationConfigOptions {
 
   public function getName() {
-    return pht("Pholio");
+    return pht('Pholio');
   }
 
   public function getDescription() {
-    return pht("Configure Pholio.");
+    return pht('Configure Pholio.');
   }
 
   public function getOptions() {

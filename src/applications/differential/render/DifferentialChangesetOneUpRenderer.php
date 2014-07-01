@@ -27,19 +27,19 @@ final class DifferentialChangesetOneUpRenderer
             } else {
               $class = 'left';
             }
-            $out[] = hsprintf('<th>%s</th>', $p['line']);
-            $out[] = hsprintf('<th></th>');
-            $out[] = hsprintf('<td class="%s">%s</td>', $class, $p['render']);
+            $out[] = phutil_tag('th', array(), $p['line']);
+            $out[] = phutil_tag('th', array());
+            $out[] = phutil_tag('td', array('class' => $class), $p['render']);
           } else if ($type == 'new') {
             if ($p['htype']) {
               $class = 'right new';
-              $out[] = hsprintf('<th />');
+              $out[] = phutil_tag('th', array());
             } else {
               $class = 'right';
-              $out[] = hsprintf('<th>%s</th>', $p['oline']);
+              $out[] = phutil_tag('th', array(), $p['oline']);
             }
-            $out[] = hsprintf('<th>%s</th>', $p['line']);
-            $out[] = hsprintf('<td class="%s">%s</td>', $class, $p['render']);
+            $out[] = phutil_tag('th', array(), $p['line']);
+            $out[] = phutil_tag('td', array('class' => $class), $p['render']);
           }
           $out[] = hsprintf('</tr>');
           break;
@@ -71,7 +71,7 @@ final class DifferentialChangesetOneUpRenderer
                                    $new_file = null,
                                    $id = 0,
                                    $vs = 0) {
-    throw new Exception("Not implemented!");
+    throw new Exception('Not implemented!');
   }
 
 }

@@ -15,81 +15,81 @@ final class PhabricatorCountdownEditController
 
     $request = $this->getRequest();
     $user = $request->getUser();
-    $action_label = pht('Create Countdown');
+    $epoch_control = id(new AphrontFormDateControl())
+      ->setUser($user)
+      ->setName('epoch')
+      ->setLabel(pht('End Date'))
+      ->setInitialTime(AphrontFormDateControl::TIME_END_OF_DAY);
 
     if ($this->id) {
-      $countdown = id(new CountdownQuery())
+      $page_title = pht('Edit Countdown');
+      $countdown = id(new PhabricatorCountdownQuery())
         ->setViewer($user)
         ->withIDs(array($this->id))
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
         ->executeOne();
-
-      // If no countdown is found
       if (!$countdown) {
         return new Aphront404Response();
       }
-
-      if (($countdown->getAuthorPHID() != $user->getPHID())
-          && $user->getIsAdmin() == false) {
-        return new Aphront403Response();
-      }
-
-      $action_label = pht('Update Countdown');
     } else {
-      $countdown = new PhabricatorCountdown();
-      $countdown->setEpoch(time());
+      $page_title = pht('Create Countdown');
+      $countdown = PhabricatorCountdown::initializeNewCountdown($user);
     }
+    $epoch_control->setValue($countdown->getEpoch());
 
-    $error_view = null;
-    $e_text = null;
-
+    $e_text = true;
+    $errors = array();
     if ($request->isFormPost()) {
-      $errors = array();
       $title = $request->getStr('title');
-      $epoch = $request->getStr('epoch');
+      $epoch = $epoch_control->readValueFromRequest($request);
+      $view_policy = $request->getStr('viewPolicy');
 
       $e_text = null;
       if (!strlen($title)) {
         $e_text = pht('Required');
-        $errors[] = pht('You must give it a name.');
+        $errors[] = pht('You must give the countdown a name.');
       }
-
-      // If the user types something like "5 PM", convert it to a timestamp
-      // using their local time, not the server time.
-      $timezone = new DateTimeZone($user->getTimezoneIdentifier());
-
-      try {
-        $date = new DateTime($epoch, $timezone);
-        $timestamp = $date->format('U');
-      } catch (Exception $e) {
-        $errors[] = pht('You entered an incorrect date. You can enter date'.
-          ' like \'2011-06-26 13:33:37\' to create an event at'.
-          ' 13:33:37 on the 26th of June 2011.');
-        $timestamp = null;
+      if (!$epoch) {
+        $errors[] = pht('You must give the countdown a valid end date.');
       }
-
-      $countdown->setTitle($title);
-      $countdown->setEpoch($timestamp);
 
       if (!count($errors)) {
-        $countdown->setAuthorPHID($user->getPHID());
+        $countdown->setTitle($title);
+        $countdown->setEpoch($epoch);
+        $countdown->setViewPolicy($view_policy);
         $countdown->save();
         return id(new AphrontRedirectResponse())
           ->setURI('/countdown/'.$countdown->getID().'/');
-      } else {
-        $error_view = id(new AphrontErrorView())
-          ->setErrors($errors)
-          ->setTitle(pht('It\'s not The Final Countdown (du nu nuuu nun)' .
-            ' until you fix these problem'));
       }
     }
 
     if ($countdown->getEpoch()) {
-      $display_epoch = phabricator_datetime(
-        $countdown->getEpoch(),
-        $user);
+      $display_epoch = phabricator_datetime($countdown->getEpoch(), $user);
     } else {
       $display_epoch = $request->getStr('epoch');
     }
+
+    $crumbs = $this->buildApplicationCrumbs();
+
+    $cancel_uri = '/countdown/';
+    if ($countdown->getID()) {
+      $cancel_uri = '/countdown/'.$countdown->getID().'/';
+      $crumbs->addTextCrumb('C'.$countdown->getID(), $cancel_uri);
+      $crumbs->addTextCrumb(pht('Edit'));
+      $submit_label = pht('Save Changes');
+    } else {
+      $crumbs->addTextCrumb(pht('Create Countdown'));
+      $submit_label = pht('Create Countdown');
+    }
+
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($countdown)
+      ->execute();
 
     $form = id(new AphrontFormView())
       ->setUser($user)
@@ -98,42 +98,33 @@ final class PhabricatorCountdownEditController
         id(new AphrontFormTextControl())
           ->setLabel(pht('Title'))
           ->setValue($countdown->getTitle())
-          ->setName('title'))
+          ->setName('title')
+          ->setError($e_text))
+      ->appendChild($epoch_control)
       ->appendChild(
-        id(new AphrontFormTextControl())
-          ->setLabel(pht('End date'))
-          ->setValue($display_epoch)
-          ->setName('epoch')
-          ->setCaption(pht('Examples: '.
-            '2011-12-25 or 3 hours or '.
-            'June 8 2011, 5 PM.')))
+        id(new AphrontFormPolicyControl())
+          ->setUser($user)
+          ->setName('viewPolicy')
+          ->setPolicyObject($countdown)
+          ->setPolicies($policies)
+          ->setCapability(PhabricatorPolicyCapability::CAN_VIEW))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->addCancelButton('/countdown/')
-          ->setValue($action_label));
+          ->addCancelButton($cancel_uri)
+          ->setValue($submit_label));
 
-    $panel = id(new AphrontPanelView())
-      ->setWidth(AphrontPanelView::WIDTH_FORM)
-      ->setHeader($action_label)
-      ->setNoBackground()
-      ->appendChild($form);
-
-    $crumbs = $this
-      ->buildApplicationCrumbs()
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName($action_label)
-          ->setHref($this->getApplicationURI('edit/')));
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($page_title)
+      ->setFormErrors($errors)
+      ->setForm($form);
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $error_view,
-        $panel,
+        $form_box,
       ),
       array(
-        'title' => pht('Edit Countdown'),
-        'device' => true,
+        'title' => $page_title,
       ));
   }
 }

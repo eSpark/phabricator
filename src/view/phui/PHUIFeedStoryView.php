@@ -14,10 +14,24 @@ final class PHUIFeedStoryView extends AphrontView {
   private $tokenBar = array();
   private $projects = array();
   private $actions = array();
+  private $chronologicalKey;
+
+  public function setChronologicalKey($chronological_key) {
+    $this->chronologicalKey = $chronological_key;
+    return $this;
+  }
+
+  public function getChronologicalKey() {
+    return $this->chronologicalKey;
+  }
 
   public function setTitle($title) {
     $this->title = $title;
     return $this;
+  }
+
+  public function getTitle() {
+    return $this->title;
   }
 
   public function setEpoch($epoch) {
@@ -89,13 +103,27 @@ final class PHUIFeedStoryView extends AphrontView {
     return $this->href;
   }
 
-  public function renderNotification() {
+  public function renderNotification($user) {
     $classes = array(
       'phabricator-notification',
     );
 
     if (!$this->viewed) {
       $classes[] = 'phabricator-notification-unread';
+    }
+    if ($this->epoch) {
+      if ($user) {
+        $foot = phabricator_datetime($this->epoch, $user);
+        $foot = phutil_tag(
+          'span',
+          array(
+            'class' => 'phabricator-notification-date'),
+          $foot);
+      } else {
+        $foot = null;
+      }
+    } else {
+      $foot = pht('No time specified.');
     }
 
     return javelin_tag(
@@ -107,14 +135,19 @@ final class PHUIFeedStoryView extends AphrontView {
           'href' => $this->getHref(),
         ),
       ),
-      $this->title);
+      array($this->title, $foot));
   }
 
   public function render() {
 
     require_celerity_resource('phui-feed-story-css');
+    Javelin::initBehavior('phabricator-hovercards');
 
+    $body = null;
+    $foot = null;
+    $image_style = null;
     $actor = '';
+
     if ($this->image) {
       $actor = new PHUIIconView();
       $actor->setImage($this->image);
@@ -122,6 +155,34 @@ final class PHUIFeedStoryView extends AphrontView {
       if ($this->imageHref) {
         $actor->setHref($this->imageHref);
       }
+    }
+
+    if ($this->epoch) {
+      // TODO: This is really bad; when rendering through Conduit and via
+      // renderText() we don't have a user.
+      if ($this->user) {
+        $foot = phabricator_datetime($this->epoch, $this->user);
+      } else {
+        $foot = null;
+      }
+    } else {
+      $foot = pht('No time specified.');
+    }
+
+    if ($this->chronologicalKey) {
+      $foot = phutil_tag(
+        'a',
+        array(
+          'href' => '/feed/'.$this->chronologicalKey.'/',
+        ),
+        $foot);
+    }
+
+    $icon = null;
+    if ($this->appIcon) {
+      $icon = new PHUIIconView();
+      $icon->setSpriteIcon($this->appIcon);
+      $icon->setSpriteSheet(PHUIIconView::SPRITE_APPS);
     }
 
     $action_list = array();
@@ -151,12 +212,8 @@ final class PHUIFeedStoryView extends AphrontView {
       array(
         $actor,
         nonempty($this->title, pht('Untitled Story')),
-        $icons
+        $icons,
       ));
-
-    $body = null;
-    $foot = null;
-    $image_style = null;
 
     if (!empty($this->tokenBar)) {
       $tokenview = phutil_tag(
@@ -178,19 +235,6 @@ final class PHUIFeedStoryView extends AphrontView {
         $body_content);
     }
 
-    if ($this->epoch) {
-      $foot = phabricator_datetime($this->epoch, $this->user);
-    } else {
-      $foot = pht('No time specified.');
-    }
-
-    $icon = null;
-    if ($this->appIcon) {
-      $icon = new PHUIIconView();
-      $icon->setSpriteIcon($this->appIcon);
-      $icon->setSpriteSheet(PHUIIconView::SPRITE_APPS);
-    }
-
     $foot = phutil_tag(
       'div',
       array(
@@ -200,20 +244,31 @@ final class PHUIFeedStoryView extends AphrontView {
         $icon,
         $foot));
 
+    $classes = array('phui-feed-story');
+
     return id(new PHUIBoxView())
-      ->addClass('phui-feed-story')
-      ->setShadow(true)
+      ->addClass(implode(' ', $classes))
+      ->setBorder(true)
       ->addMargin(PHUI::MARGIN_MEDIUM_BOTTOM)
       ->appendChild(array($head, $body, $foot));
   }
 
   public function setAppIconFromPHID($phid) {
-    switch(phid_get_type($phid)) {
-      case PhabricatorPHIDConstants::PHID_TYPE_MOCK:
-        $this->setAppIcon("pholio-dark");
+    switch (phid_get_type($phid)) {
+      case PholioPHIDTypeMock::TYPECONST:
+        $this->setAppIcon('pholio-dark');
         break;
-      case PhabricatorPHIDConstants::PHID_TYPE_MCRO:
-        $this->setAppIcon("macro-dark");
+      case PhabricatorMacroPHIDTypeMacro::TYPECONST:
+        $this->setAppIcon('macro-dark');
+        break;
+      case ManiphestPHIDTypeTask::TYPECONST:
+        $this->setAppIcon('maniphest-dark');
+        break;
+      case DifferentialPHIDTypeRevision::TYPECONST:
+        $this->setAppIcon('differential-dark');
+        break;
+      case PhabricatorCalendarPHIDTypeEvent::TYPECONST:
+        $this->setAppIcon('calendar-dark');
         break;
     }
   }

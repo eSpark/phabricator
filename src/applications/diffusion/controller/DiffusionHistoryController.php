@@ -2,18 +2,25 @@
 
 final class DiffusionHistoryController extends DiffusionController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function processRequest() {
     $drequest = $this->diffusionRequest;
     $request = $this->getRequest();
+    $viewer = $request->getUser();
+    $repository = $drequest->getRepository();
 
     $page_size = $request->getInt('pagesize', 100);
-    $offset = $request->getInt('page', 0);
+    $offset = $request->getInt('offset', 0);
 
     $params = array(
       'commit' => $drequest->getCommit(),
       'path' => $drequest->getPath(),
       'offset' => $offset,
       'limit' => $page_size + 1);
+
     if (!$request->getBool('copies')) {
       $params['needDirectChanges'] = true;
       $params['needChildChanges'] = true;
@@ -28,32 +35,12 @@ final class DiffusionHistoryController extends DiffusionController {
     $pager = new AphrontPagerView();
     $pager->setPageSize($page_size);
     $pager->setOffset($offset);
-    if (count($history) == $page_size + 1) {
-      array_pop($history);
-      $pager->setHasMorePages(true);
-    } else {
-      $pager->setHasMorePages(false);
-    }
-    $pager->setURI($request->getRequestURI(), 'page');
+    $history = $pager->sliceResults($history);
+
+    $pager->setURI($request->getRequestURI(), 'offset');
 
     $show_graph = !strlen($drequest->getPath());
     $content = array();
-
-    if ($request->getBool('copies')) {
-      $button_title = pht('Hide Copies/Branches');
-      $copies_new = null;
-    } else {
-      $button_title = pht('Show Copies/Branches');
-      $copies_new = true;
-    }
-
-    $button = phutil_tag(
-      'a',
-      array(
-        'class'   => 'button small grey',
-        'href'    => $request->getRequestURI()->alter('copies', $copies_new),
-      ),
-      $button_title);
 
     $history_table = new DiffusionHistoryTableView();
     $history_table->setUser($request->getUser());
@@ -71,37 +58,116 @@ final class DiffusionHistoryController extends DiffusionController {
     }
 
     $history_panel = new AphrontPanelView();
-    $history_panel->setHeader(pht('History'));
-    $history_panel->addButton($button);
     $history_panel->appendChild($history_table);
     $history_panel->appendChild($pager);
     $history_panel->setNoBackground();
 
     $content[] = $history_panel;
 
-    // TODO: Sometimes we do have a change view, we need to look at the most
-    // recent history entry to figure it out.
+    $header = id(new PHUIHeaderView())
+      ->setUser($viewer)
+      ->setPolicyObject($repository)
+      ->setHeader($this->renderPathLinks($drequest, $mode = 'history'));
 
-    $nav = $this->buildSideNav('history', false);
-    $nav->appendChild($content);
+    $actions = $this->buildActionView($drequest);
+    $properties = $this->buildPropertyView($drequest, $actions);
+
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
+
     $crumbs = $this->buildCrumbs(
       array(
         'branch' => true,
         'path'   => true,
         'view'   => 'history',
       ));
-    $nav->setCrumbs($crumbs);
 
     return $this->buildApplicationPage(
-      $nav,
       array(
-        'device' => true,
-        'dust' => true,
+        $crumbs,
+        $object_box,
+        $content,
+      ),
+      array(
         'title' => array(
           pht('History'),
           pht('%s Repository', $drequest->getRepository()->getCallsign()),
         ),
       ));
   }
+
+  private function buildActionView(DiffusionRequest $drequest) {
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PhabricatorActionListView())
+      ->setUser($viewer);
+
+    $browse_uri = $drequest->generateURI(
+      array(
+        'action' => 'browse',
+      ));
+
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Browse Content'))
+        ->setHref($browse_uri)
+        ->setIcon('fa-files-o'));
+
+    // TODO: Sometimes we do have a change view, we need to look at the most
+    // recent history entry to figure it out.
+
+    $request = $this->getRequest();
+    if ($request->getBool('copies')) {
+      $branch_name = pht('Hide Copies/Branches');
+      $branch_uri = $request->getRequestURI()
+        ->alter('offset', null)
+        ->alter('copies', null);
+    } else {
+      $branch_name = pht('Show Copies/Branches');
+      $branch_uri = $request->getRequestURI()
+        ->alter('offset', null)
+        ->alter('copies', true);
+    }
+
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName($branch_name)
+        ->setIcon('fa-code-fork')
+        ->setHref($branch_uri));
+
+    return $view;
+  }
+
+  protected function buildPropertyView(
+    DiffusionRequest $drequest,
+    PhabricatorActionListView $actions) {
+
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setActionList($actions);
+
+    $stable_commit = $drequest->getStableCommit();
+    $callsign = $drequest->getRepository()->getCallsign();
+
+    $view->addProperty(
+      pht('Commit'),
+      phutil_tag(
+        'a',
+        array(
+          'href' => $drequest->generateURI(
+            array(
+              'action' => 'commit',
+              'commit' => $stable_commit,
+            )),
+        ),
+        $drequest->getRepository()->formatCommitName($stable_commit)));
+
+    return $view;
+  }
+
+
 
 }

@@ -38,14 +38,8 @@ final class PhabricatorConfigIssueViewController
 
     $crumbs = $this
       ->buildApplicationCrumbs()
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName(pht('Setup Issues'))
-          ->setHref($this->getApplicationURI('issue/')))
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName($title)
-          ->setHref($request->getRequestURI()));
+      ->addTextCrumb(pht('Setup Issues'), $this->getApplicationURI('issue/'))
+      ->addTextCrumb($title, $request->getRequestURI());
 
     return $this->buildApplicationPage(
       array(
@@ -54,7 +48,6 @@ final class PhabricatorConfigIssueViewController
       ),
       array(
         'title' => $title,
-        'device' => true,
       ));
   }
 

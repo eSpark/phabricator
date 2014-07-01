@@ -13,6 +13,17 @@ final class PhabricatorJavelinLinter extends ArcanistLinter {
   const LINT_UNKNOWN_DEPENDENCY = 4;
   const LINT_MISSING_BINARY = 5;
 
+  public function getInfoName() {
+    return 'Javelin Linter';
+  }
+
+  public function getInfoDescription() {
+    return pht(
+      'This linter is intended for use with the Javelin JS library and '.
+      'extensions. Use `javelinsymbols` to run Javelin rules on Javascript '.
+      'source files.');
+  }
+
   private function getBinaryPath() {
     if ($this->symbolsBinary === null) {
       list($err, $stdout) = exec_manual('which javelinsymbols');
@@ -46,6 +57,10 @@ final class PhabricatorJavelinLinter extends ArcanistLinter {
 
   public function getLinterName() {
     return 'JAVELIN';
+  }
+
+  public function getLinterConfigurationName() {
+    return 'javelin';
   }
 
   public function getLintSeverityMap() {
@@ -139,7 +154,7 @@ final class PhabricatorJavelinLinter extends ArcanistLinter {
       }
     }
 
-    $celerity = CelerityResourceMap::getInstance();
+    $celerity = CelerityResourceMap::getNamedInstance('phabricator');
 
     $path = preg_replace(
       '@^externals/javelinjs/src/@',
@@ -147,31 +162,30 @@ final class PhabricatorJavelinLinter extends ArcanistLinter {
       $path);
     $need = $external_classes;
 
-    $info = $celerity->lookupFileInformation(substr($path, strlen('webroot')));
-    if (!$info) {
-      $info = array();
+    $resource_name = substr($path, strlen('webroot/'));
+    $requires = $celerity->getRequiredSymbolsForName($resource_name);
+    if (!$requires) {
+      $requires = array();
     }
 
-    $requires = idx($info, 'requires', array());
-
-    foreach ($requires as $key => $name) {
-      $symbol_info = $celerity->lookupSymbolInformation($name);
-      if (!$symbol_info) {
+    foreach ($requires as $key => $requires_symbol) {
+      $requires_name = $celerity->getResourceNameForSymbol($requires_symbol);
+      if ($requires_name === null) {
         $this->raiseLintAtLine(
           0,
           0,
           self::LINT_UNKNOWN_DEPENDENCY,
-          "This file @requires component '{$name}', but it does not ".
-          "exist. You may need to rebuild the Celerity map.");
+          "This file @requires component '{$requires_symbol}', but it does ".
+          "not exist. You may need to rebuild the Celerity map.");
         unset($requires[$key]);
         continue;
       }
 
-      if (preg_match('/\\.css$/', $symbol_info['disk'])) {
+      if (preg_match('/\\.css$/', $requires_name)) {
         // If JS requires CSS, just assume everything is fine.
         unset($requires[$key]);
       } else {
-        $symbol_path = 'webroot'.$symbol_info['disk'];
+        $symbol_path = 'webroot/'.$requires_name;
         list($ignored, $req_install) = $this->getUsedAndInstalledSymbolsForPath(
           $symbol_path);
         if (array_intersect_key($req_install, $external_classes)) {
@@ -229,7 +243,7 @@ final class PhabricatorJavelinLinter extends ArcanistLinter {
       $matches = null;
       if (!preg_match('/^([?+\*])([^:]*):(\d+)$/', $line, $matches)) {
         throw new Exception(
-          "Received malformed output from `javelinsymbols`.");
+          'Received malformed output from `javelinsymbols`.');
       }
       $type = $matches[1];
       $symbol = $matches[2];

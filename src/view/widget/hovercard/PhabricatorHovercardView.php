@@ -17,8 +17,7 @@ final class PhabricatorHovercardView extends AphrontView {
   private $fields = array();
   private $actions = array();
 
-  private $color = 'blue';
-
+  private $color = 'lightblue';
   public function setObjectHandle(PhabricatorObjectHandle $handle) {
     $this->handle = $handle;
     return $this;
@@ -51,7 +50,7 @@ final class PhabricatorHovercardView extends AphrontView {
     return $this;
   }
 
-  public function addTag(PhabricatorTagView $tag) {
+  public function addTag(PHUITagView $tag) {
     $this->tags[] = $tag;
     return $this;
   }
@@ -63,18 +62,18 @@ final class PhabricatorHovercardView extends AphrontView {
 
   public function render() {
     if (!$this->handle) {
-      throw new Exception("Call setObjectHandle() before calling render()!");
+      throw new Exception('Call setObjectHandle() before calling render()!');
     }
 
     $handle = $this->handle;
 
-    require_celerity_resource("phabricator-hovercard-view-css");
+    require_celerity_resource('phabricator-hovercard-view-css');
 
-    $title = pht("%s: %s",
+    $title = pht('%s: %s',
       $handle->getTypeName(),
       $this->title ? $this->title : $handle->getName());
 
-    $header = new PhabricatorActionHeaderView();
+    $header = new PHUIActionHeaderView();
     $header->setHeaderColor($this->color);
     $header->setHeaderTitle($title);
     if ($this->tags) {
@@ -92,22 +91,15 @@ final class PhabricatorHovercardView extends AphrontView {
       $body_title = $handle->getFullName();
     }
 
-    $body[] = phutil_tag(
-      'div',
-        array(
-          'class' => 'phabricator-hovercard-body-header'
-          ),
-        $body_title);
+    $body[] = phutil_tag_div('phabricator-hovercard-body-header', $body_title);
 
     foreach ($this->fields as $field) {
-      $item = hsprintf('<strong>%s:</strong> <span>%s</span>',
-        $field['label'], $field['value']);
-      $body[] = phutil_tag(
-        'div',
-          array(
-            'class' => 'phabricator-hovercard-body-item'
-            ),
-          $item);
+      $item = array(
+        phutil_tag('strong', array(), $field['label']),
+        ' ',
+        phutil_tag('span', array(), $field['value']),
+      );
+      $body[] = phutil_tag_div('phabricator-hovercard-body-item', $item);
     }
 
     if ($handle->getImageURI()) {
@@ -116,11 +108,21 @@ final class PhabricatorHovercardView extends AphrontView {
       $body = phutil_tag(
         'div',
         array(
-          'class' => 'profile-header-picture-frame',
-          'style' => 'background-image: url('.$handle->getImageURI().');',
-        ),
-        '')
-        ->appendHTML($body);
+          'class' => 'phabricator-hovercard-body-image'),
+          phutil_tag(
+            'div',
+            array(
+              'class' => 'profile-header-picture-frame',
+              'style' => 'background-image: url('.$handle->getImageURI().');',
+            ),
+            ''))
+        ->appendHTML(
+          phutil_tag(
+            'div',
+            array(
+              'class' => 'phabricator-hovercard-body-details',
+            ),
+            $body));
     }
 
     $buttons = array();
@@ -147,40 +149,22 @@ final class PhabricatorHovercardView extends AphrontView {
 
     $tail = null;
     if ($buttons) {
-      $tail = phutil_tag('div',
-        array('class' => 'phabricator-hovercard-tail'),
-        $buttons);
+      $tail = phutil_tag_div('phabricator-hovercard-tail', $buttons);
     }
 
     // Assemble container
     // TODO: Add color support
-    $content = hsprintf(
-      '%s%s%s',
-      phutil_tag('div',
-        array(
-          'class' => 'phabricator-hovercard-head'
-        ),
-        $header),
-      phutil_tag('div',
-        array(
-          'class' => 'phabricator-hovercard-body'
-        ),
-        $body),
-      $tail);
-
-    $hovercard = phutil_tag("div",
+    $hovercard = phutil_tag_div(
+      'phabricator-hovercard-container',
       array(
-        "class" => "phabricator-hovercard-container",
-      ),
-      $content);
+        phutil_tag_div('phabricator-hovercard-head', $header),
+        phutil_tag_div('phabricator-hovercard-body grouped', $body),
+        $tail,
+      ));
 
     // Wrap for thick border
     // and later the tip at the bottom
-    return phutil_tag('div',
-      array(
-        'class' => 'phabricator-hovercard-wrapper',
-      ),
-      $hovercard);
+    return phutil_tag_div('phabricator-hovercard-wrapper', $hovercard);
   }
 
 }

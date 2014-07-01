@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group phame
- */
 final class PhamePost extends PhameDAO
   implements
     PhabricatorPolicyInterface,
@@ -15,8 +12,6 @@ final class PhamePost extends PhameDAO
   const VISIBILITY_DRAFT     = 0;
   const VISIBILITY_PUBLISHED = 1;
 
-  protected $id;
-  protected $phid;
   protected $bloggerPHID;
   protected $title;
   protected $phameTitle;
@@ -27,6 +22,19 @@ final class PhamePost extends PhameDAO
   protected $blogPHID;
 
   private $blog;
+
+  public static function initializePost(
+    PhabricatorUser $blogger,
+    PhameBlog $blog) {
+
+    $post = id(new PhamePost())
+      ->setBloggerPHID($blogger->getPHID())
+      ->setBlogPHID($blog->getPHID())
+      ->setBlog($blog)
+      ->setDatePublished(0)
+      ->setVisibility(self::VISIBILITY_DRAFT);
+    return $post;
+  }
 
   public function setBlog(PhameBlog $blog) {
     $this->blog = $blog;
@@ -46,6 +54,10 @@ final class PhamePost extends PhameDAO
     }
     $uri = '/phame/post/view/'.$this->getID().'/';
     return PhabricatorEnv::getProductionURI($uri);
+  }
+
+  public function getEditURI() {
+    return '/phame/post/edit/'.$this->getID().'/';
   }
 
   public function isDraft() {
@@ -81,7 +93,23 @@ final class PhamePost extends PhameDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_POST);
+      PhabricatorPhamePHIDTypePost::TYPECONST);
+  }
+
+  public function toDictionary() {
+    return array(
+      'id'            => $this->getID(),
+      'phid'          => $this->getPHID(),
+      'blogPHID'      => $this->getBlogPHID(),
+      'bloggerPHID'   => $this->getBloggerPHID(),
+      'viewURI'       => $this->getViewURI(),
+      'title'         => $this->getTitle(),
+      'phameTitle'    => $this->getPhameTitle(),
+      'body'          => $this->getBody(),
+      'summary'       => PhabricatorMarkupEngine::summarize($this->getBody()),
+      'datePublished' => $this->getDatePublished(),
+      'published'     => !$this->isDraft(),
+    );
   }
 
   public static function getVisibilityOptionsForSelect() {
@@ -96,7 +124,7 @@ final class PhamePost extends PhameDAO
     $options = array();
 
     if ($current == 'facebook' ||
-        PhabricatorEnv::getEnvConfig('facebook.application-id')) {
+        PhabricatorAuthProviderOAuthFacebook::getFacebookApplicationID()) {
       $options['facebook'] = 'Facebook';
     }
     if ($current == 'disqus' ||
@@ -147,6 +175,12 @@ final class PhamePost extends PhameDAO
       case PhabricatorPolicyCapability::CAN_EDIT:
         return ($user->getPHID() == $this->getBloggerPHID());
     }
+  }
+
+
+  public function describeAutomaticCapability($capability) {
+    return pht(
+      'The author of a blog post can always view and edit it.');
   }
 
 

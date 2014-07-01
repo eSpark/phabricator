@@ -7,6 +7,8 @@ final class PhabricatorProjectQuery
   private $phids;
   private $memberPHIDs;
   private $slugs;
+  private $phrictionSlugs;
+  private $names;
 
   private $status       = 'status-any';
   const STATUS_ANY      = 'status-any';
@@ -15,7 +17,10 @@ final class PhabricatorProjectQuery
   const STATUS_ACTIVE   = 'status-active';
   const STATUS_ARCHIVED = 'status-archived';
 
+  private $needSlugs;
   private $needMembers;
+  private $needWatchers;
+  private $needImages;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -37,13 +42,38 @@ final class PhabricatorProjectQuery
     return $this;
   }
 
-  public function withPhrictionSlugs(array $slugs) {
+  public function withSlugs(array $slugs) {
     $this->slugs = $slugs;
+    return $this;
+  }
+
+  public function withPhrictionSlugs(array $slugs) {
+    $this->phrictionSlugs = $slugs;
+    return $this;
+  }
+
+  public function withNames(array $names) {
+    $this->names = $names;
     return $this;
   }
 
   public function needMembers($need_members) {
     $this->needMembers = $need_members;
+    return $this;
+  }
+
+  public function needWatchers($need_watchers) {
+    $this->needWatchers = $need_watchers;
+    return $this;
+  }
+
+  public function needImages($need_images) {
+    $this->needImages = $need_images;
+    return $this;
+  }
+
+  public function needSlugs($need_slugs) {
+    $this->needSlugs = $need_slugs;
     return $this;
   }
 
@@ -88,25 +118,93 @@ final class PhabricatorProjectQuery
 
     if ($projects) {
       $viewer_phid = $this->getViewer()->getPHID();
+      $project_phids = mpull($projects, 'getPHID');
+
+      $member_type = PhabricatorEdgeConfig::TYPE_PROJ_MEMBER;
+      $watcher_type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_WATCHER;
+
+      $need_edge_types = array();
       if ($this->needMembers) {
-        $etype = PhabricatorEdgeConfig::TYPE_PROJ_MEMBER;
-        $members = id(new PhabricatorEdgeQuery())
-          ->withSourcePHIDs(mpull($projects, 'getPHID'))
-          ->withEdgeTypes(array($etype))
-          ->execute();
-        foreach ($projects as $project) {
-          $phid = $project->getPHID();
-          $project->attachMemberPHIDs(array_keys($members[$phid][$etype]));
-          $project->setIsUserMember(
-            $viewer_phid,
-            isset($members[$phid][$etype][$viewer_phid]));
-        }
+        $need_edge_types[] = $member_type;
       } else {
         foreach ($data as $row) {
           $projects[$row['id']]->setIsUserMember(
             $viewer_phid,
             ($row['viewerIsMember'] !== null));
         }
+      }
+
+      if ($this->needWatchers) {
+        $need_edge_types[] = $watcher_type;
+      }
+
+      if ($need_edge_types) {
+        $edges = id(new PhabricatorEdgeQuery())
+          ->withSourcePHIDs($project_phids)
+          ->withEdgeTypes($need_edge_types)
+          ->execute();
+
+        if ($this->needMembers) {
+          foreach ($projects as $project) {
+            $phid = $project->getPHID();
+            $project->attachMemberPHIDs(
+              array_keys($edges[$phid][$member_type]));
+            $project->setIsUserMember(
+              $viewer_phid,
+              isset($edges[$phid][$member_type][$viewer_phid]));
+          }
+        }
+
+        if ($this->needWatchers) {
+          foreach ($projects as $project) {
+            $phid = $project->getPHID();
+            $project->attachWatcherPHIDs(
+              array_keys($edges[$phid][$watcher_type]));
+            $project->setIsUserWatcher(
+              $viewer_phid,
+              isset($edges[$phid][$watcher_type][$viewer_phid]));
+          }
+        }
+      }
+    }
+
+    return $projects;
+  }
+
+  protected function didFilterPage(array $projects) {
+    if ($this->needImages) {
+      $default = null;
+
+      $file_phids = mpull($projects, 'getProfileImagePHID');
+      $files = id(new PhabricatorFileQuery())
+        ->setParentQuery($this)
+        ->setViewer($this->getViewer())
+        ->withPHIDs($file_phids)
+        ->execute();
+      $files = mpull($files, null, 'getPHID');
+      foreach ($projects as $project) {
+        $file = idx($files, $project->getProfileImagePHID());
+        if (!$file) {
+          if (!$default) {
+            $default = PhabricatorFile::loadBuiltin(
+              $this->getViewer(),
+              'project.png');
+          }
+          $file = $default;
+        }
+        $project->attachProfileImageFile($file);
+      }
+    }
+
+    if ($this->needSlugs) {
+      $slugs = id(new PhabricatorProjectSlug())
+        ->loadAllWhere(
+          'projectPHID IN (%Ls)',
+          mpull($projects, 'getPHID'));
+      $slugs = mgroup($slugs, 'getProjectPHID');
+      foreach ($projects as $project) {
+        $project_slugs = idx($slugs, $project->getPHID(), array());
+        $project->attachSlugs($project_slugs);
       }
     }
 
@@ -164,8 +262,22 @@ final class PhabricatorProjectQuery
     if ($this->slugs) {
       $where[] = qsprintf(
         $conn_r,
-        'phrictionSlug IN (%Ls)',
+        'slug.slug IN (%Ls)',
         $this->slugs);
+    }
+
+    if ($this->phrictionSlugs) {
+      $where[] = qsprintf(
+        $conn_r,
+        'phrictionSlug IN (%Ls)',
+        $this->phrictionSlugs);
+    }
+
+    if ($this->names) {
+      $where[] = qsprintf(
+        $conn_r,
+        'name IN (%Ls)',
+        $this->names);
     }
 
     $where[] = $this->buildPagingClause($conn_r);
@@ -177,7 +289,7 @@ final class PhabricatorProjectQuery
     if ($this->memberPHIDs) {
       return 'GROUP BY p.id';
     } else {
-      return '';
+      return $this->buildApplicationSearchGroupClause($conn_r);
     }
   }
 
@@ -201,7 +313,25 @@ final class PhabricatorProjectQuery
         PhabricatorEdgeConfig::TYPE_PROJ_MEMBER);
     }
 
+    if ($this->slugs) {
+      $joins[] = qsprintf(
+        $conn_r,
+        'JOIN %T slug on slug.projectPHID = p.phid',
+        id(new PhabricatorProjectSlug())->getTableName());
+    }
+
+    $joins[] = $this->buildApplicationSearchJoinClause($conn_r);
+
     return implode(' ', $joins);
+  }
+
+
+  public function getQueryApplicationClass() {
+    return 'PhabricatorApplicationProject';
+  }
+
+  protected function getApplicationSearchObjectPHIDColumn() {
+    return 'p.phid';
   }
 
 }

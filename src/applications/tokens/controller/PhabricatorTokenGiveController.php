@@ -12,7 +12,10 @@ final class PhabricatorTokenGiveController extends PhabricatorTokenController {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $handle = PhabricatorObjectHandleData::loadOneHandle($this->phid, $user);
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer($user)
+      ->withPHIDs(array($this->phid))
+      ->executeOne();
     if (!$handle->isComplete()) {
       return new Aphront404Response();
     }
@@ -33,15 +36,16 @@ final class PhabricatorTokenGiveController extends PhabricatorTokenController {
 
     $done_uri = $handle->getURI();
     if ($request->isDialogFormPost()) {
+      $content_source = PhabricatorContentSource::newFromRequest($request);
+
+      $editor = id(new PhabricatorTokenGivenEditor())
+        ->setActor($user)
+        ->setContentSource($content_source);
       if ($is_give) {
         $token_phid = $request->getStr('tokenPHID');
-        $editor = id(new PhabricatorTokenGivenEditor())
-          ->setActor($user)
-          ->addToken($handle->getPHID(), $token_phid);
+        $editor->addToken($handle->getPHID(), $token_phid);
       } else {
-        $editor = id(new PhabricatorTokenGivenEditor())
-          ->setActor($user)
-          ->deleteToken($handle->getPHID());
+        $editor->deleteToken($handle->getPHID());
       }
 
       return id(new AphrontReloadResponse())->setURI($done_uri);
@@ -69,6 +73,13 @@ final class PhabricatorTokenGiveController extends PhabricatorTokenController {
     $buttons = array();
     $ii = 0;
     foreach ($tokens as $token) {
+      $aural = javelin_tag(
+        'span',
+        array(
+          'aural' => true,
+        ),
+        pht('Award "%s" Token', $token->getName()));
+
       $buttons[] = javelin_tag(
         'button',
         array(
@@ -81,7 +92,10 @@ final class PhabricatorTokenGiveController extends PhabricatorTokenController {
             'tip' => $token->getName(),
           )
         ),
-        $token->renderIcon());
+        array(
+          $aural,
+          $token->renderIcon(),
+        ));
       if ((++$ii % 4) == 0) {
         $buttons[] = phutil_tag('br');
       }

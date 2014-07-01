@@ -4,10 +4,16 @@ final class PhabricatorActionListView extends AphrontView {
 
   private $actions = array();
   private $object;
+  private $objectURI;
   private $id = null;
 
   public function setObject(PhabricatorLiskDAO $object) {
     $this->object = $object;
+    return $this;
+  }
+
+  public function setObjectURI($uri) {
+    $this->objectURI = $uri;
     return $this;
   }
 
@@ -23,7 +29,7 @@ final class PhabricatorActionListView extends AphrontView {
 
   public function render() {
     if (!$this->user) {
-      throw new Exception(pht("Call setUser() before render()!"));
+      throw new Exception(pht('Call setUser() before render()!'));
     }
 
     $event = new PhabricatorEvent(
@@ -36,9 +42,13 @@ final class PhabricatorActionListView extends AphrontView {
     PhutilEventEngine::dispatchEvent($event);
 
     $actions = $event->getValue('actions');
-
     if (!$actions) {
       return null;
+    }
+
+    foreach ($actions as $action) {
+      $action->setObjectURI($this->objectURI);
+      $action->setUser($this->user);
     }
 
     require_celerity_resource('phabricator-action-list-view-css');

@@ -3,61 +3,24 @@
 final class PhabricatorApplicationsListController
   extends PhabricatorApplicationsController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  private $queryKey;
 
-    $nav = $this->buildSideNavView();
-    $nav->selectFilter('/');
-
-    $applications = PhabricatorApplication::getAllApplications();
-
-    $list = $this->buildInstalledApplicationsList($applications);
-    $title = pht('Installed Applications');
-    $nav->appendChild($list);
-
-    $crumbs = $this
-      ->buildApplicationCrumbs()
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName(pht('Applications'))
-          ->setHref($this->getApplicationURI()));
-
-    $nav->setCrumbs($crumbs);
-
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
-        'device' => true,
-        'dust' => true,
-      ));
+  public function shouldAllowPublic() {
+    return true;
   }
 
+  public function willProcessRequest(array $data) {
+    $this->queryKey = idx($data, 'queryKey');
+  }
 
-  private function buildInstalledApplicationsList(array $applications) {
-    $list = new PhabricatorObjectItemListView();
+  public function processRequest() {
+    $request = $this->getRequest();
+    $controller = id(new PhabricatorApplicationSearchController($request))
+      ->setQueryKey($this->queryKey)
+      ->setSearchEngine(new PhabricatorAppSearchEngine())
+      ->setNavigation($this->buildSideNavView());
 
-    $applications = msort($applications, 'getName');
-
-    foreach ($applications as $application) {
-        $item = id(new PhabricatorObjectItemView())
-          ->setHeader($application->getName())
-          ->setHref('/applications/view/'.get_class($application).'/')
-          ->addAttribute($application->getShortDescription());
-
-        if (!$application->isInstalled()) {
-          $item->addIcon('delete', pht('Uninstalled'));
-        }
-
-        if ($application->isBeta()) {
-          $item->addIcon('lint-warning', pht('Beta'));
-        }
-
-        $list->addItem($item);
-
-      }
-    return $list;
-   }
+    return $this->delegateToController($controller);
+  }
 
 }

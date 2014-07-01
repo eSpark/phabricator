@@ -1,0 +1,67 @@
+/**
+ * @provides conpherence-notification-css
+ */
+
+/* kill styles on phabricator-notification */
+.conpherence-notification {
+  padding: 0;
+}
+
+.phabricator-notification .conpherence-menu-item-view {
+  display: block;
+  height: 46px;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none;
+  border-bottom: none;
+  border-right: 0;
+  border-left: 0;
+}
+
+.phabricator-notification .conpherence-menu-item-view
+.conpherence-menu-item-image {
+  top: 8px;
+  left: 8px;
+  display: block;
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  background-size: 30px;
+}
+
+.phabricator-notification .conpherence-menu-item-view
+.conpherence-menu-item-title {
+  display: block;
+  margin-top: 8px;
+  margin-left: 46px;
+  text-align: left;
+  font-weight: bold;
+  font-size: 13px;
+  color: {$darkgreytext};
+  width: 280px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.phabricator-notification .conpherence-menu-item-view
+.conpherence-menu-item-subtitle {
+  display: block;
+  color: {$lightgreytext};
+  font-size: 11px;
+  margin-top: 2px;
+  margin-left: 46px;
+}
+
+.phabricator-notification .conpherence-menu-item-view
+.conpherence-menu-item-unread-count {
+  position: absolute;
+  right: 8px;
+  top: 15px;
+  background: {$blue};
+  border-radius: 2px;
+  color: #fff;
+  font-weight: bold;
+  padding: 0 5px 1px;
+  font-size: 11px;
+}

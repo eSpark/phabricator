@@ -13,14 +13,15 @@ abstract class PhabricatorRepositoryCommitParserWorker
 
     $commit_id = idx($this->getTaskData(), 'commitID');
     if (!$commit_id) {
-      return false;
+      throw new PhabricatorWorkerPermanentFailureException(
+        pht('No "%s" in task data.', 'commitID'));
     }
 
     $commit = id(new PhabricatorRepositoryCommit())->load($commit_id);
 
     if (!$commit) {
-      // TODO: Communicate permanent failure?
-      return false;
+      throw new PhabricatorWorkerPermanentFailureException(
+        pht('Commit "%s" does not exist.', $commit_id));
     }
 
     return $this->commit = $commit;
@@ -31,16 +32,16 @@ abstract class PhabricatorRepositoryCommitParserWorker
       return;
     }
 
-    $repository = id(new PhabricatorRepository())->load(
-      $this->commit->getRepositoryID());
-
+    $repository = id(new PhabricatorRepositoryQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withIDs(array($this->commit->getRepositoryID()))
+      ->executeOne();
     if (!$repository) {
       return;
     }
 
     $this->repository = $repository;
-
-    return $this->parseCommit($repository, $this->commit);
+    $this->parseCommit($repository, $this->commit);
   }
 
   final protected function shouldQueueFollowupTasks() {
@@ -50,28 +51,6 @@ abstract class PhabricatorRepositoryCommitParserWorker
   abstract protected function parseCommit(
     PhabricatorRepository $repository,
     PhabricatorRepositoryCommit $commit);
-
-  /**
-   * This method is kind of awkward here but both the SVN message and
-   * change parsers use it.
-   */
-  protected function getSVNLogXMLObject($uri, $revision, $verbose = false) {
-
-    if ($verbose) {
-      $verbose = '--verbose';
-    }
-
-    list($xml) = $this->repository->execxRemoteCommand(
-      "log --xml {$verbose} --limit 1 %s@%d",
-      $uri,
-      $revision);
-
-    // Subversion may send us back commit messages which won't parse because
-    // they have non UTF-8 garbage in them. Slam them into valid UTF-8.
-    $xml = phutil_utf8ize($xml);
-
-    return new SimpleXMLElement($xml);
-  }
 
   protected function isBadCommit($full_commit_name) {
     $repository = new PhabricatorRepository();
@@ -85,17 +64,21 @@ abstract class PhabricatorRepositoryCommitParserWorker
     return (bool)$bad_commit;
   }
 
-  public function renderForDisplay() {
-    $suffix = parent::renderForDisplay();
-    $commit = $this->loadCommit();
+  public function renderForDisplay(PhabricatorUser $viewer) {
+    $suffix = parent::renderForDisplay($viewer);
+
+    $commit = id(new DiffusionCommitQuery())
+      ->setViewer($viewer)
+      ->withIDs(array(idx($this->getTaskData(), 'commitID')))
+      ->executeOne();
     if (!$commit) {
       return $suffix;
     }
 
-    $repository = id(new PhabricatorRepository())
-      ->load($commit->getRepositoryID());
-    $link = DiffusionView::linkCommit($repository,
-                                      $commit->getCommitIdentifier());
-    return hsprintf('%s%s', $link, $suffix);
+    $link = DiffusionView::linkCommit(
+      $commit->getRepository(),
+      $commit->getCommitIdentifier());
+
+    return array($link, $suffix);
   }
 }

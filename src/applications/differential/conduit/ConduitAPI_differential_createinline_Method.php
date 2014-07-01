@@ -1,13 +1,10 @@
 <?php
 
-/**
- * @group conduit
- */
 final class ConduitAPI_differential_createinline_Method
   extends ConduitAPI_differential_Method {
 
   public function getMethodDescription() {
-    return "Add an inline comment to a Differential revision.";
+    return 'Add an inline comment to a Differential revision.';
   }
 
   public function defineParamTypes() {
@@ -43,7 +40,10 @@ final class ConduitAPI_differential_createinline_Method
     if ($rid) {
       // Given both a revision and a diff, check that they match.
       // Given only a revision, find the active diff.
-      $revision = id(new DifferentialRevision())->load($rid);
+      $revision = id(new DifferentialRevisionQuery())
+        ->setViewer($request->getUser())
+        ->withIDs(array($rid))
+        ->executeOne();
       if (!$revision) {
         throw new ConduitException('ERR-BAD-REVISION');
       }

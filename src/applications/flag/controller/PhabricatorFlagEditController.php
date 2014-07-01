@@ -13,7 +13,10 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
     $user = $request->getUser();
 
     $phid = $this->phid;
-    $handle = PhabricatorObjectHandleData::loadOneHandle($phid, $user);
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer($user)
+      ->withPHIDs(array($phid))
+      ->executeOne();
 
     if (!$handle->isComplete()) {
       return new Aphront404Response();
@@ -42,18 +45,18 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
     $dialog = new AphrontDialogView();
     $dialog->setUser($user);
 
-    $dialog->setTitle(pht("Flag %s", $type_name));
+    $dialog->setTitle(pht('Flag %s', $type_name));
 
     require_celerity_resource('phabricator-flag-css');
 
-    $form = new AphrontFormLayoutView();
+    $form = new PHUIFormLayoutView();
 
     $is_new = !$flag->getID();
 
     if ($is_new) {
       $form
         ->appendChild(hsprintf(
-          "<p>%s</p><br />",
+          '<p>%s</p><br />',
           pht('You can flag this %s if you want to remember to look '.
             'at it later.',
             $type_name)));
@@ -82,7 +85,7 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
 
     $dialog->addCancelButton($handle->getURI());
     $dialog->addSubmitButton(
-      $is_new ? pht("Flag %s") : pht('Save'));
+      $is_new ? pht('Create Flag') : pht('Save'));
 
     return id(new AphrontDialogResponse())->setDialog($dialog);
   }

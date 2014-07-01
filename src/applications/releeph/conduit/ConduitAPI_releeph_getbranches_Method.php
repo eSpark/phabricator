@@ -4,7 +4,7 @@ final class ConduitAPI_releeph_getbranches_Method
   extends ConduitAPI_releeph_Method {
 
   public function getMethodDescription() {
-    return "Return information about all active Releeph branches.";
+    return 'Return information about all active Releeph branches.';
   }
 
   public function defineParamTypes() {
@@ -24,13 +24,13 @@ final class ConduitAPI_releeph_getbranches_Method
   protected function execute(ConduitAPIRequest $request) {
     $results = array();
 
-    $projects = id(new ReleephProject())->loadAllWhere('isActive = 1');
+    $projects = id(new ReleephProductQuery())
+      ->setViewer($request->getUser())
+      ->withActive(1)
+      ->execute();
 
     foreach ($projects as $project) {
-      $repository = $project->loadOneRelative(
-        id(new PhabricatorRepository()),
-        'id',
-        'getRepositoryID');
+      $repository = $project->getRepository();
 
       $branches = $project->loadRelatives(
         id(new ReleephBranch()),
@@ -52,7 +52,7 @@ final class ConduitAPI_releeph_getbranches_Method
           'branch'          => $branch->getBasename(),
           'fullBranchName'  => $full_branch_name,
           'symbolicName'    => $branch->getSymbolicName(),
-          'cutPoint'        => $branch->getCutPointCommitIdentifier(),
+          'cutPoint'        => $cut_point_commit->getCommitIdentifier(),
         );
       }
     }

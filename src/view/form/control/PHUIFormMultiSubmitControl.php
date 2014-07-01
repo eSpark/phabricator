@@ -15,16 +15,39 @@ final class PHUIFormMultiSubmitControl extends AphrontFormControl {
     return $this->addButton('__submit__', $label);
   }
 
-  public function addButton($name, $label, $class = null) {
+  public function addCancelButton($uri, $label = null) {
+    if ($label === null) {
+      $label = pht('Cancel');
+    }
+
     $this->buttons[] = phutil_tag(
+      'a',
+      array(
+        'class' => 'grey button',
+        'href' => $uri,
+      ),
+      $label);
+
+    return $this;
+  }
+
+  public function addButtonView(PHUIButtonView $button) {
+    $this->buttons[] = $button;
+    return $this;
+  }
+
+  public function addButton($name, $label, $class = null) {
+    $this->buttons[] = javelin_tag(
       'input',
       array(
         'type'  => 'submit',
         'name'  => $name,
         'value' => $label,
         'class' => $class,
+        'sigil' => 'alternate-submit-button',
         'disabled' => $this->getDisabled() ? 'disabled' : null,
       ));
+    return $this;
   }
 
   protected function getCustomControlClass() {

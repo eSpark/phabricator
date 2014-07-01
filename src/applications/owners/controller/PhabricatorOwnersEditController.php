@@ -112,26 +112,16 @@ final class PhabricatorOwnersEditController
       }
     }
 
-    $error_view = null;
-    if ($errors) {
-      $error_view = new AphrontErrorView();
-      $error_view->setTitle(pht('Package Errors'));
-      $error_view->setErrors($errors);
-    }
-
     $handles = $this->loadViewerHandles($owners);
 
     $primary = $package->getPrimaryOwnerPHID();
     if ($primary && isset($handles[$primary])) {
-      $token_primary_owner = array(
-        $primary => $handles[$primary]->getFullName(),
-      );
+      $handle_primary_owner = array($handles[$primary]);
     } else {
-      $token_primary_owner = array();
+      $handle_primary_owner = array();
     }
 
-    $token_all_owners = array_select_keys($handles, $owners);
-    $token_all_owners = mpull($token_all_owners, 'getFullName');
+    $handles_all_owners = array_select_keys($handles, $owners);
 
     if ($package->getID()) {
       $title = pht('Edit Package');
@@ -142,7 +132,9 @@ final class PhabricatorOwnersEditController
     }
     $this->setSideNavFilter($side_nav_filter);
 
-    $repos = id(new PhabricatorRepository())->loadAll();
+    $repos = id(new PhabricatorRepositoryQuery())
+      ->setViewer($user)
+      ->execute();
 
     $default_paths = array();
     foreach ($repos as $repo) {
@@ -181,7 +173,6 @@ final class PhabricatorOwnersEditController
 
     $form = id(new AphrontFormView())
       ->setUser($user)
-      ->setFlexible(true)
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel(pht('Name'))
@@ -194,14 +185,14 @@ final class PhabricatorOwnersEditController
           ->setLabel(pht('Primary Owner'))
           ->setName('primary')
           ->setLimit(1)
-          ->setValue($token_primary_owner)
+          ->setValue($handle_primary_owner)
           ->setError($e_primary))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
           ->setDatasource('/typeahead/common/usersorprojects/')
           ->setLabel(pht('Owners'))
           ->setName('owners')
-          ->setValue($token_all_owners))
+          ->setValue($handles_all_owners))
       ->appendChild(
         id(new AphrontFormSelectControl())
           ->setName('auditing')
@@ -252,13 +243,13 @@ final class PhabricatorOwnersEditController
           ->addCancelButton($cancel_uri)
           ->setValue(pht('Save Package')));
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->setFormErrors($errors)
+      ->setForm($form);
 
     $nav = $this->buildSideNavView();
-    $nav->appendChild($error_view);
-    $nav->appendChild($header);
-    $nav->appendChild($form);
+    $nav->appendChild($form_box);
 
     return $this->buildApplicationPage(
       array(
@@ -266,8 +257,6 @@ final class PhabricatorOwnersEditController
       ),
       array(
         'title' => $title,
-        'device' => true,
-        'dust' => true,
       ));
   }
 

@@ -9,14 +9,10 @@ final class DiffusionSvnFileContentQuery extends DiffusionFileContentQuery {
     $path = $drequest->getPath();
     $commit = $drequest->getCommit();
 
-    $remote_uri = $repository->getRemoteURI();
-
     return $repository->getRemoteCommandFuture(
-      '%C %s%s@%s',
+      '%C %s',
       $this->getNeedsBlame() ? 'blame --force' : 'cat',
-      $remote_uri,
-      phutil_escape_uri($path),
-      $commit);
+      $repository->getSubversionPathURI($path, $commit));
   }
 
   protected function executeQueryFromFuture(Future $future) {
@@ -30,9 +26,9 @@ final class DiffusionSvnFileContentQuery extends DiffusionFileContentQuery {
         // nuked; Diffusion will think it still exists and try to grab content
         // at HEAD.
         throw new Exception(
-          "Failed to retrieve file content from Subversion. The file may ".
-          "have been recently deleted, or the Diffusion cache may be out of ".
-          "date.");
+          'Failed to retrieve file content from Subversion. The file may '.
+          'have been recently deleted, or the Diffusion cache may be out of '.
+          'date.');
       } else {
         throw $ex;
       }

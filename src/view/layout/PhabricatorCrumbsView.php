@@ -10,12 +10,28 @@ final class PhabricatorCrumbsView extends AphrontView {
     return false;
   }
 
+
+  /**
+   * Convenience method for adding a simple crumb with just text, or text and
+   * a link.
+   *
+   * @param string  Text of the crumb.
+   * @param string? Optional href for the crumb.
+   * @return this
+   */
+  public function addTextCrumb($text, $href = null) {
+    return $this->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($text)
+        ->setHref($href));
+  }
+
   public function addCrumb(PhabricatorCrumbView $crumb) {
     $this->crumbs[] = $crumb;
     return $this;
   }
 
-  public function addAction(PhabricatorMenuItemView $action) {
+  public function addAction(PHUIListItemView $action) {
     $this->actions[] = $action;
     return $this;
   }
@@ -35,20 +51,21 @@ final class PhabricatorCrumbsView extends AphrontView {
       foreach ($this->actions as $action) {
         $icon = null;
         if ($action->getIcon()) {
-          $icon = phutil_tag(
-            'span',
-            array(
-              'class' => 'sprite-icons icons-'.$action->getIcon(),
-            ),
-            '');
+          $icon_name = $action->getIcon();
+          if ($action->getDisabled()) {
+            $icon_name .= ' lightgreytext';
+          }
+
+          $icon = id(new PHUIIconView())
+            ->setIconFont($icon_name);
+
         }
         $name = phutil_tag(
           'span',
             array(
               'class' => 'phabricator-crumbs-action-name'
             ),
-          $action->getName()
-        );
+          $action->getName());
 
         $action_sigils = $action->getSigils();
         if ($action->getWorkflow()) {
@@ -56,6 +73,11 @@ final class PhabricatorCrumbsView extends AphrontView {
         }
         $action_classes = $action->getClasses();
         $action_classes[] = 'phabricator-crumbs-action';
+
+        if ($action->getDisabled()) {
+          $action_classes[] = 'phabricator-crumbs-action-disabled';
+        }
+
         $actions[] = javelin_tag(
           'a',
           array(
@@ -72,12 +94,8 @@ final class PhabricatorCrumbsView extends AphrontView {
 
       if ($this->actionListID) {
         $icon_id = celerity_generate_unique_node_id();
-        $icon = phutil_tag(
-          'span',
-            array(
-              'class' => 'sprite-icons action-action-menu'
-            ),
-            '');
+        $icon = id(new PHUIIconView())
+          ->setIconFont('fa-bars');
         $name = phutil_tag(
           'span',
             array(

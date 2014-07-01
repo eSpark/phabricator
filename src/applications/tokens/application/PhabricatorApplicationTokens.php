@@ -6,10 +6,6 @@ final class PhabricatorApplicationTokens extends PhabricatorApplication {
     return pht('Tokens');
   }
 
-  public function isBeta() {
-    return true;
-  }
-
   public function getBaseURI() {
     return '/token/';
   }
@@ -23,7 +19,7 @@ final class PhabricatorApplicationTokens extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Acquire Trinkets');
+    return pht('Award and Acquire Trinkets');
   }
 
   public function getApplicationGroup() {

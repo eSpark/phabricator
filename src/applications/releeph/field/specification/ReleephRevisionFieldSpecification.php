@@ -3,30 +3,27 @@
 final class ReleephRevisionFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'revision';
+  }
+
   public function getName() {
     return 'Revision';
   }
 
-  public function renderValueForHeaderView() {
-    $phid = $this
-      ->getReleephRequest()
-      ->loadRequestCommitDiffPHID();
-    if (!$phid) {
-      return null;
+  public function getRequiredHandlePHIDsForPropertyView() {
+    $requested_object = $this->getObject()->getRequestedObjectPHID();
+    if (!($requested_object instanceof DifferentialRevision)) {
+      return array();
     }
 
-    $handles = $this->getReleephRequest()->getHandles();
-    $handle = $handles[$phid];
-    $link = $handle
-      // Hack to remove the strike-through rendering of diff links
-      ->setStatus(null)
-      ->renderLink();
-    return phutil_tag(
-      'div',
-      array(
-        'class' => 'releeph-header-text-truncated',
-      ),
-      $link);
+    return array(
+      $requested_object->getPHID(),
+    );
+  }
+
+  public function renderPropertyViewValue(array $handles) {
+    return $this->renderHandleList($handles);
   }
 
 }

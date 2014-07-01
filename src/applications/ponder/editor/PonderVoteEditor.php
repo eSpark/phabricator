@@ -25,7 +25,7 @@ final class PonderVoteEditor extends PhabricatorEditor {
   public function saveVote() {
     $actor = $this->requireActor();
     if (!$this->votable) {
-      throw new Exception("Must set votable before saving vote");
+      throw new Exception('Must set votable before saving vote');
     }
 
     $votable = $this->votable;
@@ -56,7 +56,7 @@ final class PonderVoteEditor extends PhabricatorEditor {
         $votable->getVotablePHID());
 
       if (!$curvote) {
-        $curvote = PonderConstants::NONE_VOTE;
+        $curvote = PonderVote::VOTE_NONE;
       }
 
       // adjust votable's score by this much

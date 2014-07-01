@@ -14,8 +14,12 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
     return 'differential';
   }
 
+  public function isPinnedByDefault(PhabricatorUser $viewer) {
+    return true;
+  }
+
   public function getHelpURI() {
-    return PhabricatorEnv::getDoclink('article/Differential_User_Guide.html');
+    return PhabricatorEnv::getDoclink('Differential User Guide');
   }
 
   public function getFactObjectsForAnalysis() {
@@ -30,19 +34,26 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
 
   public function getEventListeners() {
     return array(
-      new DifferentialPeopleMenuEventListener(),
+      new DifferentialActionMenuEventListener(),
       new DifferentialHovercardEventListener(),
+      new DifferentialLandingActionMenuEventListener(),
     );
+  }
+
+  public function getOverview() {
+    return pht(<<<EOTEXT
+Differential is a **code review application** which allows engineers to review,
+discuss and approve changes to software.
+EOTEXT
+);
   }
 
   public function getRoutes() {
     return array(
       '/D(?P<id>[1-9]\d*)' => 'DifferentialRevisionViewController',
       '/differential/' => array(
-        '' => 'DifferentialRevisionListController',
-        'filter/(?P<filter>\w+)/(?:(?P<username>[\w\.-_]+)/)?' =>
-          'DifferentialRevisionListController',
-        'stats/(?P<filter>\w+)/' => 'DifferentialRevisionStatsController',
+        '(?:query/(?P<queryKey>[^/]+)/)?'
+          => 'DifferentialRevisionListController',
         'diff/' => array(
           '(?P<id>[1-9]\d*)/' => 'DifferentialDiffViewController',
           'create/' => 'DifferentialDiffCreateController',
@@ -50,9 +61,11 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
         'changeset/' => 'DifferentialChangesetViewController',
         'revision/edit/(?:(?P<id>[1-9]\d*)/)?'
           => 'DifferentialRevisionEditController',
+        'revision/land/(?:(?P<id>[1-9]\d*))/(?P<strategy>[^/]+)/'
+          => 'DifferentialRevisionLandController',
         'comment/' => array(
           'preview/(?P<id>[1-9]\d*)/' => 'DifferentialCommentPreviewController',
-          'save/' => 'DifferentialCommentSaveController',
+          'save/(?P<id>[1-9]\d*)/' => 'DifferentialCommentSaveController',
           'inline/' => array(
             'preview/(?P<id>[1-9]\d*)/'
               => 'DifferentialInlineCommentPreviewController',
@@ -60,14 +73,9 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
               => 'DifferentialInlineCommentEditController',
           ),
         ),
-        'subscribe/(?P<action>add|rem)/(?P<id>[1-9]\d*)/'
-          => 'DifferentialSubscribeController',
+        'preview/' => 'PhabricatorMarkupPreviewController',
       ),
     );
-  }
-
-  public function getApplicationGroup() {
-    return self::GROUP_CORE;
   }
 
   public function getApplicationOrder() {
@@ -82,6 +90,7 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
 
   public function loadStatus(PhabricatorUser $user) {
     $revisions = id(new DifferentialRevisionQuery())
+      ->setViewer($user)
       ->withResponsibleUsers(array($user->getPHID()))
       ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
       ->needRelationships(true)
@@ -118,5 +127,13 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
     return $status;
   }
 
-}
+  protected function getCustomCapabilities() {
+    return array(
+      DifferentialCapabilityDefaultView::CAPABILITY => array(
+        'caption' => pht(
+          'Default view policy for newly created revisions.')
+      ),
+    );
+  }
 
+}

@@ -2,13 +2,7 @@
 
 final class PhabricatorMainMenuSearchView extends AphrontView {
 
-  private $scope;
   private $id;
-
-  public function setScope($scope) {
-    $this->scope = $scope;
-    return $this;
-  }
 
   public function getID() {
     if (!$this->id) {
@@ -20,8 +14,9 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
   public function render() {
     $user = $this->user;
 
-    $target_id  = celerity_generate_unique_node_id();
+    $target_id = celerity_generate_unique_node_id();
     $search_id = $this->getID();
+    $button_id = celerity_generate_unique_node_id();
 
     $input = phutil_tag(
       'input',
@@ -31,8 +26,6 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
         'id' => $search_id,
         'autocomplete' => 'off',
       ));
-
-    $scope = $this->scope;
 
     $target = javelin_tag(
       'div',
@@ -47,17 +40,18 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
       array(
         'id'          => $target_id,
         'input'       => $search_id,
+        'button'      => $button_id,
         'src'         => '/typeahead/common/mainsearch/',
         'limit'       => 10,
-        'placeholder' => PhabricatorSearchScope::getScopePlaceholder($scope),
+        'placeholder' => pht('Search'),
       ));
 
-    $scope_input = phutil_tag(
+    $primary_input = phutil_tag(
       'input',
       array(
         'type' => 'hidden',
-        'name' => 'scope',
-        'value' => $scope,
+        'name' => 'search:primary',
+        'value' => 'true',
       ));
 
     $form = phabricator_form(
@@ -66,13 +60,15 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
         'action' => '/search/',
         'method' => 'POST',
       ),
-      hsprintf(
-        '<div class="phabricator-main-menu-search-container">'.
-          '%s<button>Search</button>%s%s'.
-        '</div>',
+      phutil_tag_div('phabricator-main-menu-search-container', array(
         $input,
-        $scope_input,
-        $target));
+        phutil_tag(
+          'button',
+          array('id' => $button_id),
+          pht('Search')),
+        $primary_input,
+        $target,
+      )));
 
     return $form;
   }

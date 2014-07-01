@@ -16,15 +16,11 @@ final class ReleephRequestTransaction
   }
 
   public function getApplicationTransactionType() {
-    return ReleephPHIDConstants::PHID_TYPE_RERQ;
+    return ReleephPHIDTypeRequest::TYPECONST;
   }
 
   public function getApplicationTransactionCommentObject() {
     return new ReleephRequestTransactionComment();
-  }
-
-  public function getApplicationObjectTypeName() {
-    return pht('releeph request');
   }
 
   public function hasChangeDetails() {
@@ -260,7 +256,7 @@ final class ReleephRequestTransaction
     // ReleephSummaryFieldSpecification is usually blank when an RQ is created,
     // creating a transaction change from null to "".  Hide these!
     if ($type === ReleephRequestTransaction::TYPE_EDIT_FIELD) {
-      if ($this->getOldValue() === null && $this->getNewValue() === "") {
+      if ($this->getOldValue() === null && $this->getNewValue() === '') {
         return true;
       }
     }

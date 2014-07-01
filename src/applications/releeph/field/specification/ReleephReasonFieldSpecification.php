@@ -3,6 +3,10 @@
 final class ReleephReasonFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'reason';
+  }
+
   public function getName() {
     return 'Reason';
   }
@@ -11,33 +15,31 @@ final class ReleephReasonFieldSpecification
     return 'reason';
   }
 
-  public function renderLabelForHeaderView() {
-    return null;
+  public function getStyleForPropertyView() {
+    return 'block';
   }
 
-  public function renderValueForHeaderView() {
-    $markup = phutil_tag(
+  public function getIconForPropertyView() {
+    return PHUIPropertyListView::ICON_SUMMARY;
+  }
+
+  public function renderPropertyViewValue(array $handles) {
+    return phutil_tag(
       'div',
       array(
         'class' => 'phabricator-remarkup',
       ),
       $this->getMarkupEngineOutput());
-
-    return id(new AphrontNoteView())
-      ->setTitle('Reason')
-      ->appendChild($markup)
-      ->render();
   }
 
   private $error = true;
 
-  public function renderEditControl(AphrontRequest $request) {
-    $reason = $request->getStr('reason', $this->getValue());
+  public function renderEditControl(array $handles) {
     return id(new AphrontFormTextAreaControl())
       ->setLabel('Reason')
       ->setName('reason')
       ->setError($this->error)
-      ->setValue($reason);
+      ->setValue($this->getValue());
   }
 
   public function validate($reason) {
@@ -45,7 +47,7 @@ final class ReleephReasonFieldSpecification
       $this->error = 'Required';
       throw new ReleephFieldParseException(
         $this,
-        "You must give a reason for your request.");
+        'You must give a reason for your request.');
     }
   }
 

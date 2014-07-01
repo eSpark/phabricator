@@ -1,20 +1,13 @@
 <?php
 
-/**
- * @group diffusion
- */
 final class DiffusionGitRequest extends DiffusionRequest {
 
   protected function getSupportsBranches() {
     return true;
   }
 
-  protected function didInitialize() {
-    if (!$this->commit) {
-      return;
-    }
-
-    $this->expandCommitName();
+  protected function isStableCommit($symbol) {
+    return preg_match('/^[a-f0-9]{40}\z/', $symbol);
   }
 
   public function getBranch() {
@@ -24,15 +17,16 @@ final class DiffusionGitRequest extends DiffusionRequest {
     if ($this->repository) {
       return $this->repository->getDefaultBranch();
     }
-    throw new Exception("Unable to determine branch!");
+    throw new Exception('Unable to determine branch!');
   }
 
-  public function getCommit() {
-    if ($this->commit) {
-      return $this->commit;
+  protected function getResolvableBranchName($branch) {
+    if ($this->repository->isWorkingCopyBare()) {
+      return $branch;
+    } else {
+      $remote = DiffusionGitBranch::DEFAULT_GIT_REMOTE;
+      return $remote.'/'.$branch;
     }
-    $remote = DiffusionBranchInformation::DEFAULT_GIT_REMOTE;
-    return $remote.'/'.$this->getBranch();
   }
 
 }

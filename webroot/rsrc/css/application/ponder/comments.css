@@ -2,6 +2,17 @@
  * @provides ponder-comment-table-css
  */
 
+.ponder-show-comments {
+  text-align: center;
+  padding: 8px;
+  margin: 0 16px;
+  float: right;
+  font-weight: bold;
+  background: #fff;
+  border-bottom: 1px solid {$blueborder};
+  border-left: 1px solid {$lightblueborder};
+  border-right: 1px solid {$lightblueborder};
+}
 
 .ponder-comments {
   width: 480px;
@@ -27,7 +38,7 @@
 
 .ponder-datestamp {
   font-size: 11px;
-  color: #777;
+  color: {$greytext};
 }
 
 .ponder-label {

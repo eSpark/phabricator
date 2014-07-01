@@ -1,25 +1,6 @@
-.DS_Store
-._*
-/docs/
-/src/.phutil_module_cache
-/webroot/rsrc/custom
-.#*
-*#
-*~
-*.swp
-
-# NetBeans project files
-/nbproject/
-
-# PhpStorm project files
-.idea/
-
-# Arcanist scratch directory
-/.arc
-
 # Diviner
 /docs/
-/.divinercache
+/.divinercache/
 
 # libphutil
 /src/.phutil_module_cache
@@ -36,5 +17,11 @@
 # User-accessible hook for adhoc debugging scripts
 /support/debug.php
 
+# User-accessible hook for adhoc startup code
+/support/preamble.php
+
 # Users can link binaries here
 /support/bin/*
+
+# User extensions
+/src/extensions/*

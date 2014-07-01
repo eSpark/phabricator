@@ -1,86 +1,106 @@
 <?php
 
-/**
- * Provides search functionality for the paste application.
- *
- * @group search
- */
 final class PhabricatorPasteSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
-  /**
-   * Create a saved query object from the request.
-   *
-   * @param AphrontRequest The search request.
-   * @return The saved query that is built.
-   */
+  public function getResultTypeDescription() {
+    return pht('Pastes');
+  }
+
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
     $saved = new PhabricatorSavedQuery();
     $saved->setParameter(
       'authorPHIDs',
-      array_values($request->getArr('authors')));
+      $this->readUsersFromRequest($request, 'authors'));
 
-    try {
-      $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-      $saved->save();
-      unset($unguarded);
-    } catch (AphrontQueryDuplicateKeyException $ex) {
-      // Ignore, this is just a repeated search.
+    $languages = $request->getStrList('languages');
+    if ($request->getBool('noLanguage')) {
+      $languages[] = null;
     }
+    $saved->setParameter('languages', $languages);
+
+    $saved->setParameter('createdStart', $request->getStr('createdStart'));
+    $saved->setParameter('createdEnd', $request->getStr('createdEnd'));
 
     return $saved;
   }
 
-  /**
-   * Executes the saved query.
-   *
-   * @param PhabricatorSavedQuery
-   * @return The result of the query.
-   */
   public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
     $query = id(new PhabricatorPasteQuery())
-      ->withIDs($saved->getParameter('ids', array()))
-      ->withPHIDs($saved->getParameter('phids', array()))
+      ->needRawContent(true)
       ->withAuthorPHIDs($saved->getParameter('authorPHIDs', array()))
-      ->withParentPHIDs($saved->getParameter('parentPHIDs', array()));
+      ->withLanguages($saved->getParameter('languages', array()));
+
+    $start = $this->parseDateTime($saved->getParameter('createdStart'));
+    $end = $this->parseDateTime($saved->getParameter('createdEnd'));
+
+    if ($start) {
+      $query->withDateCreatedAfter($start);
+    }
+
+    if ($end) {
+      $query->withDateCreatedBefore($end);
+    }
 
     return $query;
   }
 
-  /**
-   * Builds the search form using the request.
-   *
-   * @param PhabricatorSavedQuery The query to populate the form with.
-   * @return AphrontFormView The built form.
-   */
   public function buildSearchForm(
     AphrontFormView $form,
     PhabricatorSavedQuery $saved_query) {
     $phids = $saved_query->getParameter('authorPHIDs', array());
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $author_handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->requireViewer())
-      ->loadHandles();
-    $author_tokens = mpull($handles, 'getFullName', 'getPHID');
+      ->withPHIDs($phids)
+      ->execute();
 
-    $form->appendChild(
-      id(new AphrontFormTokenizerControl())
-        ->setDatasource('/typeahead/common/users/')
-        ->setName('authors')
-        ->setLabel(pht('Authors'))
-        ->setValue($author_tokens));
+    $languages = $saved_query->getParameter('languages', array());
+    $no_language = false;
+    foreach ($languages as $key => $language) {
+      if ($language === null) {
+        $no_language = true;
+        unset($languages[$key]);
+        continue;
+      }
+    }
+
+    $form
+      ->appendChild(
+        id(new AphrontFormTokenizerControl())
+          ->setDatasource('/typeahead/common/users/')
+          ->setName('authors')
+          ->setLabel(pht('Authors'))
+          ->setValue($author_handles))
+      ->appendChild(
+        id(new AphrontFormTextControl())
+          ->setName('languages')
+          ->setLabel(pht('Languages'))
+          ->setValue(implode(', ', $languages)))
+      ->appendChild(
+        id(new AphrontFormCheckboxControl())
+          ->addCheckbox(
+            'noLanguage',
+            1,
+            pht('Find Pastes with no specified language.'),
+            $no_language));
+
+    $this->buildDateRange(
+      $form,
+      $saved_query,
+      'createdStart',
+      pht('Created After'),
+      'createdEnd',
+      pht('Created Before'));
+
   }
 
-  public function getQueryResultsPageURI($query_key) {
-    return '/paste/query/'.$query_key.'/';
-  }
-
-  public function getQueryManagementURI() {
-    return '/paste/savedqueries/';
+  protected function getURI($path) {
+    return '/paste/'.$path;
   }
 
   public function getBuiltinQueryNames() {
     $names = array(
-      'all'       => pht('All Pastes'),
+      'all' => pht('All Pastes'),
     );
 
     if ($this->requireViewer()->isLoggedIn()) {
@@ -107,4 +127,67 @@ final class PhabricatorPasteSearchEngine
     return parent::buildSavedQueryFromBuiltin($query_key);
   }
 
+  protected function getRequiredHandlePHIDsForResultList(
+    array $pastes,
+    PhabricatorSavedQuery $query) {
+    return mpull($pastes, 'getAuthorPHID');
+  }
+
+  protected function renderResultList(
+    array $pastes,
+    PhabricatorSavedQuery $query,
+    array $handles) {
+    assert_instances_of($pastes, 'PhabricatorPaste');
+
+    $viewer = $this->requireViewer();
+
+    $lang_map = PhabricatorEnv::getEnvConfig('pygments.dropdown-choices');
+
+    $list = new PHUIObjectItemListView();
+    $list->setUser($viewer);
+    foreach ($pastes as $paste) {
+      $created = phabricator_date($paste->getDateCreated(), $viewer);
+      $author = $handles[$paste->getAuthorPHID()]->renderLink();
+
+      $lines = phutil_split_lines($paste->getRawContent());
+
+      $preview = id(new PhabricatorSourceCodeView())
+        ->setLimit(5)
+        ->setLines($lines)
+        ->setURI(new PhutilURI($paste->getURI()));
+
+      $source_code = phutil_tag(
+        'div',
+        array(
+          'class' => 'phabricator-source-code-summary',
+        ),
+        $preview);
+
+      $line_count = count($lines);
+      $line_count = pht(
+        '%s Line(s)',
+        new PhutilNumber($line_count));
+
+      $title = nonempty($paste->getTitle(), pht('(An Untitled Masterwork)'));
+
+      $item = id(new PHUIObjectItemView())
+        ->setObjectName('P'.$paste->getID())
+        ->setHeader($title)
+        ->setHref('/P'.$paste->getID())
+        ->setObject($paste)
+        ->addByline(pht('Author: %s', $author))
+        ->addIcon('none', $line_count)
+        ->appendChild($source_code);
+
+      $lang_name = $paste->getLanguage();
+      if ($lang_name) {
+        $lang_name = idx($lang_map, $lang_name, $lang_name);
+        $item->addIcon('none', $lang_name);
+      }
+
+      $list->addItem($item);
+    }
+
+    return $list;
+  }
 }

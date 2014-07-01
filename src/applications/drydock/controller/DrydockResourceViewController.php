@@ -1,6 +1,6 @@
 <?php
 
-final class DrydockResourceViewController extends DrydockController {
+final class DrydockResourceViewController extends DrydockResourceController {
 
   private $id;
 
@@ -10,33 +10,36 @@ final class DrydockResourceViewController extends DrydockController {
 
   public function processRequest() {
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
-    $resource = id(new DrydockResource())->load($this->id);
+    $resource = id(new DrydockResourceQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($this->id))
+      ->executeOne();
     if (!$resource) {
       return new Aphront404Response();
     }
 
     $title = 'Resource '.$resource->getID().' '.$resource->getName();
 
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($title);
 
     $actions = $this->buildActionListView($resource);
-    $properties = $this->buildPropertyListView($resource);
+    $properties = $this->buildPropertyListView($resource, $actions);
 
     $resource_uri = 'resource/'.$resource->getID().'/';
     $resource_uri = $this->getApplicationURI($resource_uri);
 
     $leases = id(new DrydockLeaseQuery())
+      ->setViewer($viewer)
       ->withResourceIDs(array($resource->getID()))
-      ->needResources(true)
       ->execute();
 
-    $lease_header = id(new PhabricatorHeaderView())
-      ->setHeader(pht('Leases'));
-
-    $lease_list = $this->buildLeaseListView($leases);
+    $lease_list = id(new DrydockLeaseListView())
+      ->setUser($viewer)
+      ->setLeases($leases)
+      ->render();
     $lease_list->setNoDataString(pht('This resource has no leases.'));
 
     $pager = new AphrontPagerView();
@@ -44,30 +47,32 @@ final class DrydockResourceViewController extends DrydockController {
     $pager->setOffset($request->getInt('offset'));
 
     $logs = id(new DrydockLogQuery())
+      ->setViewer($viewer)
       ->withResourceIDs(array($resource->getID()))
       ->executeWithOffsetPager($pager);
 
-    $log_table = $this->buildLogTableView($logs);
+    $log_table = id(new DrydockLogListView())
+      ->setUser($viewer)
+      ->setLogs($logs)
+      ->render();
     $log_table->appendChild($pager);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setActionList($actions);
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName(pht('Resource %d', $resource->getID())));
+    $crumbs->addTextCrumb(pht('Resource %d', $resource->getID()));
+
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
-        $actions,
-        $properties,
-        $lease_header,
+        $object_box,
         $lease_list,
         $log_table,
       ),
       array(
-        'device'  => true,
         'title'   => $title,
       ));
 
@@ -76,6 +81,7 @@ final class DrydockResourceViewController extends DrydockController {
   private function buildActionListView(DrydockResource $resource) {
     $view = id(new PhabricatorActionListView())
       ->setUser($this->getRequest()->getUser())
+      ->setObjectURI($this->getRequest()->getRequestURI())
       ->setObject($resource);
 
     $can_close = ($resource->getStatus() == DrydockResourceStatus::STATUS_OPEN);
@@ -86,15 +92,19 @@ final class DrydockResourceViewController extends DrydockController {
       id(new PhabricatorActionView())
         ->setHref($uri)
         ->setName(pht('Close Resource'))
-        ->setIcon('delete')
+        ->setIcon('fa-times')
         ->setWorkflow(true)
         ->setDisabled(!$can_close));
 
     return $view;
   }
 
-  private function buildPropertyListView(DrydockResource $resource) {
-    $view = new PhabricatorPropertyListView();
+  private function buildPropertyListView(
+    DrydockResource $resource,
+    PhabricatorActionListView $actions) {
+
+    $view = new PHUIPropertyListView();
+    $view->setActionList($actions);
 
     $status = $resource->getStatus();
     $status = DrydockResourceStatus::getNameForStatus($status);
@@ -106,6 +116,11 @@ final class DrydockResourceViewController extends DrydockController {
     $view->addProperty(
       pht('Resource Type'),
       $resource->getType());
+
+    // TODO: Load handle.
+    $view->addProperty(
+      pht('Blueprint'),
+      $resource->getBlueprintPHID());
 
     $attributes = $resource->getAttributes();
     if ($attributes) {

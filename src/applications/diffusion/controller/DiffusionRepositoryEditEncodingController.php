@@ -1,7 +1,7 @@
 <?php
 
 final class DiffusionRepositoryEditEncodingController
-  extends DiffusionController {
+  extends DiffusionRepositoryEditController {
 
   public function processRequest() {
     $request = $this->getRequest();
@@ -56,25 +56,13 @@ final class DiffusionRepositoryEditEncodingController
       }
     }
 
-    $content = array();
-
-    $crumbs = $this->buildCrumbs();
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName(pht('Edit Encoding')));
-    $content[] = $crumbs;
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Edit Encoding'));
 
     $title = pht('Edit %s', $repository->getName());
 
-    if ($errors) {
-      $content[] = id(new AphrontErrorView())
-        ->setTitle(pht('Form Errors'))
-        ->setErrors($errors);
-    }
-
     $form = id(new AphrontFormView())
       ->setUser($user)
-      ->setFlexible(true)
       ->appendRemarkupInstructions($this->getEncodingInstructions())
       ->appendChild(
         id(new AphrontFormTextControl())
@@ -87,14 +75,18 @@ final class DiffusionRepositoryEditEncodingController
           ->setValue(pht('Save Encoding'))
           ->addCancelButton($edit_uri));
 
-    $content[] = $form;
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->setForm($form)
+      ->setFormErrors($errors);
 
     return $this->buildApplicationPage(
-      $content,
+      array(
+        $crumbs,
+        $object_box,
+      ),
       array(
         'title' => $title,
-        'dust' => true,
-        'device' => true,
       ));
   }
 
@@ -114,7 +106,7 @@ Phabricator handles text encodings.
 EOT
     ,
     PhabricatorEnv::getDoclink(
-      'article/User_Guide_UTF-8_and_Character_Encoding.html'));
+      'User Guide: UTF-8 and Character Encoding'));
   }
 
 }

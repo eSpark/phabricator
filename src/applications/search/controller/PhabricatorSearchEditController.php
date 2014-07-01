@@ -66,11 +66,6 @@ final class PhabricatorSearchEditController
       }
     }
 
-    if ($errors) {
-      $errors = id(new AphrontErrorView())
-        ->setErrors($errors);
-    }
-
     $form = id(new AphrontFormView())
       ->setUser($user);
 
@@ -92,21 +87,21 @@ final class PhabricatorSearchEditController
       $title = pht('Save Query');
     }
 
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->setFormErrors($errors)
+      ->setForm($form);
+
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName($title));
+    $crumbs->addTextCrumb($title);
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $errors,
-        $form,
+        $form_box,
       ),
       array(
         'title' => $title,
-        'device' => true,
-        'dust' => true,
       ));
   }
 

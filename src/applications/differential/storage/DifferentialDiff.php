@@ -1,9 +1,16 @@
 <?php
 
-final class DifferentialDiff extends DifferentialDAO {
+final class DifferentialDiff
+  extends DifferentialDAO
+  implements
+    PhabricatorPolicyInterface,
+    HarbormasterBuildableInterface,
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorDestructableInterface {
 
   protected $revisionID;
   protected $authorPHID;
+  protected $repositoryPHID;
 
   protected $sourceMachine;
   protected $sourcePath;
@@ -20,7 +27,6 @@ final class DifferentialDiff extends DifferentialDAO {
   protected $branch;
   protected $bookmark;
 
-  protected $parentRevisionID;
   protected $arcanistProjectPHID;
   protected $creationMethod;
   protected $repositoryUUID;
@@ -28,7 +34,21 @@ final class DifferentialDiff extends DifferentialDAO {
   protected $description;
 
   private $unsavedChangesets = array();
-  private $changesets;
+  private $changesets = self::ATTACHABLE;
+  private $arcanistProject = self::ATTACHABLE;
+  private $revision = self::ATTACHABLE;
+  private $properties = array();
+
+  public function getConfiguration() {
+    return array(
+      self::CONFIG_AUX_PHID => true,
+    ) + parent::getConfiguration();
+  }
+
+  public function generatePHID() {
+    return PhabricatorPHID::generateNewPHID(
+      DifferentialPHIDTypeDiff::TYPECONST);
+  }
 
   public function addUnsavedChangeset(DifferentialChangeset $changeset) {
     if ($this->changesets === null) {
@@ -46,10 +66,7 @@ final class DifferentialDiff extends DifferentialDAO {
   }
 
   public function getChangesets() {
-    if ($this->changesets === null) {
-      throw new Exception("Must load and attach changesets first!");
-    }
-    return $this->changesets;
+    return $this->assertAttached($this->changesets);
   }
 
   public function loadChangesets() {
@@ -61,25 +78,23 @@ final class DifferentialDiff extends DifferentialDAO {
       $this->getID());
   }
 
-  public function loadArcanistProject() {
-    if (!$this->getArcanistProjectPHID()) {
-      return null;
-    }
-    return id(new PhabricatorRepositoryArcanistProject())->loadOneWhere(
-      'phid = %s',
-      $this->getArcanistProjectPHID());
+  public function attachArcanistProject(
+    PhabricatorRepositoryArcanistProject $project = null) {
+    $this->arcanistProject = $project;
+    return $this;
   }
 
-  public function getBackingVersionControlSystem() {
-    $arcanist_project = $this->loadArcanistProject();
-    if (!$arcanist_project) {
-      return null;
+  public function getArcanistProject() {
+    return $this->assertAttached($this->arcanistProject);
+  }
+
+  public function getArcanistProjectName() {
+    $name = '';
+    if ($this->arcanistProject) {
+      $project = $this->getArcanistProject();
+      $name = $project->getName();
     }
-    $repository = $arcanist_project->loadRepository();
-    if (!$repository) {
-      return null;
-    }
-    return $repository->getVersionControlSystem();
+    return $name;
   }
 
   public function save() {
@@ -93,27 +108,13 @@ final class DifferentialDiff extends DifferentialDAO {
     return $ret;
   }
 
-  public function delete() {
-    $this->openTransaction();
-      foreach ($this->loadChangesets() as $changeset) {
-        $changeset->delete();
-      }
-
-      $properties = id(new DifferentialDiffProperty())->loadAllWhere(
-        'diffID = %d',
-        $this->getID());
-      foreach ($properties as $prop) {
-        $prop->delete();
-      }
-
-      $ret = parent::delete();
-    $this->saveTransaction();
-    return $ret;
-  }
-
   public static function newFromRawChanges(array $changes) {
     assert_instances_of($changes, 'ArcanistDiffChange');
     $diff = new DifferentialDiff();
+
+    // There may not be any changes; initialize the changesets list so that
+    // we don't throw later when accessing it.
+    $diff->attachChangesets(array());
 
     $lines = 0;
     foreach ($changes as $change) {
@@ -131,7 +132,7 @@ final class DifferentialDiff extends DifferentialDAO {
       $hunks = $change->getHunks();
       if ($hunks) {
         foreach ($hunks as $hunk) {
-          $dhunk = new DifferentialHunk();
+          $dhunk = new DifferentialHunkModern();
           $dhunk->setOldOffset($hunk->getOldOffset());
           $dhunk->setOldLen($hunk->getOldLength());
           $dhunk->setNewOffset($hunk->getNewOffset());
@@ -186,7 +187,6 @@ final class DifferentialDiff extends DifferentialDAO {
   public function getDiffDict() {
     $dict = array(
       'id' => $this->getID(),
-      'parent' => $this->getParentRevisionID(),
       'revisionID' => $this->getRevisionID(),
       'dateCreated' => $this->getDateCreated(),
       'dateModified' => $this->getDateModified(),
@@ -201,8 +201,31 @@ final class DifferentialDiff extends DifferentialDAO {
       'lintStatus' => $this->getLintStatus(),
       'changes' => array(),
       'properties' => array(),
+      'projectName' => $this->getArcanistProjectName()
     );
 
+    $dict['changes'] = $this->buildChangesList();
+
+    $properties = id(new DifferentialDiffProperty())->loadAllWhere(
+      'diffID = %d',
+      $this->getID());
+    foreach ($properties as $property) {
+      $dict['properties'][$property->getName()] = $property->getData();
+
+      if ($property->getName() == 'local:commits') {
+        foreach ($property->getData() as $commit) {
+          $dict['authorName'] = $commit['author'];
+          $dict['authorEmail'] = idx($commit, 'authorEmail');
+          break;
+        }
+      }
+    }
+
+    return $dict;
+  }
+
+  public function buildChangesList() {
+    $changes = array();
     foreach ($this->getChangesets() as $changeset) {
       $hunks = array();
       foreach ($changeset->getHunks() as $hunk) {
@@ -233,25 +256,163 @@ final class DifferentialDiff extends DifferentialDAO {
         'delLines'      => $changeset->getDelLines(),
         'hunks'         => $hunks,
       );
-      $dict['changes'][] = $change;
+      $changes[] = $change;
+    }
+    return $changes;
+  }
+
+  public function getRevision() {
+    return $this->assertAttached($this->revision);
+  }
+
+  public function attachRevision(DifferentialRevision $revision = null) {
+    $this->revision = $revision;
+    return $this;
+  }
+
+  public function attachProperty($key, $value) {
+    $this->properties[$key] = $value;
+    return $this;
+  }
+
+  public function getProperty($key) {
+    return $this->assertAttachedKey($this->properties, $key);
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+    );
+  }
+
+  public function getPolicy($capability) {
+    if ($this->getRevision()) {
+      return $this->getRevision()->getPolicy($capability);
     }
 
-    $properties = id(new DifferentialDiffProperty())->loadAllWhere(
-      'diffID = %d',
-      $this->getID());
-    foreach ($properties as $property) {
-      $dict['properties'][$property->getName()] = $property->getData();
+    return PhabricatorPolicies::POLICY_USER;
+  }
 
-      if ($property->getName() == 'local:commits') {
-        foreach ($property->getData() as $commit) {
-          $dict['authorName'] = $commit['author'];
-          $dict['authorEmail'] = $commit['authorEmail'];
-          break;
-        }
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    if ($this->getRevision()) {
+      return $this->getRevision()->hasAutomaticCapability($capability, $viewer);
+    }
+
+    return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    if ($this->getRevision()) {
+      return pht(
+        'This diff is attached to a revision, and inherits its policies.');
+    }
+    return null;
+  }
+
+
+
+/* -(  HarbormasterBuildableInterface  )------------------------------------- */
+
+
+  public function getHarbormasterBuildablePHID() {
+    return $this->getPHID();
+  }
+
+  public function getHarbormasterContainerPHID() {
+    if ($this->getRevisionID()) {
+      $revision = id(new DifferentialRevision())->load($this->getRevisionID());
+      if ($revision) {
+        return $revision->getPHID();
       }
     }
 
-    return $dict;
+    return null;
+  }
+
+  public function getBuildVariables() {
+    $results = array();
+
+    $results['buildable.diff'] = $this->getID();
+    $revision = $this->getRevision();
+    $results['buildable.revision'] = $revision->getID();
+    $repo = $revision->getRepository();
+
+    if ($repo) {
+      $results['repository.callsign'] = $repo->getCallsign();
+      $results['repository.vcs'] = $repo->getVersionControlSystem();
+      $results['repository.uri'] = $repo->getPublicCloneURI();
+    }
+
+    return $results;
+  }
+
+  public function getAvailableBuildVariables() {
+    return array(
+      'buildable.diff' =>
+        pht('The differential diff ID, if applicable.'),
+      'buildable.revision' =>
+        pht('The differential revision ID, if applicable.'),
+      'repository.callsign' =>
+        pht('The callsign of the repository in Phabricator.'),
+      'repository.vcs' =>
+        pht('The version control system, either "svn", "hg" or "git".'),
+      'repository.uri' =>
+        pht('The URI to clone or checkout the repository from.'),
+    );
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    if (!$this->getRevisionID()) {
+      return null;
+    }
+    return $this->getRevision()->getApplicationTransactionEditor();
+  }
+
+
+  public function getApplicationTransactionObject() {
+    if (!$this->getRevisionID()) {
+      return null;
+    }
+    return $this->getRevision();
+  }
+
+  public function getApplicationTransactionTemplate() {
+    if (!$this->getRevisionID()) {
+      return null;
+    }
+    return $this->getRevision()->getApplicationTransactionTemplate();
+  }
+
+
+/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $this->delete();
+
+      foreach ($this->loadChangesets() as $changeset) {
+        $changeset->delete();
+      }
+
+      $properties = id(new DifferentialDiffProperty())->loadAllWhere(
+        'diffID = %d',
+        $this->getID());
+      foreach ($properties as $prop) {
+        $prop->delete();
+      }
+
+    $this->saveTransaction();
   }
 
 }

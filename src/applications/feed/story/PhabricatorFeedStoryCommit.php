@@ -37,23 +37,22 @@ final class PhabricatorFeedStoryCommit extends PhabricatorFeedStory {
     }
 
     if ($author) {
-      $title = hsprintf(
-        "%s committed %s (authored by %s)",
+      $title = pht(
+        '%s committed %s (authored by %s)',
         $committer,
         $commit,
         $author);
     } else {
-      $title = hsprintf(
-        "%s committed %s",
+      $title = pht(
+        '%s committed %s',
         $committer,
         $commit);
     }
 
-    $view = new PHUIFeedStoryView();
+    $view = $this->newStoryView();
     $view->setAppIcon('differential-dark');
 
     $view->setTitle($title);
-    $view->setEpoch($data->getEpoch());
 
     if ($data->getValue('authorPHID')) {
       $view->setImage($this->getHandle($data->getAuthorPHID())->getImageURI());
@@ -91,10 +90,16 @@ final class PhabricatorFeedStoryCommit extends PhabricatorFeedStory {
     }
 
     if ($author) {
-      $text = "{$committer} (authored by {$author})".
-              "committed {$commit_name} {$commit_uri}";
+      $text = pht(
+        '%s committed %s (authored by %s).',
+        $committer,
+        $commit_name,
+        $author);
     } else {
-      $text = "{$committer} committed {$commit_name} {$commit_uri}";
+      $text = pht(
+        '%s committed %s.',
+        $committer,
+        $commit_name);
     }
 
     return $text;

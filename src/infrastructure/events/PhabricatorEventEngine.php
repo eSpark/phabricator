@@ -1,28 +1,50 @@
 <?php
 
-/**
- * @group events
- */
 final class PhabricatorEventEngine {
 
   public static function initialize() {
-    $listeners = PhabricatorEnv::getEnvConfig('events.listeners');
-    foreach ($listeners as $listener) {
-      id(new $listener())->register();
-    }
+    // NOTE: If any of this fails, we just log it and move on. It's important
+    // to try to make it through here because users may have difficulty fixing
+    // fix the errors if we don't: for example, if we fatal here a user may not
+    // be able to run `bin/config` in order to remove an invalid listener.
 
-    // Register the DarkConosole event logger.
-    id(new DarkConsoleEventPluginAPI())->register();
-    id(new ManiphestEdgeEventListener())->register();
+    // Load automatic listeners.
+    $listeners = id(new PhutilSymbolLoader())
+      ->setAncestorClass('PhabricatorAutoEventListener')
+      ->loadObjects();
 
-    $applications = PhabricatorApplication::getAllInstalledApplications();
-    foreach ($applications as $application) {
-      $listeners = $application->getEventListeners();
-      foreach ($listeners as $listener) {
-        $listener->register();
+    // Load configured listeners.
+    $config_listeners = PhabricatorEnv::getEnvConfig('events.listeners');
+    foreach ($config_listeners as $listener_class) {
+      try {
+        $listeners[] = newv($listener_class, array());
+      } catch (Exception $ex) {
+        phlog($ex);
       }
     }
 
+    // Add builtin listeners.
+    $listeners[] = new DarkConsoleEventPluginAPI();
+    $listeners[] = new ManiphestEdgeEventListener();
+
+    // Add application listeners.
+    $applications = PhabricatorApplication::getAllInstalledApplications();
+    foreach ($applications as $application) {
+      $app_listeners = $application->getEventListeners();
+      foreach ($app_listeners as $listener) {
+        $listener->setApplication($application);
+        $listeners[] = $listener;
+      }
+    }
+
+    // Now, register all of the listeners.
+    foreach ($listeners as $listener) {
+      try {
+        $listener->register();
+      } catch (Exception $ex) {
+        phlog($ex);
+      }
+    }
   }
 
 }

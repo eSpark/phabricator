@@ -4,11 +4,11 @@ final class PhabricatorMetaMTAConfigOptions
   extends PhabricatorApplicationConfigOptions {
 
   public function getName() {
-    return pht("Mail");
+    return pht('Mail');
   }
 
   public function getDescription() {
-    return pht("Configure Mail.");
+    return pht('Configure Mail.');
   }
 
   public function getOptions() {
@@ -72,9 +72,9 @@ EODOC
 
     $herald_hints_description = $this->deformat(pht(<<<EODOC
 You can disable the Herald hints in email if users prefer smaller messages.
-These are the links under the headers "MANAGE HERALD RULES" and "WHY DID I GET
-THIS EMAIL?". If you set this to true, they will not appear in any mail. Users
-can still navigate to the links via the web interface.
+These are the links under the header "WHY DID I GET THIS EMAIL?". If you set
+this to true, they will not appear in any mail. Users can still navigate to
+the links via the web interface.
 EODOC
 ));
 
@@ -135,15 +135,6 @@ actually works on your host, but if you haven't configured mail it may not be so
 great. A number of other mailers are available (e.g., SES, SendGrid, SMTP,
 custom mailers), consult "Configuring Outbound Email" in the documentation for
 details.
-EODOC
-));
-
-    $immediately_description = $this->deformat(pht(<<<EODOC
-When email is sent, try to hand it off to the MTA immediately instead of
-queueing it for delivery by the daemons. If you are running the Phabricator
-daemons with "phd start", you should disable this to provide a (sometimes
-substantial) performance boost. It's on by default to make setup and
-configuration a little easier.
 EODOC
 ));
 
@@ -216,8 +207,8 @@ EODOC
         true)
         ->setBoolOptions(
           array(
-            pht("Send Mail To Each Recipient"),
-            pht("Send Mail To All Recipients"),
+            pht('Send Mail To Each Recipient'),
+            pht('Send Mail To All Recipients'),
           ))
         ->setSummary(
           pht(
@@ -228,8 +219,8 @@ EODOC
       $this->newOption('metamta.can-send-as-user', 'bool', false)
         ->setBoolOptions(
           array(
-            pht("Send as User Taking Action"),
-            pht("Send as Phabricator"),
+            pht('Send as User Taking Action'),
+            pht('Send as Phabricator'),
           ))
         ->setSummary(
           pht(
@@ -245,24 +236,24 @@ EODOC
       $this->newOption('metamta.reply.show-hints', 'bool', true)
         ->setBoolOptions(
           array(
-            pht("Show Reply Handler Hints"),
-            pht("No Reply Handler Hints"),
-          ))
-        ->setSummary(pht('Show hints about Herald rules in email.'))
-        ->setDescription($herald_hints_description),
-      $this->newOption('metamta.herald.show-hints', 'bool', true)
-        ->setBoolOptions(
-          array(
-            pht("Show Herald Hints"),
-            pht("No Herald Hints"),
+            pht('Show Reply Handler Hints'),
+            pht('No Reply Handler Hints'),
           ))
         ->setSummary(pht('Show hints about reply handler actions in email.'))
         ->setDescription($reply_hints_description),
+      $this->newOption('metamta.herald.show-hints', 'bool', true)
+        ->setBoolOptions(
+          array(
+            pht('Show Herald Hints'),
+            pht('No Herald Hints'),
+          ))
+        ->setSummary(pht('Show hints about Herald rules in email.'))
+        ->setDescription($herald_hints_description),
       $this->newOption('metamta.recipients.show-hints', 'bool', true)
         ->setBoolOptions(
           array(
-            pht("Show Recipient Hints"),
-            pht("No Recipient Hints"),
+            pht('Show Recipient Hints'),
+            pht('No Recipient Hints'),
           ))
         ->setSummary(pht('Show "To:" and "Cc:" footer hints in email.'))
         ->setDescription($recipient_hints_description),
@@ -298,14 +289,6 @@ EODOC
           ))
         ->setSummary(pht('Trust "Reply-To" headers for authentication.'))
         ->setDescription($reply_to_description),
-      $this->newOption('metamta.send-immediately', 'bool', true)
-        ->setBoolOptions(
-          array(
-            pht('Send Immediately (Slow)'),
-            pht('Send Via Daemons (Must Run Daemons)'),
-          ))
-        ->setSummary(pht('Improve performance by sending email via daemons.'))
-        ->setDescription($immediately_description),
       $this->newOption('metamta.placeholder-to-recipient', 'string', null)
         ->setSummary(pht('Placeholder for mail with only CCs.'))
         ->setDescription($placeholder_description),
@@ -338,6 +321,17 @@ EODOC
         ->addExample(
           'gwashington (George Washington) <gwashington@example.com>',
           'full'),
+      $this->newOption('metamta.email-body-limit', 'int', 524288)
+        ->setDescription(
+          pht(
+            'You can set a limit for the maximum byte size of outbound mail. '.
+            'Mail which is larger than this limit will be truncated before '.
+            'being sent. This can be useful if your MTA rejects mail which '.
+            'exceeds some limit (this is reasonably common). Specify a value '.
+            'in bytes.'))
+        ->setSummary(pht('Global cap for size of generated emails (bytes).'))
+        ->addExample(524288, pht('Truncate at 512KB'))
+        ->addExample(1048576, pht('Truncate at 1MB'))
     );
   }
 

@@ -114,15 +114,15 @@ final class DiffusionCommentView extends AphrontView {
     $actions = array();
     if ($action == PhabricatorAuditActionConstants::ADD_CCS) {
       $rendered_ccs = $this->renderHandleList($added_ccs);
-      $actions[] = pht("%s added CCs: %s.", $author_link, $rendered_ccs);
+      $actions[] = pht('%s added CCs: %s.', $author_link, $rendered_ccs);
     } else if ($action == PhabricatorAuditActionConstants::ADD_AUDITORS) {
       $rendered_auditors = $this->renderHandleList($added_auditors);
       $actions[] = pht(
-        "%s added auditors: %s.",
+        '%s added auditors: %s.',
         $author_link,
         $rendered_auditors);
     } else {
-      $actions[] = hsprintf("%s %s this commit.", $author_link, $verb);
+      $actions[] = hsprintf('%s %s this commit.', $author_link, $verb);
     }
 
     foreach ($actions as $key => $action) {
@@ -139,12 +139,12 @@ final class DiffusionCommentView extends AphrontView {
     if (!strlen($comment->getContent()) && empty($this->inlineComments)) {
       return null;
     } else {
-      return hsprintf(
-        '<div class="phabricator-remarkup">%s%s</div>',
+      return phutil_tag_div('phabricator-remarkup', array(
         $engine->getOutput(
           $comment,
           PhabricatorAuditComment::MARKUP_FIELD_BODY),
-        $this->renderInlines());
+        $this->renderInlines(),
+      ));
     }
   }
 

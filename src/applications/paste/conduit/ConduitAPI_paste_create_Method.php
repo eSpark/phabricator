@@ -39,26 +39,36 @@ final class ConduitAPI_paste_create_Method extends ConduitAPI_paste_Method {
     $title = nonempty($title, 'Masterwork From Distant Lands');
     $language = nonempty($language, '');
 
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
-    $paste_file = PhabricatorFile::newFromFileData(
-      $content,
-      array(
-        'name'        => $title,
-        'mime-type'   => 'text/plain; charset=utf-8',
-        'authorPHID'  => $user->getPHID(),
-      ));
+    $paste = PhabricatorPaste::initializeNewPaste($viewer);
 
-    $paste = new PhabricatorPaste();
-    $paste->setTitle($title);
-    $paste->setLanguage($language);
-    $paste->setFilePHID($paste_file->getPHID());
-    $paste->setAuthorPHID($user->getPHID());
-    $paste->setViewPolicy(PhabricatorPolicies::POLICY_USER);
-    $paste->save();
+    $file = PhabricatorPasteEditor::initializeFileForPaste(
+      $viewer,
+      $title,
+      $content);
+
+    $xactions = array();
+
+    $xactions[] = id(new PhabricatorPasteTransaction())
+      ->setTransactionType(PhabricatorPasteTransaction::TYPE_CONTENT)
+      ->setNewValue($file->getPHID());
+
+    $xactions[] = id(new PhabricatorPasteTransaction())
+      ->setTransactionType(PhabricatorPasteTransaction::TYPE_TITLE)
+      ->setNewValue($title);
+
+    $xactions[] = id(new PhabricatorPasteTransaction())
+      ->setTransactionType(PhabricatorPasteTransaction::TYPE_LANGUAGE)
+      ->setNewValue($language);
+
+    $editor = id(new PhabricatorPasteEditor())
+      ->setActor($viewer)
+      ->setContentSourceFromConduitRequest($request);
+
+    $xactions = $editor->applyTransactions($paste, $xactions);
 
     $paste->attachRawContent($content);
-
     return $this->buildPasteInfoDictionary($paste);
   }
 

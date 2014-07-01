@@ -28,7 +28,7 @@ final class PasteEmbedView extends AphrontView {
 
   public function render() {
     if (!$this->paste) {
-      throw new Exception("Call setPaste() before render()!");
+      throw new Exception('Call setPaste() before render()!');
     }
 
     $lines = phutil_split_lines($this->paste->getContent());
@@ -58,7 +58,8 @@ final class PasteEmbedView extends AphrontView {
       $body_attributes,
       id(new PhabricatorSourceCodeView())
       ->setLines($lines)
-      ->setHighlights($this->highlights));
+      ->setHighlights($this->highlights)
+      ->disableHighlightOnClick());
 
     return phutil_tag(
       'div',

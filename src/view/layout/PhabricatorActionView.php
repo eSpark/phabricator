@@ -9,6 +9,36 @@ final class PhabricatorActionView extends AphrontView {
   private $workflow;
   private $renderAsForm;
   private $download;
+  private $objectURI;
+  private $sigils = array();
+  private $metadata;
+  private $selected;
+
+  public function setSelected($selected) {
+    $this->selected = $selected;
+    return $this;
+  }
+
+  public function getSelected() {
+    return $this->selected;
+  }
+
+  public function setMetadata($metadata) {
+    $this->metadata = $metadata;
+    return $this;
+  }
+
+  public function getMetadata() {
+    return $this->metadata;
+  }
+
+  public function setObjectURI($object_uri) {
+    $this->objectURI = $object_uri;
+    return $this;
+  }
+  public function getObjectURI() {
+    return $this->objectURI;
+  }
 
   public function setDownload($download) {
     $this->download = $download;
@@ -22,6 +52,27 @@ final class PhabricatorActionView extends AphrontView {
   public function setHref($href) {
     $this->href = $href;
     return $this;
+  }
+
+  public function addSigil($sigil) {
+    $this->sigils[] = $sigil;
+    return $this;
+  }
+
+  /**
+   * If the user is not logged in and the action is relatively complicated,
+   * give them a generic login link that will re-direct to the page they're
+   * viewing.
+   */
+  public function getHref() {
+    if (($this->workflow || $this->renderAsForm) && !$this->download) {
+      if (!$this->user || !$this->user->isLoggedIn()) {
+        return id(new PhutilURI('/auth/start/'))
+          ->setQueryParam('next', (string)$this->getObjectURI());
+      }
+    }
+
+    return $this->href;
   }
 
   public function setIcon($icon) {
@@ -53,23 +104,31 @@ final class PhabricatorActionView extends AphrontView {
 
     $icon = null;
     if ($this->icon) {
-
-      $suffix = '';
+      $color = '';
       if ($this->disabled) {
-        $suffix = '-grey';
+        $color = ' grey';
       }
-
-      require_celerity_resource('sprite-icons-css');
-      $icon = phutil_tag(
-        'span',
-        array(
-          'class' => 'phabricator-action-view-icon sprite-icons '.
-                       'icons-'.$this->icon.$suffix,
-        ),
-        '');
+      $icon = id(new PHUIIconView())
+        ->addClass('phabricator-action-view-icon')
+        ->setIconFont($this->icon.$color);
     }
 
     if ($this->href) {
+
+      $sigils = array();
+      if ($this->workflow) {
+        $sigils[] = 'workflow';
+      }
+      if ($this->download) {
+        $sigils[] = 'download';
+      }
+
+      if ($this->sigils) {
+        $sigils = array_merge($sigils, $this->sigils);
+      }
+
+      $sigils = $sigils ? implode(' ', $sigils) : null;
+
       if ($this->renderAsForm) {
         if (!$this->user) {
           throw new Exception(
@@ -81,33 +140,27 @@ final class PhabricatorActionView extends AphrontView {
           array(
             'class' => 'phabricator-action-view-item',
           ),
-          $this->name);
-
-        $sigils = array();
-        if ($this->workflow) {
-          $sigils[] = 'workflow';
-        }
-        if ($this->download) {
-          $sigils[] = 'download';
-        }
+          array($icon, $this->name));
 
         $item = phabricator_form(
           $this->user,
           array(
-            'action'    => $this->href,
+            'action'    => $this->getHref(),
             'method'    => 'POST',
-            'sigil'     => implode(' ', $sigils),
+            'sigil'     => $sigils,
+            'meta' => $this->metadata,
           ),
           $item);
       } else {
         $item = javelin_tag(
           'a',
           array(
-            'href'  => $this->href,
+            'href'  => $this->getHref(),
             'class' => 'phabricator-action-view-item',
-            'sigil' => $this->workflow ? 'workflow' : null,
+            'sigil' => $sigils,
+            'meta' => $this->metadata,
           ),
-          $this->name);
+          array($icon, $this->name));
       }
     } else {
       $item = phutil_tag(
@@ -115,7 +168,7 @@ final class PhabricatorActionView extends AphrontView {
         array(
           'class' => 'phabricator-action-view-item',
         ),
-        $this->name);
+        array($icon, $this->name));
     }
 
     $classes = array();
@@ -124,33 +177,16 @@ final class PhabricatorActionView extends AphrontView {
       $classes[] = 'phabricator-action-view-disabled';
     }
 
+    if ($this->selected) {
+      $classes[] = 'phabricator-action-view-selected';
+    }
+
     return phutil_tag(
       'li',
       array(
         'class' => implode(' ', $classes),
       ),
-      array($icon, $item));
-  }
-
-  public static function getAvailableIcons() {
-    $root = dirname(phutil_get_library_root('phabricator'));
-    $path = $root.'/resources/sprite/manifest/icons.json';
-    $data = Filesystem::readFile($path);
-    $manifest = json_decode($data, true);
-
-    $results = array();
-    $prefix = 'icons-';
-    foreach ($manifest['sprites'] as $sprite) {
-      $name = $sprite['name'];
-      if (preg_match('/-(white|grey)$/', $name)) {
-        continue;
-      }
-      if (!strncmp($name, $prefix, strlen($prefix))) {
-        $results[] = substr($name, strlen($prefix));
-      }
-    }
-
-    return $results;
+      $item);
   }
 
 }

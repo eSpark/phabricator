@@ -3,6 +3,7 @@
  * @requires javelin-behavior
  *           javelin-dom
  *           javelin-util
+ *           javelin-request
  *           phabricator-shaped-request
  */
 
@@ -10,19 +11,9 @@ JX.behavior('phabricator-transaction-comment-form', function(config) {
 
   var form = JX.$(config.formID);
 
-  JX.DOM.listen(form, 'willClear', null, function(e) {
-    e.kill();
-    JX.$(config.commentID).value = '';
-  });
-
   var getdata = function() {
     var obj = JX.DOM.convertFormToDictionary(form);
     obj.__preview__ = 1;
-
-    if (config.draftKey) {
-      obj.__draft__ = config.draftKey;
-    }
-
     return obj;
   };
 
@@ -42,13 +33,20 @@ JX.behavior('phabricator-transaction-comment-form', function(config) {
     }
   };
 
-  var request = new JX.PhabricatorShapedRequest(
-    config.actionURI,
-    onresponse,
-    getdata);
-  var trigger = JX.bind(request, request.trigger);
+  if (config.showPreview) {
+    var request = new JX.PhabricatorShapedRequest(
+      config.actionURI,
+      onresponse,
+      getdata);
+    var trigger = JX.bind(request, request.trigger);
+    JX.DOM.listen(form, 'keydown', null, trigger);
+    var always_trigger = function() {
+      new JX.Request(config.actionURI, onresponse)
+        .setData(getdata())
+        .send();
+    };
+    JX.DOM.listen(form, 'shouldRefresh', null, always_trigger);
 
-  JX.DOM.listen(form, 'keydown', null, trigger);
-
-  request.start();
+    request.start();
+  }
 });

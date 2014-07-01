@@ -1,94 +1,202 @@
 <?php
 
-final class ReleephBranchViewController extends ReleephController {
+final class ReleephBranchViewController extends ReleephBranchController
+  implements PhabricatorApplicationSearchResultsControllerInterface {
+
+  private $queryKey;
+  private $branchID;
+
+  public function shouldAllowPublic() {
+    return true;
+  }
+
+  public function willProcessRequest(array $data) {
+    $this->branchID = $data['branchID'];
+    $this->queryKey = idx($data, 'queryKey');
+  }
 
   public function processRequest() {
     $request = $this->getRequest();
+    $viewer = $request->getUser();
 
-    $releeph_branch = $this->getReleephBranch();
-    $releeph_project = $this->getReleephProject();
-    $all_releeph_requests = $releeph_branch->loadReleephRequests(
-      $request->getUser());
+    $branch = id(new ReleephBranchQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($this->branchID))
+      ->executeOne();
+    if (!$branch) {
+      return new Aphront404Response();
+    }
+    $this->setBranch($branch);
 
-    $selector = $releeph_project->getReleephFieldSelector();
-    $fields = $selector->arrangeFieldsForSelectForm(
-      $selector->getFieldSpecifications());
+    $controller = id(new PhabricatorApplicationSearchController($request))
+      ->setPreface($this->renderPreface())
+      ->setQueryKey($this->queryKey)
+      ->setSearchEngine($this->getSearchEngine())
+      ->setNavigation($this->buildSideNavView());
 
-    $form = id(new AphrontFormView())
-      ->setMethod('GET')
-      ->setUser($request->getUser());
+    return $this->delegateToController($controller);
+  }
 
-    $filtered_releeph_requests = $all_releeph_requests;
-    foreach ($fields as $field) {
-      $all_releeph_requests_without_this_field = $all_releeph_requests;
-      foreach ($fields as $other_field) {
-        if ($other_field != $field) {
-          $other_field->selectReleephRequestsHook(
-            $request,
-            $all_releeph_requests_without_this_field);
+  public function renderResultsList(
+    array $requests,
+    PhabricatorSavedQuery $query) {
 
+    assert_instances_of($requests, 'ReleephRequest');
+    $viewer = $this->getRequest()->getUser();
+
+    // TODO: This is generally a bit sketchy, but we don't do this kind of
+    // thing elsewhere at the moment. For the moment it shouldn't be hugely
+    // costly, and we can batch things later. Generally, this commits fewer
+    // sins than the old code did.
+
+    $engine = id(new PhabricatorMarkupEngine())
+      ->setViewer($viewer);
+
+    $list = array();
+    foreach ($requests as $pull) {
+      $field_list = PhabricatorCustomField::getObjectFields(
+        $pull,
+        PhabricatorCustomField::ROLE_VIEW);
+
+      $field_list
+        ->setViewer($viewer)
+        ->readFieldsFromStorage($pull);
+
+      foreach ($field_list->getFields() as $field) {
+        if ($field->shouldMarkup()) {
+          $field->setMarkupEngine($engine);
         }
       }
 
-      $field->appendSelectControlsHook(
-        $form,
-        $request,
-        $all_releeph_requests,
-        $all_releeph_requests_without_this_field);
-
-      $field->selectReleephRequestsHook(
-        $request,
-        $filtered_releeph_requests);
+      $list[] = id(new ReleephRequestView())
+        ->setUser($viewer)
+        ->setCustomFields($field_list)
+        ->setPullRequest($pull)
+        ->setIsListView(true);
     }
 
-    $form->appendChild(
-      id(new AphrontFormSubmitControl())
-        ->setValue(pht('Filter')));
+    // This is quite sketchy, but the list has not actually rendered yet, so
+    // this still allows us to batch the markup rendering.
+    $engine->process();
 
-    $list = id(new ReleephRequestHeaderListView())
-      ->setOriginType('branch')
-      ->setUser($request->getUser())
-      ->setAphrontRequest($this->getRequest())
-      ->setReleephProject($releeph_project)
-      ->setReleephBranch($releeph_branch)
-      ->setReleephRequests($filtered_releeph_requests);
+    return $list;
+  }
 
-    $filter = id(new AphrontListFilterView())
-      ->appendChild($form);
+  public function buildSideNavView($for_app = false) {
+    $user = $this->getRequest()->getUser();
 
-    $crumbs = $this->buildApplicationCrumbs()
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName($releeph_project->getName())
-          ->setHref($releeph_project->getURI()))
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName($releeph_branch->getDisplayNameWithDetail())
-          ->setHref($releeph_branch->getURI()));
+    $nav = new AphrontSideNavFilterView();
+    $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
 
-    // Don't show the request button for inactive (closed) branches
-    if ($releeph_branch->isActive()) {
-      $create_uri = $releeph_branch->getURI('request/');
+    $this->getSearchEngine()->addNavigationItems($nav->getMenu());
+
+    $nav->selectFilter(null);
+
+    return $nav;
+  }
+
+  private function getSearchEngine() {
+    $branch = $this->getBranch();
+    return id(new ReleephRequestSearchEngine())
+      ->setBranch($branch)
+      ->setBaseURI($this->getApplicationURI('branch/'.$branch->getID().'/'))
+      ->setViewer($this->getRequest()->getUser());
+  }
+
+  public function buildApplicationCrumbs() {
+    $crumbs = parent::buildApplicationCrumbs();
+
+    $branch = $this->getBranch();
+    if ($branch) {
+      $pull_uri = $this->getApplicationURI('branch/pull/'.$branch->getID().'/');
       $crumbs->addAction(
-        id(new PhabricatorMenuItemView())
-          ->setHref($create_uri)
-          ->setName(pht('Request Pick'))
-          ->setIcon('create'));
+        id(new PHUIListItemView())
+          ->setHref($pull_uri)
+          ->setName(pht('New Pull Request'))
+          ->setIcon('fa-plus-square')
+          ->setDisabled(!$branch->isActive()));
     }
 
-    return $this->buildStandardPageResponse(
-      array(
-        $crumbs,
-        $filter,
-        $list
-      ),
-      array(
-        'title' =>
-          $releeph_project->getName().
-          ' - '.
-          $releeph_branch->getDisplayName().
-          ' requests'
-      ));
+    return $crumbs;
+  }
+
+  private function renderPreface() {
+    $viewer = $this->getRequest()->getUser();
+
+    $branch = $this->getBranch();
+    $id = $branch->getID();
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($branch->getDisplayName())
+      ->setUser($viewer)
+      ->setPolicyObject($branch);
+
+    if ($branch->getIsActive()) {
+      $header->setStatus('fa-check', 'bluegrey', pht('Active'));
+    } else {
+      $header->setStatus('fa-ban', 'dark', pht('Closed'));
+    }
+
+    $actions = id(new PhabricatorActionListView())
+      ->setUser($viewer)
+      ->setObject($branch)
+      ->setObjectURI($this->getRequest()->getRequestURI());
+
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $branch,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $edit_uri = $this->getApplicationURI("branch/edit/{$id}/");
+    $close_uri = $this->getApplicationURI("branch/close/{$id}/");
+    $reopen_uri = $this->getApplicationURI("branch/re-open/{$id}/");
+    $history_uri = $this->getApplicationURI("branch/{$id}/history/");
+
+    $actions->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Branch'))
+        ->setHref($edit_uri)
+        ->setIcon('fa-pencil')
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit));
+
+    if ($branch->getIsActive()) {
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Close Branch'))
+          ->setHref($close_uri)
+          ->setIcon('fa-times')
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(true));
+    } else {
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Reopen Branch'))
+          ->setHref($reopen_uri)
+          ->setIcon('fa-plus')
+          ->setUser($viewer)
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(true));
+    }
+
+    $actions->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('View History'))
+        ->setHref($history_uri)
+        ->setIcon('fa-list'));
+
+    $properties = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setObject($branch)
+      ->setActionList($actions);
+
+    $properties->addProperty(
+      pht('Branch'),
+      $branch->getName());
+
+    return id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
   }
 
 }

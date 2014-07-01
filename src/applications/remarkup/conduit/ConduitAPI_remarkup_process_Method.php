@@ -23,16 +23,16 @@ final class ConduitAPI_remarkup_process_Method extends ConduitAPIMethod {
 
   public function defineParamTypes() {
     $available_contexts = array_keys($this->getEngineContexts());
-    $available_contexts = implode(', ', $available_contexts);
+    $available_const = $this->formatStringConstants($available_contexts);
 
     return array(
-      'context' => 'required enum<'.$available_contexts.'>',
-      'content' => 'required string',
+      'context' => 'required '.$available_const,
+      'contents' => 'required list<string>',
     );
   }
 
   protected function execute(ConduitAPIRequest $request) {
-    $content = $request->getValue('content');
+    $contents = $request->getValue('contents');
     $context = $request->getValue('context');
 
     $engine_class = idx($this->getEngineContexts(), $context);
@@ -43,18 +43,19 @@ final class ConduitAPI_remarkup_process_Method extends ConduitAPIMethod {
     $engine = PhabricatorMarkupEngine::$engine_class();
     $engine->setConfig('viewer', $request->getUser());
 
-    $text = $engine->markupText($content);
-    if ($text) {
-      $content = hsprintf('%s', $text)->getHTMLContent();
-    } else {
-      $content = '';
+    $results = array();
+    foreach ($contents as $content) {
+      $text = $engine->markupText($content);
+      if ($text) {
+        $content = hsprintf('%s', $text)->getHTMLContent();
+      } else {
+        $content = '';
+      }
+      $results[] = array(
+        'content' => $content,
+      );
     }
-
-    $result = array(
-      'content' => $content,
-    );
-
-    return $result;
+    return $results;
   }
 
   private function getEngineContexts() {
@@ -62,6 +63,9 @@ final class ConduitAPI_remarkup_process_Method extends ConduitAPIMethod {
       'phriction' => 'newPhrictionMarkupEngine',
       'maniphest' => 'newManiphestMarkupEngine',
       'differential' => 'newDifferentialMarkupEngine',
+      'phame' => 'newPhameMarkupEngine',
+      'feed' => 'newFeedMarkupEngine',
+      'diffusion' => 'newDiffusionMarkupEngine',
     );
   }
 }

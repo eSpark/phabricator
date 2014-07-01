@@ -21,14 +21,20 @@ final class ConduitAPI_releephwork_record_Method
    * reverted.
    */
   public function getMethodDescription() {
-    return "Record whether we committed a pick or revert ".
-      "to the upstream repository.";
+    return 'Record whether we committed a pick or revert '.
+      'to the upstream repository.';
   }
 
   public function defineParamTypes() {
+    $action_const = $this->formatStringConstants(
+      array(
+        'pick',
+        'revert',
+      ));
+
     return array(
       'requestPHID'       => 'required string',
-      'action'            => 'required enum<"pick", "revert">',
+      'action'            => 'required '.$action_const,
       'commitIdentifier'  => 'required string',
     );
   }

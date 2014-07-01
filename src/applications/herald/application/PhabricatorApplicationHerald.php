@@ -19,7 +19,7 @@ final class PhabricatorApplicationHerald extends PhabricatorApplication {
   }
 
   public function getHelpURI() {
-    return PhabricatorEnv::getDoclink('article/Herald_User_Guide.html');
+    return PhabricatorEnv::getDoclink('Herald User Guide');
   }
 
   public function getFlavorText() {
@@ -27,26 +27,44 @@ final class PhabricatorApplicationHerald extends PhabricatorApplication {
   }
 
   public function getApplicationGroup() {
-    return self::GROUP_COMMUNICATION;
+    return self::GROUP_UTILITIES;
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new HeraldRemarkupRule(),
+    );
   }
 
   public function getRoutes() {
     return array(
       '/herald/' => array(
-        '' => 'HeraldHomeController',
-        'view/(?P<content_type>[^/]+)/(?:(?P<rule_type>[^/]+)/)?'
-          => 'HeraldHomeController',
-        'new/(?:(?P<type>[^/]+)/(?:(?P<rule_type>[^/]+)/)?)?'
-          => 'HeraldNewController',
-        'rule/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'HeraldRuleListController',
+        'new/' => 'HeraldNewController',
+        'rule/(?P<id>[1-9]\d*)/' => 'HeraldRuleViewController',
+        'edit/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleController',
+        'disable/(?P<id>[1-9]\d*)/(?P<action>\w+)/' =>
+          'HeraldDisableController',
         'history/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleEditHistoryController',
-        'delete/(?P<id>[1-9]\d*)/' => 'HeraldDeleteController',
         'test/' => 'HeraldTestConsoleController',
-        'transcript/' => 'HeraldTranscriptListController',
-        'transcript/(?P<id>[1-9]\d*)/(?:(?P<filter>\w+)/)?'
+        'transcript/' => array(
+          '' => 'HeraldTranscriptListController',
+          '(?:query/(?P<queryKey>[^/]+)/)?' => 'HeraldTranscriptListController',
+          '(?P<id>[1-9]\d*)/(?:(?P<filter>\w+)/)?'
           => 'HeraldTranscriptController',
+        )
+      )
+    );
+  }
+
+  protected function getCustomCapabilities() {
+    return array(
+      HeraldCapabilityManageGlobalRules::CAPABILITY => array(
+        'caption' => pht('Global rules can bypass access controls.'),
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
     );
   }
+
 
 }

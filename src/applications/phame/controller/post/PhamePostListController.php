@@ -78,10 +78,7 @@ final class PhamePostListController extends PhameController {
       ->appendChild($post_list);
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName($title)
-        ->setHref($this->getApplicationURI()));
+    $crumbs->addTextCrumb($title, $this->getApplicationURI());
 
     $nav->appendChild(
       array(
@@ -93,8 +90,6 @@ final class PhamePostListController extends PhameController {
       $nav,
       array(
         'title'   => $title,
-        'device'  => true,
-        'dust'    => true,
       ));
   }
 

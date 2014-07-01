@@ -1,18 +1,15 @@
 <?php
 
-/**
- * @group conduit
- */
 final class ConduitAPI_differential_query_Method
-  extends ConduitAPIMethod {
+  extends ConduitAPI_differential_Method {
 
   public function getMethodDescription() {
-    return "Query Differential revisions which match certain criteria.";
+    return 'Query Differential revisions which match certain criteria.';
   }
 
   public function defineParamTypes() {
     $hash_types = ArcanistDifferentialRevisionHash::getTypes();
-    $hash_types = implode(', ', $hash_types);
+    $hash_const = $this->formatStringConstants($hash_types);
 
     $status_types = array(
       DifferentialRevisionQuery::STATUS_ANY,
@@ -20,23 +17,22 @@ final class ConduitAPI_differential_query_Method
       DifferentialRevisionQuery::STATUS_ACCEPTED,
       DifferentialRevisionQuery::STATUS_CLOSED,
     );
-    $status_types = implode(', ', $status_types);
+    $status_const = $this->formatStringConstants($status_types);
 
     $order_types = array(
       DifferentialRevisionQuery::ORDER_MODIFIED,
       DifferentialRevisionQuery::ORDER_CREATED,
     );
-    $order_types = implode(', ', $order_types);
+    $order_const = $this->formatStringConstants($order_types);
 
     return array(
       'authors'           => 'optional list<phid>',
       'ccs'               => 'optional list<phid>',
       'reviewers'         => 'optional list<phid>',
       'paths'             => 'optional list<pair<callsign, path>>',
-      'commitHashes'      => 'optional list<pair<enum<'.
-                             $hash_types.'>, string>>',
-      'status'            => 'optional enum<'.$status_types.'>',
-      'order'             => 'optional enum<'.$order_types.'>',
+      'commitHashes'      => 'optional list<pair<'.$hash_const.', string>>',
+      'status'            => 'optional '.$status_const,
+      'order'             => 'optional '.$order_const,
       'limit'             => 'optional uint',
       'offset'            => 'optional uint',
       'ids'               => 'optional list<uint>',
@@ -75,7 +71,9 @@ final class ConduitAPI_differential_query_Method
     $branches           = $request->getValue('branches');
     $arc_projects       = $request->getValue('arcanistProjects');
 
-    $query = new DifferentialRevisionQuery();
+    $query = id(new DifferentialRevisionQuery())
+      ->setViewer($request->getUser());
+
     if ($authors) {
       $query->withAuthors($authors);
     }
@@ -110,9 +108,10 @@ final class ConduitAPI_differential_query_Method
       foreach ($path_pairs as $pair) {
         list($callsign, $path) = $pair;
         if (!idx($repos, $callsign)) {
-          $repos[$callsign] = id(new PhabricatorRepository())->loadOneWhere(
-            'callsign = %s',
-            $callsign);
+          $repos[$callsign] = id(new PhabricatorRepositoryQuery())
+            ->setViewer($request->getUser())
+            ->withCallsigns(array($callsign))
+            ->executeOne();
 
           if (!$repos[$callsign]) {
             throw id(new ConduitException('ERR-INVALID-PARAMETER'))
@@ -161,7 +160,7 @@ final class ConduitAPI_differential_query_Method
       $query->withResponsibleUsers($responsible_users);
     }
     if ($subscribers) {
-      $query->withSubscribers($subscribers);
+      $query->withCCs($subscribers);
     }
     if ($branches) {
       $query->withBranches($branches);
@@ -188,6 +187,10 @@ final class ConduitAPI_differential_query_Method
 
     $revisions = $query->execute();
 
+    $field_data = $this->loadCustomFieldsForRevisions(
+      $request->getUser(),
+      $revisions);
+
     $results = array();
     foreach ($revisions as $revision) {
       $diff = $revision->getActiveDiff();
@@ -196,30 +199,32 @@ final class ConduitAPI_differential_query_Method
       }
 
       $id = $revision->getID();
-      $auxiliary_fields = $this->loadAuxiliaryFields(
-                                 $revision, $request->getUser());
+      $phid = $revision->getPHID();
+
       $result = array(
-        'id'            => $id,
-        'phid'          => $revision->getPHID(),
-        'title'         => $revision->getTitle(),
-        'uri'           => PhabricatorEnv::getProductionURI('/D'.$id),
-        'dateCreated'   => $revision->getDateCreated(),
-        'dateModified'  => $revision->getDateModified(),
-        'authorPHID'    => $revision->getAuthorPHID(),
-        'status'        => $revision->getStatus(),
-        'statusName'    =>
+        'id'                  => $id,
+        'phid'                => $phid,
+        'title'               => $revision->getTitle(),
+        'uri'                 => PhabricatorEnv::getProductionURI('/D'.$id),
+        'dateCreated'         => $revision->getDateCreated(),
+        'dateModified'        => $revision->getDateModified(),
+        'authorPHID'          => $revision->getAuthorPHID(),
+        'status'              => $revision->getStatus(),
+        'statusName'          =>
           ArcanistDifferentialRevisionStatus::getNameForRevisionStatus(
             $revision->getStatus()),
-        'branch'        => $diff->getBranch(),
-        'summary'       => $revision->getSummary(),
-        'testPlan'      => $revision->getTestPlan(),
-        'lineCount'     => $revision->getLineCount(),
-        'diffs'         => $revision->getDiffIDs(),
-        'commits'       => $revision->getCommitPHIDs(),
-        'reviewers'     => array_values($revision->getReviewers()),
-        'ccs'           => array_values($revision->getCCPHIDs()),
-        'hashes'        => $revision->getHashes(),
-        'auxiliary'     => $auxiliary_fields,
+        'branch'              => $diff->getBranch(),
+        'summary'             => $revision->getSummary(),
+        'testPlan'            => $revision->getTestPlan(),
+        'lineCount'           => $revision->getLineCount(),
+        'activeDiffPHID'      => $diff->getPHID(),
+        'diffs'               => $revision->getDiffIDs(),
+        'commits'             => $revision->getCommitPHIDs(),
+        'reviewers'           => array_values($revision->getReviewers()),
+        'ccs'                 => array_values($revision->getCCPHIDs()),
+        'hashes'              => $revision->getHashes(),
+        'auxiliary'           => idx($field_data, $phid, array()),
+        'arcanistProjectPHID' => $diff->getArcanistProjectPHID()
       );
 
       // TODO: This is a hacky way to put permissions on this field until we
@@ -232,25 +237,6 @@ final class ConduitAPI_differential_query_Method
     }
 
     return $results;
-  }
-
-  private function loadAuxiliaryFields(
-    DifferentialRevision $revision,
-    PhabricatorUser $user) {
-    $aux_fields = DifferentialFieldSelector::newSelector()
-      ->getFieldSpecifications();
-    foreach ($aux_fields as $key => $aux_field) {
-      $aux_field->setUser($user);
-      if (!$aux_field->shouldAppearOnConduitView()) {
-        unset($aux_fields[$key]);
-      }
-    }
-
-    $aux_fields = DifferentialAuxiliaryField::loadFromStorage(
-      $revision,
-      $aux_fields);
-
-    return mpull($aux_fields, 'getValueForConduit', 'getKeyForConduit');
   }
 
 }

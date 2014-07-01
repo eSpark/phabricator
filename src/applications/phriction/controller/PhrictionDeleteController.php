@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group phriction
- */
 final class PhrictionDeleteController extends PhrictionController {
 
   private $id;
@@ -12,11 +9,18 @@ final class PhrictionDeleteController extends PhrictionController {
   }
 
   public function processRequest() {
-
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $document = id(new PhrictionDocument())->load($this->id);
+    $document = id(new PhrictionDocumentQuery())
+      ->setViewer($user)
+      ->withIDs(array($this->id))
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_EDIT,
+          PhabricatorPolicyCapability::CAN_VIEW,
+        ))
+      ->executeOne();
     if (!$document) {
       return new Aphront404Response();
     }
@@ -50,7 +54,6 @@ final class PhrictionDeleteController extends PhrictionController {
       $dialog = id(new AphrontDialogView())
         ->setUser($user)
         ->setTitle(pht('Delete Document?'))
-        ->setHeaderColor(PhabricatorActionHeaderView::HEADER_RED)
         ->appendChild(
           pht('Really delete this document? You can recover it later by '.
           'reverting to a previous version.'))

@@ -223,6 +223,18 @@ JX.install('Vector', {
     getPos : function(node) {
       JX.Event && (node instanceof JX.Event) && (node = node.getRawEvent());
 
+      if (node.getBoundingClientRect) {
+        var rect;
+        try {
+          rect = node.getBoundingClientRect();
+        } catch (e) {
+          rect = { top : 0, left : 0 };
+        }
+        return new JX.Vector(
+          rect.left + window.pageXOffset,
+          rect.top + window.pageYOffset);
+      }
+
       if (('pageX' in node) || ('clientX' in node)) {
         var c = JX.Vector._viewport;
         return new JX.Vector(

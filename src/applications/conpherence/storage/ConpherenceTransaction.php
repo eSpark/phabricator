@@ -10,15 +10,11 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
   }
 
   public function getApplicationTransactionType() {
-    return PhabricatorPHIDConstants::PHID_TYPE_CONP;
+    return PhabricatorConpherencePHIDTypeThread::TYPECONST;
   }
 
   public function getApplicationTransactionCommentObject() {
     return new ConpherenceTransactionComment();
-  }
-
-  public function getApplicationObjectTypeName() {
-    return pht('conpherence');
   }
 
   public function getNoEffectDescription() {
@@ -39,6 +35,7 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
         return ($old === null);
       case ConpherenceTransactionType::TYPE_TITLE:
+      case ConpherenceTransactionType::TYPE_DATE_MARKER:
         return false;
       case ConpherenceTransactionType::TYPE_FILES:
         return true;
@@ -142,6 +139,7 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
     switch ($this->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_TITLE:
       case ConpherenceTransactionType::TYPE_FILES:
+      case ConpherenceTransactionType::TYPE_DATE_MARKER:
         break;
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
         $phids = array_merge($phids, $this->getOldValue());

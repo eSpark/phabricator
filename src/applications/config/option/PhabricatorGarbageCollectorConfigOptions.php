@@ -4,11 +4,11 @@ final class PhabricatorGarbageCollectorConfigOptions
   extends PhabricatorApplicationConfigOptions {
 
   public function getName() {
-    return pht("Garbage Collector");
+    return pht('Garbage Collector');
   }
 
   public function getDescription() {
-    return pht("Configure the GC for old logs, caches, etc.");
+    return pht('Configure the GC for old logs, caches, etc.');
   }
 
   public function getOptions() {
@@ -32,6 +32,9 @@ final class PhabricatorGarbageCollectorConfigOptions
       'gcdaemon.ttl.general-cache' => array(
         30,
         pht('Number of seconds to retain general cache entries for.')),
+      'gcdaemon.ttl.conduit-logs' => array(
+        180,
+        pht('Number of seconds to retain Conduit call logs for.'))
     );
 
     $result = array();

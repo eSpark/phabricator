@@ -5,14 +5,87 @@
  */
 final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
+  const ERROR_EMPTY_PARTICIPANTS = 'error-empty-participants';
+  const ERROR_EMPTY_MESSAGE = 'error-empty-message';
+
+  public static function createConpherence(
+    PhabricatorUser $creator,
+    array $participant_phids,
+    $title,
+    $message,
+    PhabricatorContentSource $source) {
+
+    $conpherence = id(new ConpherenceThread())
+      ->attachParticipants(array())
+      ->attachFilePHIDs(array())
+      ->setMessageCount(0);
+    $files = array();
+    $errors = array();
+    if (empty($participant_phids)) {
+      $errors[] = self::ERROR_EMPTY_PARTICIPANTS;
+    } else {
+      $participant_phids[] = $creator->getPHID();
+      $participant_phids = array_unique($participant_phids);
+      $conpherence->setRecentParticipantPHIDs(
+        array_slice($participant_phids, 0, 10));
+    }
+
+    if (empty($message)) {
+      $errors[] = self::ERROR_EMPTY_MESSAGE;
+    }
+
+    $file_phids = PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
+      $creator,
+      array($message));
+    if ($file_phids) {
+      $files = id(new PhabricatorFileQuery())
+        ->setViewer($creator)
+        ->withPHIDs($file_phids)
+        ->execute();
+    }
+
+    if (!$errors) {
+      $xactions = array();
+      $xactions[] = id(new ConpherenceTransaction())
+        ->setTransactionType(ConpherenceTransactionType::TYPE_PARTICIPANTS)
+        ->setNewValue(array('+' => $participant_phids));
+      if ($files) {
+        $xactions[] = id(new ConpherenceTransaction())
+          ->setTransactionType(ConpherenceTransactionType::TYPE_FILES)
+          ->setNewValue(array('+' => mpull($files, 'getPHID')));
+      }
+      if ($title) {
+        $xactions[] = id(new ConpherenceTransaction())
+          ->setTransactionType(ConpherenceTransactionType::TYPE_TITLE)
+          ->setNewValue($title);
+      }
+      $xactions[] = id(new ConpherenceTransaction())
+        ->setTransactionType(PhabricatorTransactions::TYPE_COMMENT)
+        ->attachComment(
+          id(new ConpherenceTransactionComment())
+          ->setContent($message)
+          ->setConpherencePHID($conpherence->getPHID()));
+
+      id(new ConpherenceEditor())
+        ->setContentSource($source)
+        ->setContinueOnNoEffect(true)
+        ->setActor($creator)
+        ->applyTransactions($conpherence, $xactions);
+
+    }
+
+    return array($errors, $conpherence);
+  }
+
   public function generateTransactionsFromText(
+    PhabricatorUser $viewer,
     ConpherenceThread $conpherence,
     $text) {
 
     $files = array();
-    $file_phids =
-      PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
-        array($text));
+    $file_phids = PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
+      $viewer,
+      array($text));
     // Since these are extracted from text, we might be re-including the
     // same file -- e.g. a mock under discussion. Filter files we
     // already have.
@@ -95,6 +168,24 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     }
 
     return $lock;
+  }
+
+  /**
+   * We need to apply initial effects IFF the conpherence is new. We must
+   * save the conpherence first thing to make sure we have an id and a phid.
+   */
+  protected function shouldApplyInitialEffects(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    return !$object->getID();
+  }
+
+  protected function applyInitialEffects(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    $object->save();
   }
 
   protected function applyCustomInternalTransaction(
@@ -214,6 +305,19 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
       }
       $participant->save();
     }
+
+    if ($xactions) {
+      $data = array(
+        'type'        => 'message',
+        'threadPHID'  => $object->getPHID(),
+        'messageID'   => last($xactions)->getID(),
+        'subscribers' => array($object->getPHID()),
+      );
+
+      PhabricatorNotificationClient::tryToPostMessage($data);
+    }
+
+    return $xactions;
   }
 
   protected function mergeTransactions(
@@ -232,7 +336,9 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     return parent::mergeTransactions($u, $v);
   }
 
-  protected function supportsMail() {
+  protected function shouldSendMail(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
     return true;
   }
 
@@ -306,7 +412,9 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     return PhabricatorEnv::getEnvConfig('metamta.conpherence.subject-prefix');
   }
 
-  protected function supportsFeed() {
+  protected function shouldPublishFeedStory(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
     return false;
   }
 

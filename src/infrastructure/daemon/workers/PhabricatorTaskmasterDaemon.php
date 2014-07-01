@@ -19,8 +19,16 @@ final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
           $task = $task->executeTask();
           $ex = $task->getExecutionException();
           if ($ex) {
-            $this->log("Task {$id} failed!");
-            throw $ex;
+            if ($ex instanceof PhabricatorWorkerPermanentFailureException) {
+              $this->log("Task {$id} failed permanently.");
+            } else if ($ex instanceof PhabricatorWorkerYieldException) {
+              $this->log(pht('Task %s yielded.', $id));
+            } else {
+              $this->log("Task {$id} failed!");
+              throw new PhutilProxyException(
+                "Error while executing task ID {$id} from queue.",
+                $ex);
+            }
           } else {
             $this->log("Task {$id} complete! Moved to archive.");
           }

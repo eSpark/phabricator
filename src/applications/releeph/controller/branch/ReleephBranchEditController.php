@@ -1,80 +1,77 @@
 <?php
 
-final class ReleephBranchEditController extends ReleephController {
+final class ReleephBranchEditController extends ReleephBranchController {
+
+  private $branchID;
+
+  public function willProcessRequest(array $data) {
+    $this->branchID = $data['branchID'];
+  }
 
   public function processRequest() {
     $request = $this->getRequest();
-    $releeph_branch = $this->getReleephBranch();
-    $branch_name = $request->getStr(
-      'branchName',
-      $releeph_branch->getName());
+    $viewer = $request->getUser();
+
+    $branch = id(new ReleephBranchQuery())
+      ->setViewer($viewer)
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
+      ->withIDs(array($this->branchID))
+      ->executeOne();
+    if (!$branch) {
+      return new Aphront404Response();
+    }
+    $this->setBranch($branch);
+
     $symbolic_name = $request->getStr(
       'symbolicName',
-      $releeph_branch->getSymbolicName());
-
-    $e_existing_with_same_branch_name = false;
-    $errors = array();
+      $branch->getSymbolicName());
 
     if ($request->isFormPost()) {
-      $existing_with_same_branch_name =
+      $existing_with_same_symbolic_name =
         id(new ReleephBranch())
           ->loadOneWhere(
-              'id != %d AND releephProjectID = %d AND name = %s',
-              $releeph_branch->getID(),
-              $releeph_branch->getReleephProjectID(),
-              $branch_name);
+              'id != %d AND releephProjectID = %d AND symbolicName = %s',
+              $branch->getID(),
+              $branch->getReleephProjectID(),
+              $symbolic_name);
 
-      if ($existing_with_same_branch_name) {
-        $errors[] = pht(
-          "The branch name %s is currently taken. Please use another name. ",
-          $branch_name);
-        $e_existing_with_same_branch_name = pht('Error');
+      $branch->openTransaction();
+      $branch
+        ->setSymbolicName($symbolic_name);
+
+      if ($existing_with_same_symbolic_name) {
+        $existing_with_same_symbolic_name
+          ->setSymbolicName(null)
+          ->save();
       }
 
-      if (!$errors) {
-        $existing_with_same_symbolic_name =
-          id(new ReleephBranch())
-            ->loadOneWhere(
-                'id != %d AND releephProjectID = %d AND symbolicName = %s',
-                $releeph_branch->getID(),
-                $releeph_branch->getReleephProjectID(),
-                $symbolic_name);
+      $branch->save();
+      $branch->saveTransaction();
 
-        $releeph_branch->openTransaction();
-        $releeph_branch
-          ->setName($branch_name)
-          ->setBasename(last(explode('/', $branch_name)))
-          ->setSymbolicName($symbolic_name);
-
-        if ($existing_with_same_symbolic_name) {
-          $existing_with_same_symbolic_name
-            ->setSymbolicName(null)
-            ->save();
-        }
-
-        $releeph_branch->save();
-        $releeph_branch->saveTransaction();
-
-        return id(new AphrontRedirectResponse())
-          ->setURI('/releeph/project/'.$releeph_branch->getReleephProjectID());
-      }
+      return id(new AphrontRedirectResponse())
+        ->setURI($this->getBranchViewURI($branch));
     }
 
     $phids = array();
 
-    $phids[] = $creator_phid = $releeph_branch->getCreatedByUserPHID();
-    $phids[] = $cut_commit_phid = $releeph_branch->getCutPointCommitPHID();
+    $phids[] = $creator_phid = $branch->getCreatedByUserPHID();
+    $phids[] = $cut_commit_phid = $branch->getCutPointCommitPHID();
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($request->getUser())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
 
     $form = id(new AphrontFormView())
       ->setUser($request->getUser())
       ->appendChild(
         id(new AphrontFormStaticControl())
         ->setLabel(pht('Branch Name'))
-        ->setValue($branch_name))
+        ->setValue($branch->getName()))
       ->appendChild(
         id(new AphrontFormMarkupControl())
           ->setLabel(pht('Cut Point'))
@@ -90,48 +87,29 @@ final class ReleephBranchEditController extends ReleephController {
           ->setValue($symbolic_name)
           ->setCaption(pht('Mutable alternate name, for easy reference, '.
               '(e.g. "LATEST")')))
-      ->appendChild(phutil_tag(
-          'p',
-          array(),
-          pht('In dire situations where the branch name is wrong, ' .
-            'you can edit it in the database by changing the field below. ' .
-            'If you do this, it is very important that you change your ' .
-            'branch\'s name in the VCS to reflect the new name in Releeph, ' .
-            'otherwise a catastrophe of previously unheard-of magnitude ' .
-            'will befall your project.')))
-      ->appendChild(
-        id(new AphrontFormTextControl)
-          ->setLabel(pht('New Branch Name'))
-          ->setName('branchName')
-          ->setValue($branch_name)
-          ->setError($e_existing_with_same_branch_name))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->addCancelButton($releeph_branch->getURI())
-          ->setValue(pht('Save')));
-
-    $error_view = null;
-    if ($errors) {
-      $error_view = id(new AphrontErrorView())
-        ->setSeverity(AphrontErrorView::SEVERITY_ERROR)
-        ->setErrors($errors)
-        ->setTitle(pht('Errors'));
-    }
+          ->addCancelButton($this->getBranchViewURI($branch))
+          ->setValue(pht('Save Branch')));
 
     $title = pht(
       'Edit Branch %s',
-      $releeph_branch->getDisplayNameWithDetail());
+      $branch->getDisplayNameWithDetail());
 
-    $panel = id(new AphrontPanelView())
-      ->setHeader($title)
-      ->appendChild($form)
-      ->setWidth(AphrontPanelView::WIDTH_FORM);
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Edit'));
 
-    return $this->buildStandardPageResponse(
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->appendChild($form);
+
+    return $this->buildApplicationPage(
       array(
-        $error_view,
-        $panel,
+        $crumbs,
+        $box,
       ),
-      array('title' => $title));
+      array(
+        'title' => $title,
+      ));
   }
 }

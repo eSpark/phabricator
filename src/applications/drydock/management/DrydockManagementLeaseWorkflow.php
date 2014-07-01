@@ -28,7 +28,7 @@ final class DrydockManagementLeaseWorkflow
     $resource_type = $args->getArg('type');
     if (!$resource_type) {
       throw new PhutilArgumentUsageException(
-        "Specify a resource type with `--type`.");
+        'Specify a resource type with `--type`.');
     }
 
     $attributes = $args->getArg('attributes');
@@ -38,39 +38,16 @@ final class DrydockManagementLeaseWorkflow
       $attributes = $options->parse($attributes);
     }
 
-    $lease = new DrydockLease();
-    $lease->setResourceType($resource_type);
+    PhabricatorWorker::setRunAllTasksInProcess(true);
+
+    $lease = id(new DrydockLease())
+      ->setResourceType($resource_type);
     if ($attributes) {
       $lease->setAttributes($attributes);
     }
-    $lease->queueForActivation();
-
-    $root = dirname(phutil_get_library_root('phabricator'));
-    $wait = new ExecFuture(
-      'php -f %s wait-for-lease --id %s',
-      $root.'/scripts/drydock/drydock_control.php',
-      $lease->getID());
-
-    $cursor = 0;
-    foreach (Futures(array($wait))->setUpdateInterval(1) as $key => $future) {
-      if ($future) {
-        $future->resolvex();
-        break;
-      }
-
-      $logs = id(new DrydockLogQuery())
-        ->withLeaseIDs(array($lease->getID()))
-        ->withAfterID($cursor)
-        ->setOrder(DrydockLogQuery::ORDER_ID)
-        ->execute();
-
-      if ($logs) {
-        foreach ($logs as $log) {
-          $console->writeErr("%s\n", $log->getMessage());
-        }
-        $cursor = max(mpull($logs, 'getID'));
-      }
-    }
+    $lease
+      ->queueForActivation()
+      ->waitUntilActive();
 
     $console->writeOut("Acquired Lease %s\n", $lease->getID());
     return 0;

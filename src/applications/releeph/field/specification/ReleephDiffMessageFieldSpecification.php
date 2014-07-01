@@ -3,26 +3,25 @@
 final class ReleephDiffMessageFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'commit:message';
+  }
+
   public function getName() {
     return 'Message';
   }
 
-  public function renderLabelForHeaderView() {
-    return null;
+  public function getStyleForPropertyView() {
+    return 'block';
   }
 
-  public function renderValueForHeaderView() {
-    $markup = phutil_tag(
+  public function renderPropertyViewValue(array $handles) {
+    return phutil_tag(
       'div',
       array(
         'class' => 'phabricator-remarkup',
       ),
       $this->getMarkupEngineOutput());
-
-    return id(new AphrontNoteView())
-      ->setTitle('Commit Message')
-      ->appendChild($markup)
-      ->render();
   }
 
   public function shouldMarkup() {

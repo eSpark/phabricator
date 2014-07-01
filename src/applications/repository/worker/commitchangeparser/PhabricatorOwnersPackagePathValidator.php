@@ -15,16 +15,17 @@ final class PhabricatorOwnersPackagePathValidator {
       return;
     }
 
+    // TODO: (T603) This should be policy-aware.
     $repository =
       id(new PhabricatorRepository())->load($commit->getRepositoryID());
     $move_map = array();
     foreach ($changes as $change) {
       if ($change->getChangeType() == DifferentialChangeType::TYPE_MOVE_HERE) {
-        $from_path = "/".$change->getTargetPath();
-        $to_path = "/".$change->getPath();
+        $from_path = '/'.$change->getTargetPath();
+        $to_path = '/'.$change->getPath();
         if ($change->getFileType() == DifferentialChangeType::FILE_DIRECTORY) {
-          $to_path = $to_path."/";
-          $from_path = $from_path."/";
+          $to_path = $to_path.'/';
+          $from_path = $from_path.'/';
         }
         $move_map[$from_path] = $to_path;
       }

@@ -12,7 +12,7 @@ class ConduitAPI_maniphest_query_Method
 
 
   public function getMethodDescription() {
-    return "Execute complex searches for Maniphest tasks.";
+    return 'Execute complex searches for Maniphest tasks.';
   }
 
   public function defineParamTypes() {
@@ -27,14 +27,14 @@ class ConduitAPI_maniphest_query_Method
       ManiphestTaskQuery::STATUS_SPITE,
       ManiphestTaskQuery::STATUS_DUPLICATE,
     );
-    $statuses = implode(', ', $statuses);
+    $status_const = $this->formatStringConstants($statuses);
 
     $orders = array(
       ManiphestTaskQuery::ORDER_PRIORITY,
       ManiphestTaskQuery::ORDER_CREATED,
       ManiphestTaskQuery::ORDER_MODIFIED,
     );
-    $orders = implode(', ', $orders);
+    $order_const = $this->formatStringConstants($orders);
 
     return array(
       'ids'               => 'optional list<uint>',
@@ -45,8 +45,8 @@ class ConduitAPI_maniphest_query_Method
       'ccPHIDs'           => 'optional list<phid>',
       'fullText'          => 'optional string',
 
-      'status'            => 'optional enum<'.$statuses.'>',
-      'order'             => 'optional enum<'.$orders.'>',
+      'status'            => 'optional '.$status_const,
+      'order'             => 'optional '.$order_const,
 
       'limit'             => 'optional int',
       'offset'            => 'optional int',
@@ -65,14 +65,16 @@ class ConduitAPI_maniphest_query_Method
   protected function execute(ConduitAPIRequest $request) {
     $query = new ManiphestTaskQuery();
 
+    $query->setViewer($request->getUser());
+
     $task_ids = $request->getValue('ids');
     if ($task_ids) {
-      $query->withTaskIDs($task_ids);
+      $query->withIDs($task_ids);
     }
 
     $task_phids = $request->getValue('phids');
     if ($task_phids) {
-      $query->withTaskPHIDs($task_phids);
+      $query->withPHIDs($task_phids);
     }
 
     $owners = $request->getValue('ownerPHIDs');

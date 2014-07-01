@@ -43,7 +43,9 @@ echo
 set +x
 
 sudo apt-get -qq update
-sudo apt-get install $GIT mysql-server apache2 php5 php5-mysql php5-gd php5-dev php5-curl php-apc php5-cli dpkg-dev
+sudo apt-get install \
+  $GIT mysql-server apache2 dpkg-dev \
+  php5 php5-mysql php5-gd php5-dev php5-curl php-apc php5-cli php5-json
 
 # Enable mod_rewrite
 sudo a2enmod rewrite
@@ -62,21 +64,21 @@ fi
 
 if [ ! -e libphutil ]
 then
-  git clone git://github.com/facebook/libphutil.git
+  git clone https://github.com/phacility/libphutil.git
 else
   (cd libphutil && git pull --rebase)
 fi
 
 if [ ! -e arcanist ]
 then
-  git clone git://github.com/facebook/arcanist.git
+  git clone https://github.com/phacility/arcanist.git
 else
   (cd arcanist && git pull --rebase)
 fi
 
 if [ ! -e phabricator ]
 then
-  git clone git://github.com/facebook/phabricator.git
+  git clone https://github.com/phacility/phabricator.git
 else
   (cd phabricator && git pull --rebase)
 fi

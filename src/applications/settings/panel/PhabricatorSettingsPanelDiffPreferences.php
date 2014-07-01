@@ -50,30 +50,21 @@ final class PhabricatorSettingsPanelDiffPreferences
               1 => pht('Enable Filetree'),
             ))
           ->setCaption(
-            pht("When looking at a revision or commit, enable a sidebar ".
-                "showing affected files. You can press %s to show or hide ".
-                "the sidebar.",
+            pht('When looking at a revision or commit, enable a sidebar '.
+                'showing affected files. You can press %s to show or hide '.
+                'the sidebar.',
                 phutil_tag('tt', array(), 'f'))))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue(pht('Save Preferences')));
 
-    $header = new PhabricatorHeaderView();
-    $header->setHeader(pht('Diff Preferences'));
-
-    $error_view = null;
-    if ($request->getBool('saved')) {
-      $error_view = id(new AphrontErrorView())
-        ->setTitle(pht('Preferences Saved'))
-        ->setSeverity(AphrontErrorView::SEVERITY_NOTICE)
-        ->setErrors(array(pht('Your preferences have been saved.')));
-    }
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Diff Preferences'))
+      ->setFormSaved($request->getBool('saved'))
+      ->setForm($form);
 
     return array(
-      $error_view,
-      $header,
-      $form,
+      $form_box,
     );
   }
 }
-

@@ -1,14 +1,14 @@
 <?php
 
 final class PhabricatorMailManagementShowInboundWorkflow
-  extends PhabricatorSearchManagementWorkflow {
+  extends PhabricatorMailManagementWorkflow {
 
   protected function didConstruct() {
     $this
       ->setName('show-inbound')
       ->setSynopsis('Show diagnostic details about inbound mail.')
       ->setExamples(
-        "**show-inbound** --id 1 --id 2")
+        '**show-inbound** --id 1 --id 2')
       ->setArguments(
         array(
           array(
@@ -38,7 +38,7 @@ final class PhabricatorMailManagementShowInboundWorkflow
       $missing = array_diff_key($ids, $messages);
       if ($missing) {
         throw new PhutilArgumentUsageException(
-          "Some specified messages do not exist: ".
+          'Some specified messages do not exist: '.
           implode(', ', array_keys($missing)));
       }
     }
@@ -54,9 +54,18 @@ final class PhabricatorMailManagementShowInboundWorkflow
       $info[] = pht('Author PHID: %s', $message->getAuthorPHID());
       $info[] = pht('Message ID Hash: %s', $message->getMessageIDHash());
 
+      if ($message->getMessage()) {
+        $info[] = null;
+        $info[] = pht('MESSAGE');
+        $info[] = $message->getMessage();
+      }
+
       $info[] = null;
       $info[] = pht('HEADERS');
       foreach ($message->getHeaders() as $key => $value) {
+        if (is_array($value)) {
+          $value = implode("\n", $value);
+        }
         $info[] = pht('%s: %s', $key, $value);
       }
 

@@ -7,7 +7,7 @@ final class PhabricatorApplicationDaemons extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Manage Daemons');
+    return pht('Manage Phabricator Daemons');
   }
 
   public function getBaseURI() {
@@ -30,6 +30,12 @@ final class PhabricatorApplicationDaemons extends PhabricatorApplication {
     return false;
   }
 
+  public function getEventListeners() {
+    return array(
+      new PhabricatorDaemonEventListener(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/daemon/' => array(
@@ -42,6 +48,7 @@ final class PhabricatorApplicationDaemons extends PhabricatorApplication {
           'combined/' => 'PhabricatorDaemonCombinedLogController',
           '(?P<id>[1-9]\d*)/' => 'PhabricatorDaemonLogViewController',
         ),
+        'event/(?P<id>[1-9]\d*)/' => 'PhabricatorDaemonLogEventViewController',
       ),
     );
   }

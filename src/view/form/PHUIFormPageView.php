@@ -8,14 +8,84 @@ class PHUIFormPageView extends AphrontView {
   private $key;
   private $form;
   private $controls = array();
+  private $content = array();
   private $values = array();
   private $isValid;
+  private $validateFormPageCallback;
+  private $adjustFormPageCallback;
+  private $pageErrors = array();
+  private $pageName;
+
+
+  public function setPageName($page_name) {
+    $this->pageName = $page_name;
+    return $this;
+  }
+
+  public function getPageName() {
+    return $this->pageName;
+  }
+
+  public function addPageError($page_error) {
+    $this->pageErrors[] = $page_error;
+    return $this;
+  }
+
+  public function getPageErrors() {
+    return $this->pageErrors;
+  }
+
+  public function setAdjustFormPageCallback($adjust_form_page_callback) {
+    $this->adjustFormPageCallback = $adjust_form_page_callback;
+    return $this;
+  }
+
+  public function setValidateFormPageCallback($validate_form_page_callback) {
+    $this->validateFormPageCallback = $validate_form_page_callback;
+    return $this;
+  }
+
+  public function addInstructions($text, $before = null) {
+    $tag = phutil_tag(
+      'div',
+      array(
+        'class' => 'aphront-form-instructions',
+      ),
+      $text);
+
+    $append = true;
+    if ($before !== null) {
+      for ($ii = 0; $ii < count($this->content); $ii++) {
+        if ($this->content[$ii] instanceof AphrontFormControl) {
+          if ($this->content[$ii]->getName() == $before) {
+            array_splice($this->content, $ii, 0, array($tag));
+            $append = false;
+            break;
+          }
+        }
+      }
+    }
+
+    if ($append) {
+      $this->content[] = $tag;
+    }
+
+    return $this;
+  }
+
+  public function addRemarkupInstructions($remarkup, $before = null) {
+    return $this->addInstructions(
+      PhabricatorMarkupEngine::renderOneObject(
+        id(new PhabricatorMarkupOneOff())->setContent($remarkup),
+        'default',
+        $this->getUser()), $before);
+  }
 
   public function addControl(AphrontFormControl $control) {
     $name = $control->getName();
 
     if (!strlen($name)) {
-      throw new Exception("Form control has no name!");
+      throw new Exception('Form control has no name!');
     }
 
     if (isset($this->controls[$name])) {
@@ -24,6 +94,7 @@ class PHUIFormPageView extends AphrontView {
     }
 
     $this->controls[$name] = $control;
+    $this->content[] = $control;
     $control->setFormPage($this);
 
     return $this;
@@ -46,11 +117,25 @@ class PHUIFormPageView extends AphrontView {
 
   public function setPagedFormView(PHUIPagedFormView $view, $key) {
     if ($this->key) {
-      throw new Exception("This page is already part of a form!");
+      throw new Exception('This page is already part of a form!');
     }
     $this->form = $view;
     $this->key = $key;
     return $this;
+  }
+
+  public function adjustFormPage() {
+    if ($this->adjustFormPageCallback) {
+      call_user_func($this->adjustFormPageCallback, $this);
+    }
+    return $this;
+  }
+
+  protected function validateFormPage() {
+    if ($this->validateFormPageCallback) {
+      return call_user_func($this->validateFormPageCallback, $this);
+    }
+    return true;
   }
 
   public function getKey() {
@@ -58,7 +143,7 @@ class PHUIFormPageView extends AphrontView {
   }
 
   public function render() {
-    return $this->getControls();
+    return $this->content;
   }
 
   public function getForm() {
@@ -91,7 +176,7 @@ class PHUIFormPageView extends AphrontView {
 
   public function isValid() {
     if ($this->isValid === null) {
-      $this->isValid = $this->validateControls();
+      $this->isValid = $this->validateControls() && $this->validateFormPage();
     }
     return $this->isValid;
   }
@@ -105,6 +190,12 @@ class PHUIFormPageView extends AphrontView {
   }
 
   public function readFromObject($object) {
+    foreach ($this->getControls() as $name => $control) {
+      if (is_array($object)) {
+        $control->readValueFromDictionary($object);
+      }
+    }
+
     return $this;
   }
 

@@ -1,8 +1,8 @@
 <?php
 
-final class ReleephBranch extends ReleephDAO {
+final class ReleephBranch extends ReleephDAO
+  implements PhabricatorPolicyInterface {
 
-  protected $phid;
   protected $releephProjectID;
   protected $isActive;
   protected $createdByUserPHID;
@@ -16,10 +16,12 @@ final class ReleephBranch extends ReleephDAO {
   protected $symbolicName;
 
   // Where to cut the branch
-  protected $cutPointCommitIdentifier;
   protected $cutPointCommitPHID;
 
   protected $details = array();
+
+  private $project = self::ATTACHABLE;
+  private $cutPointCommit = self::ATTACHABLE;
 
   public function getConfiguration() {
     return array(
@@ -31,8 +33,7 @@ final class ReleephBranch extends ReleephDAO {
   }
 
   public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID(
-      ReleephPHIDConstants::PHID_TYPE_REBR);
+    return PhabricatorPHID::generateNewPHID(ReleephPHIDTypeBranch::TYPECONST);
   }
 
   public function getDetail($key, $default = null) {
@@ -93,62 +94,61 @@ final class ReleephBranch extends ReleephDAO {
 
   public function getURI($path = null) {
     $components = array(
-      '/releeph',
-      rawurlencode($this->loadReleephProject()->getName()),
-      rawurlencode($this->getBasename()),
-      $path
+      '/releeph/branch',
+      $this->getID(),
+      $path,
     );
     return implode('/', $components);
-  }
-
-  public function loadReleephProject() {
-    return $this->loadOneRelative(
-      new ReleephProject(),
-      'id',
-      'getReleephProjectID');
-  }
-
-  private function loadReleephRequestHandles(PhabricatorUser $user, $reqs) {
-    $phids_to_phetch = array();
-    foreach ($reqs as $rr) {
-      $phids_to_phetch[] = $rr->getRequestCommitPHID();
-      $phids_to_phetch[] = $rr->getRequestUserPHID();
-      $phids_to_phetch[] = $rr->getCommitPHID();
-
-      $intents = $rr->getUserIntents();
-      if ($intents) {
-        foreach ($intents as $user_phid => $intent) {
-          $phids_to_phetch[] = $user_phid;
-        }
-      }
-
-      $request_commit = $rr->loadPhabricatorRepositoryCommit();
-      if ($request_commit) {
-        $phids_to_phetch[] = $request_commit->getAuthorPHID();
-        $phids_to_phetch[] = $rr->loadRequestCommitDiffPHID();
-      }
-    }
-    $handles = id(new PhabricatorObjectHandleData($phids_to_phetch))
-      ->setViewer($user)
-      ->loadHandles();
-    return $handles;
-  }
-
-  public function populateReleephRequestHandles(PhabricatorUser $user, $reqs) {
-    $handles = $this->loadReleephRequestHandles($user, $reqs);
-    foreach ($reqs as $req) {
-      $req->setHandles($handles);
-    }
-  }
-
-  public function loadReleephRequests(PhabricatorUser $user) {
-    $reqs = $this->loadRelatives(new ReleephRequest(), 'branchID');
-    $this->populateReleephRequestHandles($user, $reqs);
-    return $reqs;
   }
 
   public function isActive() {
     return $this->getIsActive();
   }
+
+  public function attachProject(ReleephProject $project) {
+    $this->project = $project;
+    return $this;
+  }
+
+  public function getProject() {
+    return $this->assertAttached($this->project);
+  }
+
+  public function getProduct() {
+    return $this->getProject();
+  }
+
+  public function attachCutPointCommit(
+    PhabricatorRepositoryCommit $commit = null) {
+    $this->cutPointCommit = $commit;
+    return $this;
+  }
+
+  public function getCutPointCommit() {
+    return $this->assertAttached($this->cutPointCommit);
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return $this->getProduct()->getCapabilities();
+  }
+
+  public function getPolicy($capability) {
+    return $this->getProduct()->getPolicy($capability);
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    return $this->getProduct()->hasAutomaticCapability($capability, $viewer);
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return pht(
+      'Release branches have the same policies as the product they are a '.
+      'part of.');
+  }
+
 
 }

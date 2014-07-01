@@ -59,9 +59,10 @@ final class PackageModifyMail extends PackageMail {
       array(
         $this->getPackage()->getActorPHID(),
       ));
-    $this->handles = id(new PhabricatorObjectHandleData($phids))
+    $this->handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
   }
 
   protected function renderDescriptionSection() {
@@ -80,9 +81,9 @@ final class PackageModifyMail extends PackageMail {
 
     $section = array();
     $section[] = 'PRIMARY OWNER CHANGE';
-    $section[] = '  Old owner: ' .
+    $section[] = '  Old owner: '.
       $handles[$old_primary_owner_phid]->getName();
-    $section[] = '  New owner: ' .
+    $section[] = '  New owner: '.
       $handles[$primary_owner_phid]->getName();
 
     return implode("\n", $section);

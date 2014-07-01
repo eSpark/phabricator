@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group phriction
- */
 final class PhrictionEditController
   extends PhrictionController {
 
@@ -17,11 +14,23 @@ final class PhrictionEditController
     $request = $this->getRequest();
     $user = $request->getUser();
 
+    $current_version = null;
     if ($this->id) {
-      $document = id(new PhrictionDocument())->load($this->id);
+      $document = id(new PhrictionDocumentQuery())
+        ->setViewer($user)
+        ->withIDs(array($this->id))
+        ->needContent(true)
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
+        ->executeOne();
       if (!$document) {
         return new Aphront404Response();
       }
+
+      $current_version = $document->getContent()->getVersion();
 
       $revert = $request->getInt('revert');
       if ($revert) {
@@ -33,7 +42,7 @@ final class PhrictionEditController
           return new Aphront404Response();
         }
       } else {
-        $content = id(new PhrictionContent())->load($document->getContentID());
+        $content = $document->getContent();
       }
 
     } else {
@@ -43,17 +52,22 @@ final class PhrictionEditController
         return new Aphront404Response();
       }
 
-      $document = id(new PhrictionDocument())->loadOneWhere(
-        'slug = %s',
-        $slug);
+      $document = id(new PhrictionDocumentQuery())
+        ->setViewer($user)
+        ->withSlugs(array($slug))
+        ->needContent(true)
+        ->executeOne();
 
       if ($document) {
-        $content = id(new PhrictionContent())->load($document->getContentID());
+        $content = $document->getContent();
+        $current_version = $content->getVersion();
       } else {
         if (PhrictionDocument::isProjectSlug($slug)) {
-          $project = id(new PhabricatorProject())->loadOneWhere(
-            'phrictionSlug = %s',
-            PhrictionDocument::getProjectSlugIdentifier($slug));
+          $project = id(new PhabricatorProjectQuery())
+            ->setViewer($user)
+            ->withPhrictionSlugs(array(
+              PhrictionDocument::getProjectSlugIdentifier($slug)))
+            ->executeOne();
           if (!$project) {
             return new Aphront404Response();
           }
@@ -91,6 +105,35 @@ final class PhrictionEditController
     $errors = array();
 
     if ($request->isFormPost()) {
+
+      $overwrite = $request->getBool('overwrite');
+      if (!$overwrite) {
+        $edit_version = $request->getStr('contentVersion');
+        if ($edit_version != $current_version) {
+          $dialog = $this->newDialog()
+            ->setTitle(pht('Edit Conflict!'))
+            ->appendParagraph(
+              pht(
+                'Another user made changes to this document after you began '.
+                'editing it. Do you want to overwrite their changes?'))
+            ->appendParagraph(
+              pht(
+                'If you choose to overwrite their changes, you should review '.
+                'the document edit history to see what you overwrote, and '.
+                'then make another edit to merge the changes if necessary.'))
+            ->addSubmitButton(pht('Overwrite Changes'))
+            ->addCancelButton($request->getRequestURI());
+
+          $dialog->addHiddenInput('overwrite', 'true');
+          foreach ($request->getPassthroughRequestData() as $key => $value) {
+            $dialog->addHiddenInput($key, $value);
+          }
+
+          return $dialog;
+        }
+      }
+
+
       $title = $request->getStr('title');
       $notes = $request->getStr('description');
 
@@ -147,13 +190,6 @@ final class PhrictionEditController
       }
     }
 
-    $error_view = null;
-    if ($errors) {
-      $error_view = id(new AphrontErrorView())
-        ->setTitle(pht('Form Errors'))
-        ->setErrors($errors);
-    }
-
     if ($document->getID()) {
       $panel_header = pht('Edit Phriction Document');
       $submit_button = pht('Save Changes');
@@ -197,6 +233,7 @@ final class PhrictionEditController
       ->setAction($request->getRequestURI()->getPath())
       ->addHiddenInput('slug', $document->getSlug())
       ->addHiddenInput('nodraft', $request->getBool('nodraft'))
+      ->addHiddenInput('contentVersion', $current_version)
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel(pht('Title'))
@@ -226,41 +263,36 @@ final class PhrictionEditController
           ->addCancelButton($cancel_uri)
           ->setValue($submit_button));
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($panel_header);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Edit Document'))
+      ->setFormErrors($errors)
+      ->setForm($form);
 
-    $preview_panel = hsprintf(
-      '<div class="phriction-wrap">
-        <div class="phriction-content">
-        <div class="phriction-document-preview-header plt pll">%s</div>
-        <div id="document-preview">
-          <div class="aphront-panel-preview-loading-text">%s</div>
-        </div>
-        </div>
-      </div>',
-      pht('Document Preview'),
-      pht('Loading preview...'));
+    $preview = id(new PHUIRemarkupPreviewPanel())
+      ->setHeader(pht('Document Preview'))
+      ->setPreviewURI('/phriction/preview/')
+      ->setControlID('document-textarea')
+      ->setSkin('document');
 
-    Javelin::initBehavior(
-      'phriction-document-preview',
-      array(
-        'preview'   => 'document-preview',
-        'textarea'  => 'document-textarea',
-        'uri'       => '/phriction/preview/?draftkey='.$draft_key,
-      ));
+    $crumbs = $this->buildApplicationCrumbs();
+    if ($document->getID()) {
+      $crumbs->addTextCrumb(
+        $content->getTitle(),
+        PhrictionDocument::getSlugURI($document->getSlug()));
+      $crumbs->addTextCrumb(pht('Edit'));
+    } else {
+      $crumbs->addTextCrumb(pht('Create'));
+    }
 
     return $this->buildApplicationPage(
       array(
+        $crumbs,
         $draft_note,
-        $error_view,
-        $header,
-        $form,
-        $preview_panel,
+        $form_box,
+        $preview,
       ),
       array(
         'title'   => pht('Edit Document'),
-        'device'  => true,
-        'dust'    => true,
       ));
   }
 

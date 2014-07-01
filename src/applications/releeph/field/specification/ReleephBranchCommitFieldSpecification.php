@@ -3,28 +3,26 @@
 final class ReleephBranchCommitFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'commit';
+  }
+
   public function getName() {
     return 'Commit';
   }
 
-  public function renderValueForHeaderView() {
-    $rr = $this->getReleephRequest();
-    if (!$rr->getInBranch()) {
-      return null;
+  public function getRequiredHandlePHIDsForPropertyView() {
+    $pull = $this->getReleephRequest();
+
+    if ($pull->getCommitPHID()) {
+      return array($pull->getCommitPHID());
     }
 
-    $c_phid = $rr->getCommitPHID();
-    $c_id = $rr->getCommitIdentifier();
+    return array();
+  }
 
-    if ($c_phid) {
-      $handles = $rr->getHandles();
-      $val = $handles[$c_phid]->renderLink();
-    } else if ($c_id) {
-      $val = $c_id;
-    } else {
-      $val = '???';
-    }
-    return $val;
+  public function renderPropertyViewValue(array $handles) {
+    return $this->renderHandleList($handles);
   }
 
 }

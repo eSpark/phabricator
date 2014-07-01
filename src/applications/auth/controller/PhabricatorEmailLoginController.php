@@ -10,7 +10,7 @@ final class PhabricatorEmailLoginController
   public function processRequest() {
     $request = $this->getRequest();
 
-    if (!PhabricatorEnv::getEnvConfig('auth.password-auth-enabled')) {
+    if (!PhabricatorAuthProviderPassword::getPasswordProvider()) {
       return new Aphront400Response();
     }
 
@@ -26,13 +26,13 @@ final class PhabricatorEmailLoginController
 
       $captcha_ok = AphrontFormRecaptchaControl::processCaptcha($request);
       if (!$captcha_ok) {
-        $errors[] = pht("Captcha response is incorrect, try again.");
+        $errors[] = pht('Captcha response is incorrect, try again.');
         $e_captcha = pht('Invalid');
       }
 
       $email = $request->getStr('email');
       if (!strlen($email)) {
-       $errors[] = pht("You must provide an email address.");
+       $errors[] = pht('You must provide an email address.');
        $e_email = pht('Required');
       }
 
@@ -54,12 +54,17 @@ final class PhabricatorEmailLoginController
 
         if (!$target_user) {
           $errors[] =
-            pht("There is no account associated with that email address.");
-          $e_email = pht("Invalid");
+            pht('There is no account associated with that email address.');
+          $e_email = pht('Invalid');
         }
 
         if (!$errors) {
-          $uri = $target_user->getEmailLoginURI($target_email);
+          $engine = new PhabricatorAuthSessionEngine();
+          $uri = $engine->getOneTimeLoginURI(
+            $target_user,
+            null,
+            PhabricatorAuthSessionEngine::ONETIME_RESET);
+
           if ($is_serious) {
             $body = <<<EOBODY
 You can use this link to reset your Phabricator password:
@@ -87,33 +92,34 @@ EOBODY;
           // mail if they have the "don't send me email about my own actions"
           // preference set.
 
-          $mail = new PhabricatorMetaMTAMail();
-          $mail->setSubject('[Phabricator] Password Reset');
-          $mail->addTos(
-            array(
-              $target_user->getPHID(),
-            ));
-          $mail->setBody($body);
-          $mail->saveAndSend();
+          $mail = id(new PhabricatorMetaMTAMail())
+            ->setSubject(pht('[Phabricator] Password Reset'))
+            ->addRawTos(array($target_email->getAddress()))
+            ->setBody($body)
+            ->saveAndSend();
 
-          $view = new AphrontRequestFailureView();
-          $view->setHeader(pht('Check Your Email'));
-          $view->appendChild(phutil_tag('p', array(), pht(
-              'An email has been sent with a link you can use to login.')));
-          return $this->buildStandardPageResponse(
-            $view,
-            array(
-              'title' => pht('Email Sent'),
-            ));
+          return $this->newDialog()
+            ->setTitle(pht('Check Your Email'))
+            ->setShortTitle(pht('Email Sent'))
+            ->appendParagraph(
+              pht('An email has been sent with a link you can use to login.'))
+            ->addCancelButton('/', pht('Done'));
         }
       }
 
     }
 
-    $email_auth = new AphrontFormView();
+    $error_view = null;
+    if ($errors) {
+      $error_view = new AphrontErrorView();
+      $error_view->setErrors($errors);
+    }
+
+    $email_auth = new PHUIFormLayoutView();
+    $email_auth->appendChild($error_view);
     $email_auth
-      ->setAction('/login/email/')
       ->setUser($request->getUser())
+      ->setFullWidth(true)
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel(pht('Email'))
@@ -123,34 +129,26 @@ EOBODY;
       ->appendChild(
         id(new AphrontFormRecaptchaControl())
           ->setLabel(pht('Captcha'))
-          ->setError($e_captcha))
-      ->appendChild(
-        id(new AphrontFormSubmitControl())
-          ->setValue(pht('Send Email')));
+          ->setError($e_captcha));
 
-    $error_view = null;
-    if ($errors) {
-      $error_view = new AphrontErrorView();
-      $error_view->setTitle(pht('Login Error'));
-      $error_view->setErrors($errors);
-    }
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Reset Password'));
 
-
-    $panel = new AphrontPanelView();
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
-    $panel->appendChild(phutil_tag('h1', array(), pht(
-      'Forgot Password / Email Login')));
-    $panel->appendChild($email_auth);
-    $panel->setNoBackground();
+    $dialog = new AphrontDialogView();
+    $dialog->setUser($request->getUser());
+    $dialog->setTitle(pht(
+      'Forgot Password / Email Login'));
+    $dialog->appendChild($email_auth);
+    $dialog->addSubmitButton(pht('Send Email'));
+    $dialog->setSubmitURI('/login/email/');
 
     return $this->buildApplicationPage(
       array(
-        $error_view,
-        $panel,
+        $crumbs,
+        $dialog,
       ),
       array(
         'title' => pht('Forgot Password'),
-        'device' => true,
       ));
   }
 

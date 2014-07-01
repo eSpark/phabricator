@@ -108,6 +108,10 @@ final class PhabricatorEnv {
     }
     putenv('PATH='.$env_path);
 
+    // Write this back into $_ENV, too, so ExecFuture picks it up when creating
+    // subprocess environments.
+    $_ENV['PATH'] = $env_path;
+
     PhabricatorEventEngine::initialize();
 
     $translation = PhabricatorEnv::newObjectFromConfig('translation.provider');
@@ -135,7 +139,7 @@ final class PhabricatorEnv {
 
     $stack->pushSource(
       id(new PhabricatorConfigLocalSource())
-        ->setName(pht("Local Config")));
+        ->setName(pht('Local Config')));
 
     // If the install overrides the database adapter, we might need to load
     // the database adapter class before we can push on the database config.
@@ -152,7 +156,7 @@ final class PhabricatorEnv {
     try {
       $stack->pushSource(
         id(new PhabricatorConfigDatabaseSource('default'))
-          ->setName(pht("Database")));
+          ->setName(pht('Database')));
     } catch (AphrontQueryException $exception) {
       // If the database is not available, just skip this configuration
       // source. This happens during `bin/storage upgrade`, `bin/conf` before
@@ -163,7 +167,7 @@ final class PhabricatorEnv {
   public static function repairConfig($key, $value) {
     if (!self::$repairSource) {
       self::$repairSource = id(new PhabricatorConfigDictionarySource(array()))
-        ->setName(pht("Repaired Config"));
+        ->setName(pht('Repaired Config'));
       self::$sourceStack->pushSource(self::$repairSource);
     }
     self::$repairSource->setKeys(array($key => $value));
@@ -173,7 +177,7 @@ final class PhabricatorEnv {
   public static function overrideConfig($key, $value) {
     if (!self::$overrideSource) {
       self::$overrideSource = id(new PhabricatorConfigDictionarySource(array()))
-        ->setName(pht("Overridden Config"));
+        ->setName(pht('Overridden Config'));
       self::$sourceStack->pushSource(self::$overrideSource);
     }
     self::$overrideSource->setKeys(array($key => $value));
@@ -248,6 +252,23 @@ final class PhabricatorEnv {
 
 
   /**
+   * Get the current configuration setting for a given key. If the key
+   * does not exist, return a default value instead of throwing. This is
+   * primarily useful for migrations involving keys which are slated for
+   * removal.
+   *
+   * @task read
+   */
+  public static function getEnvConfigIfExists($key, $default = null) {
+    try {
+      return self::getEnvConfig($key);
+    } catch (Exception $ex) {
+      return $default;
+    }
+  }
+
+
+  /**
    * Get the fully-qualified URI for a path.
    *
    * @task read
@@ -315,8 +336,12 @@ final class PhabricatorEnv {
    *
    * @task read
    */
-  public static function getDoclink($resource) {
-    return 'http://www.phabricator.com/docs/phabricator/'.$resource;
+  public static function getDoclink($resource, $type = 'article') {
+    $uri = new PhutilURI('https://secure.phabricator.com/diviner/find/');
+    $uri->setQueryParam('name', $resource);
+    $uri->setQueryParam('type', $type);
+    $uri->setQueryParam('jump', true);
+    return (string)$uri;
   }
 
 
@@ -385,8 +410,8 @@ final class PhabricatorEnv {
     if ($stack_key !== $key) {
       self::$sourceStack->pushSource($source);
       throw new Exception(
-        "Scoped environments were destroyed in a diffent order than they ".
-        "were initialized.");
+        'Scoped environments were destroyed in a diffent order than they '.
+        'were initialized.');
     }
   }
 
@@ -511,6 +536,8 @@ final class PhabricatorEnv {
     foreach ($tmp as $source) {
       self::$sourceStack->pushSource($source);
     }
+
+    self::dropConfigCache();
   }
 
   private static function dropConfigCache() {

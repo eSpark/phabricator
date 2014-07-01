@@ -3,6 +3,7 @@
 final class AphrontDialogView extends AphrontView {
 
   private $title;
+  private $shortTitle;
   private $submitButton;
   private $cancelURI;
   private $cancelText = 'Cancel';
@@ -11,12 +12,40 @@ final class AphrontDialogView extends AphrontView {
   private $class;
   private $renderAsForm = true;
   private $formID;
-  private $headerColor = PhabricatorActionHeaderView::HEADER_DARK_GREY;
-
+  private $headerColor = PHUIActionHeaderView::HEADER_LIGHTBLUE;
+  private $footers = array();
+  private $isStandalone;
+  private $method = 'POST';
+  private $disableWorkflowOnSubmit;
+  private $disableWorkflowOnCancel;
   private $width      = 'default';
+  private $errors = array();
+  private $flush;
+  private $validationException;
+
+
   const WIDTH_DEFAULT = 'default';
   const WIDTH_FORM    = 'form';
   const WIDTH_FULL    = 'full';
+
+  public function setMethod($method) {
+    $this->method = $method;
+    return $this;
+  }
+
+  public function setIsStandalone($is_standalone) {
+    $this->isStandalone = $is_standalone;
+    return $this;
+  }
+
+  public function setErrors(array $errors) {
+    $this->errors = $errors;
+    return $this;
+  }
+
+  public function getIsStandalone() {
+    return $this->isStandalone;
+  }
 
   public function setSubmitURI($uri) {
     $this->submitURI = $uri;
@@ -30,6 +59,15 @@ final class AphrontDialogView extends AphrontView {
 
   public function getTitle() {
     return $this->title;
+  }
+
+  public function setShortTitle($short_title) {
+    $this->shortTitle = $short_title;
+    return $this;
+  }
+
+  public function getShortTitle() {
+    return $this->shortTitle;
   }
 
   public function addSubmitButton($text = null) {
@@ -51,6 +89,11 @@ final class AphrontDialogView extends AphrontView {
     return $this;
   }
 
+  public function addFooter($footer) {
+    $this->footers[] = $footer;
+    return $this;
+  }
+
   public function addHiddenInput($key, $value) {
     if (is_array($value)) {
       foreach ($value as $hidden_key => $hidden_value) {
@@ -64,6 +107,11 @@ final class AphrontDialogView extends AphrontView {
 
   public function setClass($class) {
     $this->class = $class;
+    return $this;
+  }
+
+  public function setFlush($flush) {
+    $this->flush = $flush;
     return $this;
   }
 
@@ -88,21 +136,67 @@ final class AphrontDialogView extends AphrontView {
     return $this;
   }
 
+  public function appendParagraph($paragraph) {
+    return $this->appendChild(
+      phutil_tag(
+        'p',
+        array(
+          'class' => 'aphront-dialog-view-paragraph',
+        ),
+        $paragraph));
+  }
+
+  public function setDisableWorkflowOnSubmit($disable_workflow_on_submit) {
+    $this->disableWorkflowOnSubmit = $disable_workflow_on_submit;
+    return $this;
+  }
+
+  public function getDisableWorkflowOnSubmit() {
+    return $this->disableWorkflowOnSubmit;
+  }
+
+  public function setDisableWorkflowOnCancel($disable_workflow_on_cancel) {
+    $this->disableWorkflowOnCancel = $disable_workflow_on_cancel;
+    return $this;
+  }
+
+  public function getDisableWorkflowOnCancel() {
+    return $this->disableWorkflowOnCancel;
+  }
+
+  public function setValidationException(
+    PhabricatorApplicationTransactionValidationException $ex = null) {
+    $this->validationException = $ex;
+    return $this;
+  }
+
   final public function render() {
     require_celerity_resource('aphront-dialog-view-css');
 
     $buttons = array();
     if ($this->submitButton) {
+      $meta = array();
+      if ($this->disableWorkflowOnSubmit) {
+        $meta['disableWorkflow'] = true;
+      }
+
       $buttons[] = javelin_tag(
         'button',
         array(
           'name' => '__submit__',
           'sigil' => '__default__',
+          'type' => 'submit',
+          'meta' => $meta,
         ),
         $this->submitButton);
     }
 
     if ($this->cancelURI) {
+      $meta = array();
+      if ($this->disableWorkflowOnCancel) {
+        $meta['disableWorkflow'] = true;
+      }
+
       $buttons[] = javelin_tag(
         'a',
         array(
@@ -110,16 +204,20 @@ final class AphrontDialogView extends AphrontView {
           'class' => 'button grey',
           'name'  => '__cancel__',
           'sigil' => 'jx-workflow-button',
+          'meta' => $meta,
         ),
         $this->cancelText);
     }
 
     if (!$this->user) {
       throw new Exception(
-        pht("You must call setUser() when rendering an AphrontDialogView."));
+        pht('You must call setUser() when rendering an AphrontDialogView.'));
     }
 
     $more = $this->class;
+    if ($this->flush) {
+      $more .= ' aphront-dialog-flush';
+    }
 
     switch ($this->width) {
       case self::WIDTH_FORM:
@@ -132,6 +230,10 @@ final class AphrontDialogView extends AphrontView {
         throw new Exception("Unknown dialog width '{$this->width}'!");
     }
 
+    if ($this->isStandalone) {
+      $more .= ' aphront-dialog-view-standalone';
+    }
+
     $attributes = array(
       'class'   => 'aphront-dialog-view '.$more,
       'sigil'   => 'jx-dialog',
@@ -139,7 +241,7 @@ final class AphrontDialogView extends AphrontView {
 
     $form_attributes = array(
       'action'  => $this->submitURI,
-      'method'  => 'post',
+      'method'  => $this->method,
       'id'      => $this->formID,
     );
 
@@ -171,18 +273,60 @@ final class AphrontDialogView extends AphrontView {
         array_merge($hidden_inputs, $buttons)));
     }
 
-    $buttons[] = phutil_tag('div', array('style' => 'clear: both;'), '');
     $children = $this->renderChildren();
 
-    $header = new PhabricatorActionHeaderView();
+    $errors = $this->errors;
+
+    $ex = $this->validationException;
+    $exception_errors = null;
+    if ($ex) {
+      foreach ($ex->getErrors() as $error) {
+        $errors[] = $error->getMessage();
+      }
+    }
+
+    if ($errors) {
+      $children = array(
+        id(new AphrontErrorView())->setErrors($errors),
+        $children);
+    }
+
+    $header = new PHUIActionHeaderView();
     $header->setHeaderTitle($this->title);
     $header->setHeaderColor($this->headerColor);
 
-    $content = hsprintf(
-      '%s%s%s',
-      phutil_tag('div', array('class' => 'aphront-dialog-head'), $header),
-      phutil_tag('div', array('class' => 'aphront-dialog-body'), $children),
-      phutil_tag('div', array('class' => 'aphront-dialog-tail'), $buttons));
+    $footer = null;
+    if ($this->footers) {
+      $footer = phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-foot',
+        ),
+        $this->footers);
+    }
+
+    $content = array(
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-head',
+        ),
+        $header),
+      phutil_tag('div',
+        array(
+          'class' => 'aphront-dialog-body grouped',
+        ),
+        $children),
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-tail grouped',
+        ),
+        array(
+          $buttons,
+          $footer,
+        )),
+    );
 
     if ($this->renderAsForm) {
       return phabricator_form(

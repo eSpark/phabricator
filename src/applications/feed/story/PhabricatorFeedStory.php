@@ -13,10 +13,11 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
   private $data;
   private $hasViewed;
   private $framed;
+  private $hovercard = false;
+  private $renderingTarget = PhabricatorApplicationTransaction::TARGET_HTML;
 
   private $handles  = array();
   private $objects  = array();
-
 
 /* -(  Loading Stories  )---------------------------------------------------- */
 
@@ -71,9 +72,10 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
       $object_phids += $phids;
     }
 
-    $objects = id(new PhabricatorObjectHandleData(array_keys($object_phids)))
+    $objects = id(new PhabricatorObjectQuery())
       ->setViewer($viewer)
-      ->loadObjects();
+      ->withPHIDs(array_keys($object_phids))
+      ->execute();
 
     foreach ($key_phids as $key => $phids) {
       if (!$phids) {
@@ -102,9 +104,10 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
       $handle_phids += $key_phids[$key];
     }
 
-    $handles = id(new PhabricatorObjectHandleData(array_keys($handle_phids)))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($viewer)
-      ->loadHandles();
+      ->withPHIDs(array_keys($handle_phids))
+      ->execute();
 
     foreach ($key_phids as $key => $phids) {
       if (!$phids) {
@@ -115,6 +118,32 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
     }
 
     return $stories;
+  }
+
+  public function setHovercard($hover) {
+    $this->hovercard = $hover;
+    return $this;
+  }
+
+  public function setRenderingTarget($target) {
+    $this->validateRenderingTarget($target);
+    $this->renderingTarget = $target;
+    return $this;
+  }
+
+  public function getRenderingTarget() {
+    return $this->renderingTarget;
+  }
+
+  private function validateRenderingTarget($target) {
+    switch ($target) {
+      case PhabricatorApplicationTransaction::TARGET_HTML:
+      case PhabricatorApplicationTransaction::TARGET_TEXT:
+        break;
+      default:
+        throw new Exception('Unknown rendering target: '.$target);
+        break;
+    }
   }
 
   public function setObjects(array $objects) {
@@ -134,7 +163,7 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
   public function getPrimaryObject() {
     $phid = $this->getPrimaryObjectPHID();
     if (!$phid) {
-      throw new Exception("Story has no primary object!");
+      throw new Exception('Story has no primary object!');
     }
     return $this->getObject($phid);
   }
@@ -220,37 +249,68 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
   }
 
   final protected function renderHandleList(array $phids) {
-    $list = array();
+    $items = array();
     foreach ($phids as $phid) {
-      $list[] = $this->linkTo($phid);
+      $items[] = $this->linkTo($phid);
     }
-    return phutil_implode_html(', ', $list);
+    $list = null;
+    switch ($this->getRenderingTarget()) {
+      case PhabricatorApplicationTransaction::TARGET_TEXT:
+        $list = implode(', ', $items);
+        break;
+      case PhabricatorApplicationTransaction::TARGET_HTML:
+        $list = phutil_implode_html(', ', $items);
+        break;
+    }
+    return $list;
   }
 
   final protected function linkTo($phid) {
     $handle = $this->getHandle($phid);
 
+    switch ($this->getRenderingTarget()) {
+      case PhabricatorApplicationTransaction::TARGET_TEXT:
+        return $handle->getLinkName();
+    }
+
     // NOTE: We render our own link here to customize the styling and add
     // the '_top' target for framed feeds.
 
-    return phutil_tag(
+    $class = null;
+    if ($handle->getType() == PhabricatorPeoplePHIDTypeUser::TYPECONST) {
+      $class = 'phui-link-person';
+    }
+
+    return javelin_tag(
       'a',
       array(
         'href'    => $handle->getURI(),
         'target'  => $this->framed ? '_top' : null,
+        'sigil'   => $this->hovercard ? 'hovercard' : null,
+        'meta'    => $this->hovercard ? array('hoverPHID' => $phid) : null,
+        'class'   => $class,
       ),
       $handle->getLinkName());
   }
 
   final protected function renderString($str) {
-    return phutil_tag('strong', array(), $str);
+    switch ($this->getRenderingTarget()) {
+      case PhabricatorApplicationTransaction::TARGET_TEXT:
+        return $str;
+      case PhabricatorApplicationTransaction::TARGET_HTML:
+        return phutil_tag('strong', array(), $str);
+    }
   }
 
   final protected function renderSummary($text, $len = 128) {
     if ($len) {
       $text = phutil_utf8_shorten($text, $len);
     }
-    $text = phutil_escape_html_newlines($text);
+    switch ($this->getRenderingTarget()) {
+      case PhabricatorApplicationTransaction::TARGET_HTML:
+        $text = phutil_escape_html_newlines($text);
+        break;
+    }
     return $text;
   }
 
@@ -258,9 +318,19 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
     return array();
   }
 
+  protected function newStoryView() {
+    return id(new PHUIFeedStoryView())
+      ->setChronologicalKey($this->getChronologicalKey())
+      ->setEpoch($this->getEpoch())
+      ->setViewed($this->getHasViewed());
+  }
+
 
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
 
+  public function getPHID() {
+    return null;
+  }
 
   /**
    * @task policy
@@ -300,6 +370,10 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
    */
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return null;
   }
 
 }

@@ -27,10 +27,8 @@ $webroot = Filesystem::readablePath($webroot);
 $generator = new CeleritySpriteGenerator();
 
 $sheets = array(
-  'icons' => $generator->buildIconSheet(),
   'menu' => $generator->buildMenuSheet(),
   'apps' => $generator->buildAppsSheet(),
-  'actions' => $generator->buildActionsSheet(),
   'minicons' => $generator->buildMiniconsSheet(),
   'conpherence' => $generator->buildConpherenceSheet(),
   'apps-large' => $generator->buildAppsLargeSheet(),
@@ -38,6 +36,9 @@ $sheets = array(
   'tokens' => $generator->buildTokenSheet(),
   'docs' => $generator->buildDocsSheet(),
   'gradient' => $generator->buildGradientSheet(),
+  'main-header' => $generator->buildMainHeaderSheet(),
+  'login' => $generator->buildLoginSheet(),
+  'projects' => $generator->buildProjectsSheet(),
 );
 
 list($err) = exec_manual('optipng');

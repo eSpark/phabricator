@@ -1,6 +1,7 @@
 <?php
 
-final class DrydockLease extends DrydockDAO {
+final class DrydockLease extends DrydockDAO
+  implements PhabricatorPolicyInterface {
 
   protected $resourceID;
   protected $resourceType;
@@ -10,7 +11,7 @@ final class DrydockLease extends DrydockDAO {
   protected $status = DrydockLeaseStatus::STATUS_PENDING;
   protected $taskID;
 
-  private $resource;
+  private $resource = self::ATTACHABLE;
   private $releaseOnDestruction;
 
   /**
@@ -55,8 +56,7 @@ final class DrydockLease extends DrydockDAO {
   }
 
   public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_DRYL);
+    return PhabricatorPHID::generateNewPHID(DrydockPHIDTypeLease::TYPECONST);
   }
 
   public function getInterface($type) {
@@ -64,13 +64,10 @@ final class DrydockLease extends DrydockDAO {
   }
 
   public function getResource() {
-    if ($this->resource === null) {
-      throw new Exception("Resource is not yet loaded.");
-    }
-    return $this->resource;
+    return $this->assertAttached($this->resource);
   }
 
-  public function attachResource(DrydockResource $resource) {
+  public function attachResource(DrydockResource $resource = null) {
     $this->resource = $resource;
     return $this;
   }
@@ -88,29 +85,23 @@ final class DrydockLease extends DrydockDAO {
   public function queueForActivation() {
     if ($this->getID()) {
       throw new Exception(
-        "Only new leases may be queued for activation!");
+        'Only new leases may be queued for activation!');
     }
 
     $this->setStatus(DrydockLeaseStatus::STATUS_PENDING);
     $this->save();
 
-    // NOTE: Prevent a race where some eager worker quickly grabs the task
-    // before we can save the Task ID.
+    $task = PhabricatorWorker::scheduleTask(
+      'DrydockAllocatorWorker',
+      $this->getID());
 
-    $this->openTransaction();
-      $this->beginReadLocking();
+    // NOTE: Scheduling the task might execute it in-process, if we're running
+    // from a CLI script. Reload the lease to make sure we have the most
+    // up-to-date information. Normally, this has no effect.
+    $this->reload();
 
-        $this->reload();
-
-        $task = PhabricatorWorker::scheduleTask(
-          'DrydockAllocatorWorker',
-          $this->getID());
-
-        $this->setTaskID($task->getID());
-        $this->save();
-
-      $this->endReadLocking();
-    $this->saveTransaction();
+    $this->setTaskID($task->getID());
+    $this->save();
 
     return $this;
   }
@@ -137,8 +128,8 @@ final class DrydockLease extends DrydockDAO {
   private function assertActive() {
     if (!$this->isActive()) {
       throw new Exception(
-        "Lease is not active! You can not interact with resources through ".
-        "an inactive lease.");
+        'Lease is not active! You can not interact with resources through '.
+        'an inactive lease.');
     }
   }
 
@@ -158,14 +149,16 @@ final class DrydockLease extends DrydockDAO {
             unset($unresolved[$key]);
             break;
           case DrydockLeaseStatus::STATUS_RELEASED:
-            throw new Exception("Lease has already been released!");
+            throw new Exception('Lease has already been released!');
           case DrydockLeaseStatus::STATUS_EXPIRED:
-            throw new Exception("Lease has already expired!");
+            throw new Exception('Lease has already expired!');
           case DrydockLeaseStatus::STATUS_BROKEN:
-            throw new Exception("Lease has been broken!");
+            throw new Exception('Lease has been broken!');
           case DrydockLeaseStatus::STATUS_PENDING:
           case DrydockLeaseStatus::STATUS_ACQUIRING:
             break;
+          default:
+            throw new Exception('Unknown status??');
         }
       }
 
@@ -188,6 +181,34 @@ final class DrydockLease extends DrydockDAO {
 
     self::waitForLeases(array($this));
     return $this;
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+    );
+  }
+
+  public function getPolicy($capability) {
+    if ($this->getResource()) {
+      return $this->getResource()->getPolicy($capability);
+    }
+    return PhabricatorPolicies::getMostOpenPolicy();
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    if ($this->getResource()) {
+      return $this->getResource()->hasAutomaticCapability($capability, $viewer);
+    }
+    return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return pht('Leases inherit policies from the resources they lease.');
   }
 
 }

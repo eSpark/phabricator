@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group conpherence
- */
 final class ConpherenceViewController extends
   ConpherenceController {
 
@@ -70,7 +67,7 @@ final class ConpherenceViewController extends
       $form = null;
       $content = array('messages' => $messages);
     } else {
-      $header = $this->renderHeaderPaneContent();
+      $header = $this->buildHeaderPaneContent($conpherence);
       $form = $this->renderFormContent($data['latest_transaction_id']);
       $content = array(
         'header' => $header,
@@ -93,28 +90,19 @@ final class ConpherenceViewController extends
 
     $title = $conpherence->getTitle();
     if (!$title) {
-      $title = pht('Conpherence');
+      $title = pht('[No Title]');
     }
     return $this->buildApplicationPage(
       $layout,
       array(
         'title' => $title,
-        'device' => true,
+        'pageObjects' => array($conpherence->getPHID()),
       ));
   }
-
-  private function renderHeaderPaneContent() {
-    $conpherence = $this->getConpherence();
-    $header = $this->buildHeaderPaneContent($conpherence);
-    return hsprintf('%s', $header);
-  }
-
 
   private function renderMessagePaneContent(
     array $transactions,
     $oldest_transaction_id) {
-
-    require_celerity_resource('conpherence-message-pane-css');
 
     $scrollbutton = '';
     if ($oldest_transaction_id) {
@@ -139,14 +127,16 @@ final class ConpherenceViewController extends
 
     $conpherence = $this->getConpherence();
     $user = $this->getRequest()->getUser();
+    $draft = PhabricatorDraft::newFromUserAndKey(
+      $user,
+      $conpherence->getPHID());
     $update_uri = $this->getApplicationURI('update/'.$conpherence->getID().'/');
 
-    Javelin::initBehavior('conpherence-pontificate');
+    $this->initBehavior('conpherence-pontificate');
 
     $form =
       id(new AphrontFormView())
       ->setAction($update_uri)
-      ->setFlexible(true)
       ->addSigil('conpherence-pontificate')
       ->setWorkflow(true)
       ->setUser($user)
@@ -154,10 +144,11 @@ final class ConpherenceViewController extends
       ->appendChild(
         id(new PhabricatorRemarkupControl())
         ->setUser($user)
-        ->setName('text'))
+        ->setName('text')
+        ->setValue($draft->getDraft()))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue(pht('Pontificate')))
+          ->setValue(pht('Send Message')))
       ->appendChild(
         javelin_tag(
           'input',
@@ -167,10 +158,11 @@ final class ConpherenceViewController extends
             'value' => $latest_transaction_id,
             'sigil' => 'latest-transaction-id',
             'meta' => array(
-              'id' => $latest_transaction_id
-            )
+              'threadPHID' => $conpherence->getPHID(),
+              'threadID' => $conpherence->getID(),
+            ),
           ),
-        ''))
+          ''))
       ->render();
 
     return $form;

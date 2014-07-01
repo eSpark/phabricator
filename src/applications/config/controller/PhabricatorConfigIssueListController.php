@@ -15,25 +15,23 @@ final class PhabricatorConfigIssueListController
       PhabricatorSetupCheck::countUnignoredIssues($issues));
 
     $list = $this->buildIssueList($issues);
-    $list->setNoDataString(pht("There are no open setup issues."));
+    $list->setNoDataString(pht('There are no open setup issues.'));
+    $list->setStackable(true);
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader(pht('Open Phabricator Setup Issues'));
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Open Phabricator Setup Issues'))
+      ->appendChild($list);
 
     $nav->appendChild(
       array(
-        $header,
-        $list,
+        $box,
       ));
 
     $title = pht('Setup Issues');
 
     $crumbs = $this
       ->buildApplicationCrumbs($nav)
-      ->addCrumb(
-        id(new PhabricatorCrumbView())
-          ->setName(pht('Setup'))
-          ->setHref($this->getApplicationURI('issue/')));
+      ->addTextCrumb(pht('Setup'), $this->getApplicationURI('issue/'));
 
     $nav->setCrumbs($crumbs);
 
@@ -41,40 +39,39 @@ final class PhabricatorConfigIssueListController
       $nav,
       array(
         'title' => $title,
-        'device' => true,
       ));
   }
 
   private function buildIssueList(array $issues) {
     assert_instances_of($issues, 'PhabricatorSetupIssue');
-    $list = new PhabricatorObjectItemListView();
-    $list->setStackable(true);
+    $list = new PHUIObjectItemListView();
     $ignored_items = array();
 
     foreach ($issues as $issue) {
         $href = $this->getApplicationURI('/issue/'.$issue->getIssueKey().'/');
-        $item = id(new PhabricatorObjectItemView())
+        $item = id(new PHUIObjectItemView())
           ->setHeader($issue->getName())
           ->setHref($href)
-          ->setBarColor('yellow')
           ->addAttribute($issue->getSummary());
       if (!$issue->getIsIgnored()) {
-        $item->addIcon('warning', pht('Setup Warning'));
-        $link = javelin_tag(
-                 'a',
-                 array('href'  => '/config/ignore/'.$issue->getIssueKey().'/',
-                       'sigil' => 'workflow'),
-                 pht('Ignore'));
-        $item->addAttribute($link);
+        $item->setBarColor('yellow');
+        $item->addAction(
+          id(new PHUIListItemView())
+            ->setIcon('fa-eye-slash')
+            ->setWorkflow(true)
+            ->setName(pht('Ignore'))
+            ->setHref('/config/ignore/'.$issue->getIssueKey().'/'));
         $list->addItem($item);
       } else {
         $item->addIcon('none', pht('Ignored'));
-        $link = javelin_tag(
-                 'a',
-                 array('href'  => '/config/unignore/'.$issue->getIssueKey().'/',
-                       'sigil' => 'workflow'),
-                 pht('Unignore'));
-        $item->addAttribute($link);
+        $item->setDisabled(true);
+        $item->addAction(
+          id(new PHUIListItemView())
+            ->setIcon('fa-eye')
+            ->setWorkflow(true)
+            ->setName(pht('Unignore'))
+            ->setHref('/config/unignore/'.$issue->getIssueKey().'/'));
+        $item->setBarColor('none');
         $ignored_items[] = $item;
       }
     }

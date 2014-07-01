@@ -7,19 +7,15 @@ final class PhabricatorApplicationReleeph extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Release Branches');
+    return pht('Pull Requests');
   }
 
   public function getBaseURI() {
     return '/releeph/';
   }
 
-  public function getAutospriteName() {
+  public function getIconName() {
     return 'releeph';
-  }
-
-  public function getApplicationGroup() {
-    return self::GROUP_ORGANIZATION;
   }
 
   public function isInstalled() {
@@ -31,33 +27,42 @@ final class PhabricatorApplicationReleeph extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
+      '/Y(?P<requestID>[1-9]\d*)' => 'ReleephRequestViewController',
+
+      // TODO: Remove these older routes eventually.
       '/RQ(?P<requestID>[1-9]\d*)' => 'ReleephRequestViewController',
+      '/releeph/request/(?P<requestID>[1-9]\d*)/'
+        => 'ReleephRequestViewController',
+
       '/releeph/' => array(
-        '' => 'ReleephProjectListController',
-        'project/' => array(
-          '(?:(?P<filter>active|inactive)/)?' => 'ReleephProjectListController',
-          'create/' => 'ReleephProjectCreateController',
+        '' => 'ReleephProductListController',
+        '(?:product|project)/' => array(
+          '(?:query/(?P<queryKey>[^/]+)/)?' => 'ReleephProductListController',
+          'create/' => 'ReleephProductCreateController',
           '(?P<projectID>[1-9]\d*)/' => array(
-            '' => 'ReleephProjectViewController',
-            'closedbranches/' => 'ReleephProjectViewController',
-            'edit/' => 'ReleephProjectEditController',
+            '(?:query/(?P<queryKey>[^/]+)/)?' => 'ReleephProductViewController',
+            'edit/' => 'ReleephProductEditController',
             'cutbranch/' => 'ReleephBranchCreateController',
-            'action/(?P<action>.+)/' => 'ReleephProjectActionController',
+            'action/(?P<action>.+)/' => 'ReleephProductActionController',
+            'history/' => 'ReleephProductHistoryController',
           ),
         ),
+
         'branch/' => array(
           'edit/(?P<branchID>[1-9]\d*)/' =>
             'ReleephBranchEditController',
           '(?P<action>close|re-open)/(?P<branchID>[1-9]\d*)/' =>
             'ReleephBranchAccessController',
           'preview/' => 'ReleephBranchNamePreviewController',
-
-          // Left in, just in case the by-name stuff fails!
-          '(?P<branchID>[^/]+)/' =>
-            'ReleephBranchViewController',
+          '(?P<branchID>[1-9]\d*)/' => array(
+            'history/' => 'ReleephBranchHistoryController',
+            '(?:query/(?P<queryKey>[^/]+)/)?' => 'ReleephBranchViewController',
+          ),
+          'pull/(?P<branchID>[1-9]\d*)/' =>
+            'ReleephRequestEditController',
         ),
+
         'request/' => array(
-          '(?P<requestID>[1-9]\d*)/' => 'ReleephRequestViewController',
           'create/' => 'ReleephRequestEditController',
           'differentialcreate/' => array(
             'D(?P<diffRevID>[1-9]\d*)' =>
@@ -71,14 +76,6 @@ final class PhabricatorApplicationReleeph extends PhabricatorApplication {
             'ReleephRequestTypeaheadController',
           'comment/(?P<requestID>[1-9]\d*)/' =>
             'ReleephRequestCommentController',
-        ),
-
-        // Branch navigation made pretty, as it's the most common:
-        '(?P<projectName>[^/]+)/(?P<branchName>[^/]+)/' => array(
-          ''              => 'ReleephBranchViewController',
-          'edit/'         => 'ReleephBranchEditController',
-          'request/'      => 'ReleephRequestEditController',
-          '(?P<action>close|re-open)/' => 'ReleephBranchAccessController',
         ),
       )
     );

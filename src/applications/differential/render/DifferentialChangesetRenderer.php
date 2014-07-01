@@ -6,6 +6,7 @@ abstract class DifferentialChangesetRenderer {
   private $changeset;
   private $renderingReference;
   private $renderPropertyChangeHeader;
+  private $isTopLevel;
   private $hunkStartLines;
   private $oldLines;
   private $newLines;
@@ -27,6 +28,16 @@ abstract class DifferentialChangesetRenderer {
   private $gaps;
   private $mask;
   private $depths;
+  private $originalCharacterEncoding;
+
+  public function setOriginalCharacterEncoding($original_character_encoding) {
+    $this->originalCharacterEncoding = $original_character_encoding;
+    return $this;
+  }
+
+  public function getOriginalCharacterEncoding() {
+    return $this->originalCharacterEncoding;
+  }
 
   public function setDepths($depths) {
     $this->depths = $depths;
@@ -236,14 +247,25 @@ abstract class DifferentialChangesetRenderer {
     return $this->renderPropertyChangeHeader;
   }
 
+  public function setIsTopLevel($is) {
+    $this->isTopLevel = $is;
+    return $this;
+  }
+  private function getIsTopLevel() {
+    return $this->isTopLevel;
+  }
+
   final public function renderChangesetTable($content) {
     $props = null;
     if ($this->shouldRenderPropertyChangeHeader()) {
       $props = $this->renderPropertyChangeHeader();
     }
 
-    $force = (!$content && !$props);
-    $notice = $this->renderChangeTypeHeader($force);
+    $notice = null;
+    if ($this->getIsTopLevel()) {
+      $force = (!$content && !$props);
+      $notice = $this->renderChangeTypeHeader($force);
+    }
 
     $result = $notice.$props.$content;
 

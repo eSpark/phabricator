@@ -8,6 +8,54 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
     );
   }
 
+  public function testMailSendFailures() {
+    $user = $this->generateNewTestUser();
+    $phid = $user->getPHID();
+
+
+    // Normally, the send should succeed.
+    $mail = new PhabricatorMetaMTAMail();
+    $mail->addTos(array($phid));
+
+    $mailer = new PhabricatorMailImplementationTestAdapter();
+    $mail->sendNow($force = true, $mailer);
+    $this->assertEqual(
+      PhabricatorMetaMTAMail::STATUS_SENT,
+      $mail->getStatus());
+
+
+    // When the mailer fails temporarily, the mail should remain queued.
+    $mail = new PhabricatorMetaMTAMail();
+    $mail->addTos(array($phid));
+
+    $mailer = new PhabricatorMailImplementationTestAdapter();
+    $mailer->setFailTemporarily(true);
+    try {
+      $mail->sendNow($force = true, $mailer);
+    } catch (Exception $ex) {
+      // Ignore.
+    }
+    $this->assertEqual(
+      PhabricatorMetaMTAMail::STATUS_QUEUE,
+      $mail->getStatus());
+
+
+    // When the mailer fails permanently, the mail should be failed.
+    $mail = new PhabricatorMetaMTAMail();
+    $mail->addTos(array($phid));
+
+    $mailer = new PhabricatorMailImplementationTestAdapter();
+    $mailer->setFailPermanently(true);
+    try {
+      $mail->sendNow($force = true, $mailer);
+    } catch (Exception $ex) {
+      // Ignore.
+    }
+    $this->assertEqual(
+      PhabricatorMetaMTAMail::STATUS_FAIL,
+      $mail->getStatus());
+  }
+
   public function testRecipients() {
     $user = $this->generateNewTestUser();
     $phid = $user->getPHID();
@@ -19,8 +67,7 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
     $mail = new PhabricatorMetaMTAMail();
     $mail->addTos(array($phid));
 
-    $this->assertEqual(
-      true,
+    $this->assertTrue(
       in_array($phid, $mail->buildRecipientList()),
       '"To" is a recipient.');
 
@@ -28,8 +75,7 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
     // Test that the "No Self Mail" preference works correctly.
     $mail->setFrom($phid);
 
-    $this->assertEqual(
-      true,
+    $this->assertTrue(
       in_array($phid, $mail->buildRecipientList()),
       '"From" does not exclude recipients by default.');
 
@@ -38,8 +84,7 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
       true);
     $prefs->save();
 
-    $this->assertEqual(
-      false,
+    $this->assertFalse(
       in_array($phid, $mail->buildRecipientList()),
       '"From" excludes recipients with no-self-mail set.');
 
@@ -47,8 +92,7 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
       PhabricatorUserPreferences::PREFERENCE_NO_SELF_MAIL);
     $prefs->save();
 
-    $this->assertEqual(
-      true,
+    $this->assertTrue(
       in_array($phid, $mail->buildRecipientList()),
       '"From" does not exclude recipients by default.');
 
@@ -56,8 +100,7 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
     // Test that explicit exclusion works correctly.
     $mail->setExcludeMailRecipientPHIDs(array($phid));
 
-    $this->assertEqual(
-      false,
+    $this->assertFalse(
       in_array($phid, $mail->buildRecipientList()),
       'Explicit exclude excludes recipients.');
 
@@ -74,16 +117,14 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
 
     $mail->setMailTags(array('test-tag'));
 
-    $this->assertEqual(
-      false,
+    $this->assertFalse(
       in_array($phid, $mail->buildRecipientList()),
       'Tag preference excludes recipients.');
 
     $prefs->unsetPreference(PhabricatorUserPreferences::PREFERENCE_MAILTAGS);
     $prefs->save();
 
-    $this->assertEqual(
-      true,
+    $this->assertTrue(
       in_array($phid, $mail->buildRecipientList()),
       'Recipients restored after tag preference removed.');
   }
@@ -123,11 +164,10 @@ final class PhabricatorMetaMTAMailTestCase extends PhabricatorTestCase {
       $expect_references = true;
     }
 
-    $case = "<message-id = ".($supports_message_id ? 'Y' : 'N').", ".
-            "first = ".($is_first_mail ? 'Y' : 'N').">";
+    $case = '<message-id = '.($supports_message_id ? 'Y' : 'N').', '.
+            'first = '.($is_first_mail ? 'Y' : 'N').'>';
 
-    $this->assertEqual(
-      true,
+    $this->assertTrue(
       isset($dict['Thread-Index']),
       "Expect Thread-Index header for case {$case}.");
     $this->assertEqual(

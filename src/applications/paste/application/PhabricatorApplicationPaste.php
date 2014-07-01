@@ -18,8 +18,8 @@ final class PhabricatorApplicationPaste extends PhabricatorApplication {
     return self::GROUP_UTILITIES;
   }
 
-  public function getQuickCreateURI() {
-    return $this->getBaseURI().'create/';
+  public function getShortDescription() {
+    return pht('Share Text Snippets');
   }
 
   public function getRemarkupRules() {
@@ -30,16 +30,36 @@ final class PhabricatorApplicationPaste extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
-      '/P(?P<id>[1-9]\d*)' => 'PhabricatorPasteViewController',
+      '/P(?P<id>[1-9]\d*)(?:\$(?P<lines>\d+(?:-\d+)?))?'
+        => 'PhabricatorPasteViewController',
       '/paste/' => array(
-        ''                        => 'PhabricatorPasteListController',
-        'create/'                 => 'PhabricatorPasteEditController',
-        'edit/(?P<id>[1-9]\d*)/'  => 'PhabricatorPasteEditController',
-        'filter/(?P<filter>\w+)/' => 'PhabricatorPasteListController',
-        'query/(?P<queryKey>[^/]+)/'=> 'PhabricatorPasteListController',
-        'savedqueries/'           => 'PhabricatorPasteQueriesController',
+        '(query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorPasteListController',
+        'create/'                       => 'PhabricatorPasteEditController',
+        'edit/(?P<id>[1-9]\d*)/'        => 'PhabricatorPasteEditController',
+        'comment/(?P<id>[1-9]\d*)/'     => 'PhabricatorPasteCommentController',
       ),
     );
+  }
+
+  protected function getCustomCapabilities() {
+    return array(
+      PasteCapabilityDefaultView::CAPABILITY => array(
+        'caption' => pht(
+          'Default view policy for newly created pastes.')
+      ),
+    );
+  }
+
+  public function getQuickCreateItems(PhabricatorUser $viewer) {
+    $items = array();
+
+    $item = id(new PHUIListItemView())
+      ->setName(pht('Paste'))
+      ->setIcon('fa-clipboard')
+      ->setHref($this->getBaseURI().'create/');
+    $items[] = $item;
+
+    return $items;
   }
 
 }

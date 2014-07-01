@@ -1,13 +1,19 @@
 <?php
 
-/**
- * @group conduit
- */
 final class ConduitAPI_differential_getalldiffs_Method
-  extends ConduitAPIMethod {
+  extends ConduitAPI_differential_Method {
+
+  public function getMethodStatus() {
+    return self::METHOD_STATUS_DEPRECATED;
+  }
+
+  public function getMethodStatusDescription() {
+    return pht(
+      'This method has been deprecated in favor of differential.querydiffs.');
+  }
 
   public function getMethodDescription() {
-    return "Load all diffs for given revisions from Differential.";
+    return 'Load all diffs for given revisions from Differential.';
   }
 
   public function defineParamTypes() {
@@ -32,9 +38,10 @@ final class ConduitAPI_differential_getalldiffs_Method
       return $results;
     }
 
-    $diffs = id(new DifferentialDiff())->loadAllWhere(
-      'revisionID IN (%Ld)',
-      $revision_ids);
+    $diffs = id(new DifferentialDiffQuery())
+      ->setViewer($request->getUser())
+      ->withRevisionIDs($revision_ids)
+      ->execute();
 
     foreach ($diffs as $diff) {
       $results[] = array(

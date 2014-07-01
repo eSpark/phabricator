@@ -44,7 +44,7 @@ abstract class PackageMail extends PhabricatorMail {
     $handles = $this->getHandles();
     $section = array();
     $section[] = '  In repository '.$handles[$repository_phid]->getName().
-      ' - '. PhabricatorEnv::getProductionURI($handles[$repository_phid]
+      ' - '.PhabricatorEnv::getProductionURI($handles[$repository_phid]
       ->getURI());
     foreach ($paths as $path => $excluded) {
       $section[] = '    '.($excluded ? 'Excluded' : 'Included').' '.$path;
@@ -80,9 +80,10 @@ abstract class PackageMail extends PhabricatorMail {
       $this->mailTo,
       array($package->getActorPHID()),
       array_keys($this->paths));
-    $this->handles = id(new PhabricatorObjectHandleData($phids))
+    $this->handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
   }
 
   final protected function renderSummarySection() {

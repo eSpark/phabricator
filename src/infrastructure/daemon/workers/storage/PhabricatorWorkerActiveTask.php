@@ -2,6 +2,8 @@
 
 final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
 
+  protected $failureTime;
+
   private $serverTime;
   private $localTime;
 
@@ -65,8 +67,8 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
 
   public function delete() {
     throw new Exception(
-      "Active tasks can not be deleted directly. ".
-      "Use archiveTask() to move tasks to the archive.");
+      'Active tasks can not be deleted directly. '.
+      'Use archiveTask() to move tasks to the archive.');
   }
 
   public function archiveTask($result, $duration) {
@@ -98,6 +100,7 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
     // to release the lease otherwise.
     $this->checkLease();
 
+    $did_succeed = false;
     try {
       $worker = $this->getWorkerInstance();
 
@@ -124,24 +127,45 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
       $result = $this->archiveTask(
         PhabricatorWorkerArchiveTask::RESULT_SUCCESS,
         $duration);
+      $did_succeed = true;
     } catch (PhabricatorWorkerPermanentFailureException $ex) {
       $result = $this->archiveTask(
         PhabricatorWorkerArchiveTask::RESULT_FAILURE,
         0);
       $result->setExecutionException($ex);
-    } catch (Exception $ex) {
+    } catch (PhabricatorWorkerYieldException $ex) {
       $this->setExecutionException($ex);
-      $this->setFailureCount($this->getFailureCount() + 1);
 
-      $retry = $worker->getWaitBeforeRetry($this);
-      $retry = coalesce(
-        $retry,
-        PhabricatorWorkerLeaseQuery::DEFAULT_LEASE_DURATION);
+      $retry = $ex->getDuration();
+      $retry = max($retry, 5);
 
       // NOTE: As a side effect, this saves the object.
       $this->setLeaseDuration($retry);
 
       $result = $this;
+    } catch (Exception $ex) {
+      $this->setExecutionException($ex);
+      $this->setFailureCount($this->getFailureCount() + 1);
+      $this->setFailureTime(time());
+
+      $retry = $worker->getWaitBeforeRetry($this);
+      $retry = coalesce(
+        $retry,
+        PhabricatorWorkerLeaseQuery::getDefaultWaitBeforeRetry());
+
+      // NOTE: As a side effect, this saves the object.
+      $this->setLeaseDuration($retry);
+
+      $result = $this;
+    }
+
+    // NOTE: If this throws, we don't want it to cause the task to fail again,
+    // so execute it out here and just let the exception escape.
+    if ($did_succeed) {
+      foreach ($worker->getQueuedTasks() as $task) {
+        list($class, $data) = $task;
+        PhabricatorWorker::scheduleTask($class, $data);
+      }
     }
 
     return $result;

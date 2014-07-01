@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group conduit
- */
 abstract class ConduitAPI_user_Method extends ConduitAPIMethod {
 
   public function getApplication() {
@@ -12,7 +9,7 @@ abstract class ConduitAPI_user_Method extends ConduitAPIMethod {
 
   protected function buildUserInformationDictionary(
     PhabricatorUser $user,
-    PhabricatorUserStatus $current_status = null) {
+    PhabricatorCalendarEvent $current_status = null) {
 
     $roles = array();
     if ($user->getIsDisabled()) {
@@ -30,6 +27,14 @@ abstract class ConduitAPI_user_Method extends ConduitAPIMethod {
       $roles[] = 'verified';
     } else {
       $roles[] = 'unverified';
+    }
+
+    if ($user->getIsApproved()) {
+      $roles[] = 'approved';
+    }
+
+    if ($user->isUserActivated()) {
+      $roles[] = 'activated';
     }
 
     $return = array(

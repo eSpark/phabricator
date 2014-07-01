@@ -38,10 +38,9 @@ final class PhabricatorPeopleLdapController
       ->appendChild($form);
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName(pht('Import Ldap Users'))
-        ->setHref($this->getApplicationURI('/ldap/')));
+    $crumbs->addTextCrumb(
+      pht('Import Ldap Users'),
+      $this->getApplicationURI('/ldap/'));
 
     $nav = $this->buildSideNavView();
     $nav->setCrumbs($crumbs);
@@ -62,8 +61,6 @@ final class PhabricatorPeopleLdapController
       $nav,
       array(
         'title'  => pht('Import Ldap Users'),
-        'device' => true,
-        'dust'   => true,
       ));
   }
 
@@ -75,13 +72,13 @@ final class PhabricatorPeopleLdapController
 
     $notice_view = new AphrontErrorView();
     $notice_view->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
-    $notice_view->setTitle(pht("Import Successful"));
+    $notice_view->setTitle(pht('Import Successful'));
     $notice_view->setErrors(array(
-      pht("Successfully imported users from LDAP"),
+      pht('Successfully imported users from LDAP'),
     ));
 
-    $list = new PhabricatorObjectItemListView();
-    $list->setNoDataString(pht("No users imported?"));
+    $list = new PHUIObjectItemListView();
+    $list->setNoDataString(pht('No users imported?'));
 
     foreach ($usernames as $username) {
       $user = new PhabricatorUser();
@@ -96,10 +93,12 @@ final class PhabricatorPeopleLdapController
           ->setActor($admin)
           ->createNewUser($user, $email_obj);
 
-        $ldap_info = new PhabricatorUserLDAPInfo();
-        $ldap_info->setLDAPUsername($username);
-        $ldap_info->setUserID($user->getID());
-        $ldap_info->save();
+        id(new PhabricatorExternalAccount())
+          ->setUserPHID($user->getPHID())
+          ->setAccountType('ldap')
+          ->setAccountDomain('self')
+          ->setAccountID($username)
+          ->save();
 
         $header = pht('Successfully added %s', $username);
         $attribute = null;
@@ -110,7 +109,7 @@ final class PhabricatorPeopleLdapController
         $color = 'red';
       }
 
-      $item = id(new PhabricatorObjectItemView())
+      $item = id(new PHUIObjectItemView())
         ->setHeader($header)
         ->addAttribute($attribute)
         ->setBarColor($color);
@@ -127,50 +126,65 @@ final class PhabricatorPeopleLdapController
 
   private function processSearchRequest($request) {
     $panel = new AphrontPanelView();
-
     $admin = $request->getUser();
 
-    $username = $request->getStr('username');
-    $password = $request->getStr('password');
-    $search   = $request->getStr('query');
+    $search = $request->getStr('query');
 
-    try {
-      $ldap_provider = new PhabricatorLDAPProvider();
-      $envelope = new PhutilOpaqueEnvelope($password);
-      $ldap_provider->auth($username, $envelope);
-      $results = $ldap_provider->search($search);
-      foreach ($results as $key => $result) {
-        $results[$key][] = $this->renderUserInputs($result);
+    $ldap_provider = PhabricatorAuthProviderLDAP::getLDAPProvider();
+    if (!$ldap_provider) {
+      throw new Exception('No LDAP provider enabled!');
+    }
+
+    $ldap_adapter = $ldap_provider->getAdapter();
+    $ldap_adapter->setLoginUsername($request->getStr('username'));
+    $ldap_adapter->setLoginPassword(
+      new PhutilOpaqueEnvelope($request->getStr('password')));
+
+    // This causes us to connect and bind.
+    // TODO: Clean up this discard mode stuff.
+    DarkConsoleErrorLogPluginAPI::enableDiscardMode();
+      $ldap_adapter->getAccountID();
+    DarkConsoleErrorLogPluginAPI::disableDiscardMode();
+
+    $results = $ldap_adapter->searchLDAP('%Q', $search);
+
+    foreach ($results as $key => $record) {
+      $account_id = $ldap_adapter->readLDAPRecordAccountID($record);
+      if (!$account_id) {
+        unset($results[$key]);
+        continue;
       }
 
-      $form = id(new AphrontFormView())
-        ->setUser($admin);
-
-      $table = new AphrontTableView($results);
-      $table->setHeaders(
-        array(
-          pht('Username'),
-          pht('Email'),
-          pht('Real Name'),
-          pht('Import?'),
-        ));
-      $form->appendChild($table);
-      $form->setAction($request->getRequestURI()
-        ->alter('import', 'true')->alter('search', null))
-        ->appendChild(
-          id(new AphrontFormSubmitControl())
-          ->setValue(pht('Import')));
-
-
-      $panel->appendChild($form);
-    } catch (Exception $ex) {
-      $error_view = new AphrontErrorView();
-      $error_view->setTitle(pht('LDAP Search Failed'));
-      $error_view->setErrors(array($ex->getMessage()));
-      return $error_view;
+      $info = array(
+        $account_id,
+        $ldap_adapter->readLDAPRecordEmail($record),
+        $ldap_adapter->readLDAPRecordRealName($record),
+      );
+      $results[$key] = $info;
+      $results[$key][] = $this->renderUserInputs($info);
     }
-    return $panel;
 
+    $form = id(new AphrontFormView())
+      ->setUser($admin);
+
+    $table = new AphrontTableView($results);
+    $table->setHeaders(
+      array(
+        pht('Username'),
+        pht('Email'),
+        pht('Real Name'),
+        pht('Import?'),
+      ));
+    $form->appendChild($table);
+    $form->setAction($request->getRequestURI()
+      ->alter('import', 'true')->alter('search', null))
+      ->appendChild(
+        id(new AphrontFormSubmitControl())
+        ->setValue(pht('Import')));
+
+    $panel->appendChild($form);
+
+    return $panel;
   }
 
   private function renderUserInputs($user) {

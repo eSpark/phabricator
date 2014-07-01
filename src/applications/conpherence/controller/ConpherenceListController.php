@@ -154,13 +154,18 @@ final class ConpherenceListController
           ->setThreadView($thread_view)
           ->setRole('list');
         if ($conpherence) {
+          $layout->setHeader($this->buildHeaderPaneContent($conpherence));
           $layout->setThread($conpherence);
+        } else {
+          $layout->setHeader(
+            $this->buildHeaderPaneContent(
+              id(new ConpherenceThread())
+              ->makeEphemeral()));
         }
         $response = $this->buildApplicationPage(
           $layout,
           array(
             'title' => $title,
-            'device' => true,
           ));
         break;
     }

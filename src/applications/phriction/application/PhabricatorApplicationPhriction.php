@@ -18,12 +18,28 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
     return 'phriction';
   }
 
+  public function isPinnedByDefault(PhabricatorUser $viewer) {
+    return true;
+  }
+
   public function getHelpURI() {
-    return PhabricatorEnv::getDoclink('article/Phriction_User_Guide.html');
+    return PhabricatorEnv::getDoclink('Phriction User Guide');
   }
 
   public function getTitleGlyph() {
     return "\xE2\x9A\xA1";
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new PhrictionRemarkupRule(),
+    );
+  }
+
+  public function getEventListeners() {
+    return array(
+      new PhrictionActionMenuEventListener(),
+    );
   }
 
   public function getRoutes() {
@@ -34,8 +50,7 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
       '/w/(?P<slug>.+/)' => 'PhrictionDocumentController',
 
       '/phriction/' => array(
-        ''                       => 'PhrictionListController',
-        'list/(?P<view>[^/]+)/'  => 'PhrictionListController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhrictionListController',
 
         'history(?P<slug>/)'     => 'PhrictionHistoryController',
         'history/(?P<slug>.+/)'  => 'PhrictionHistoryController',
@@ -45,14 +60,10 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
         'new/'                        => 'PhrictionNewController',
         'move/(?:(?P<id>[1-9]\d*)/)?'      => 'PhrictionMoveController',
 
-        'preview/' => 'PhrictionDocumentPreviewController',
+        'preview/' => 'PhabricatorMarkupPreviewController',
         'diff/(?P<id>[1-9]\d*)/' => 'PhrictionDiffController',
       ),
     );
-  }
-
-  public function getApplicationGroup() {
-    return self::GROUP_CORE;
   }
 
   public function getApplicationOrder() {
@@ -60,4 +71,3 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
   }
 
 }
-

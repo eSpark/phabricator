@@ -33,7 +33,7 @@ final class ConpherenceThreadListView extends AphrontView {
   public function render() {
     require_celerity_resource('conpherence-menu-css');
 
-    $menu = id(new PhabricatorMenuView())
+    $menu = id(new PHUIListView())
       ->addClass('conpherence-menu')
       ->setID('conpherence-menu');
 
@@ -69,8 +69,8 @@ final class ConpherenceThreadListView extends AphrontView {
   }
 
   private function renderThreadItem(ConpherenceThread $thread) {
-    return id(new PhabricatorMenuItemView())
-      ->setType(PhabricatorMenuItemView::TYPE_CUSTOM)
+    return id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_CUSTOM)
       ->setName($this->renderThread($thread));
   }
 
@@ -78,12 +78,13 @@ final class ConpherenceThreadListView extends AphrontView {
     $user = $this->getUser();
 
     $uri = $this->baseURI.$thread->getID().'/';
-    $data = $thread->getDisplayData($user, null);
+    $data = $thread->getDisplayData($user);
     $title = $data['title'];
     $subtitle = $data['subtitle'];
     $unread_count = $data['unread_count'];
     $epoch = $data['epoch'];
     $image = $data['image'];
+    $dom_id = $thread->getPHID().'-nav-item';
 
     return id(new ConpherenceMenuItemView())
       ->setUser($user)
@@ -98,12 +99,13 @@ final class ConpherenceThreadListView extends AphrontView {
       ->setMetadata(
         array(
           'title' => $data['js_title'],
-          'id' => $thread->getID(),
+          'id' => $dom_id,
+          'threadID' => $thread->getID(),
           ));
   }
 
   private function addThreadsToMenu(
-    PhabricatorMenuView $menu,
+    PHUIListView $menu,
     array $conpherences) {
 
     if ($this->scrollUpParticipant->getID()) {
@@ -137,11 +139,11 @@ final class ConpherenceThreadListView extends AphrontView {
     } else {
       $name = pht('Load Older Threads');
     }
-    $item = id(new PhabricatorMenuItemView())
+    $item = id(new PHUIListItemView())
       ->addSigil('conpherence-menu-scroller')
       ->setName($name)
       ->setHref($this->baseURI)
-      ->setType(PhabricatorMenuItemView::TYPE_BUTTON)
+      ->setType(PHUIListItemView::TYPE_BUTTON)
       ->setMetadata(array(
         'participant_id' => $participant->getID(),
         'conpherence_phid' => $participant->getConpherencePHID(),
@@ -158,8 +160,8 @@ final class ConpherenceThreadListView extends AphrontView {
       ),
       pht('No conpherences.'));
 
-    return id(new PhabricatorMenuItemView())
-      ->setType(PhabricatorMenuItemView::TYPE_CUSTOM)
+    return id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_CUSTOM)
       ->setName($message);
   }
 

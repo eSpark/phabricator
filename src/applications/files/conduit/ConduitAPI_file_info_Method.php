@@ -6,7 +6,7 @@
 final class ConduitAPI_file_info_Method extends ConduitAPI_file_Method {
 
   public function getMethodDescription() {
-    return "Get information about a file.";
+    return 'Get information about a file.';
   }
 
   public function defineParamTypes() {
@@ -30,13 +30,15 @@ final class ConduitAPI_file_info_Method extends ConduitAPI_file_Method {
     $phid = $request->getValue('phid');
     $id   = $request->getValue('id');
 
+    $query = id(new PhabricatorFileQuery())
+      ->setViewer($request->getUser());
     if ($id) {
-      $file = id(new PhabricatorFile())->load($id);
+      $query->withIDs(array($id));
     } else {
-      $file = id(new PhabricatorFile())->loadOneWhere(
-        'phid = %s',
-        $phid);
+      $query->withPHIDs(array($phid));
     }
+
+    $file = $query->executeOne();
 
     if (!$file) {
       throw new ConduitException('ERR-NOT-FOUND');

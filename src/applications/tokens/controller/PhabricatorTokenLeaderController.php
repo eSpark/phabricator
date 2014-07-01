@@ -1,7 +1,11 @@
 <?php
 
 final class PhabricatorTokenLeaderController
-    extends PhabricatorTokenController {
+  extends PhabricatorTokenController {
+
+  public function shouldAllowPublic() {
+    return true;
+  }
 
   public function processRequest() {
     $request = $this->getRequest();
@@ -19,15 +23,16 @@ final class PhabricatorTokenLeaderController
     $phids = array();
     if ($counts) {
       $phids = mpull($objects, 'getPHID');
-      $handles = id(new PhabricatorObjectHandleData($phids))
+      $handles = id(new PhabricatorHandleQuery())
         ->setViewer($user)
-        ->loadHandles();
+        ->withPHIDs($phids)
+        ->execute();
     }
 
-    $list = new PhabricatorObjectItemListView();
+    $list = new PHUIObjectItemListView();
     foreach ($phids as $object) {
       $count = idx($counts, $object, 0);
-      $item = id(new PhabricatorObjectItemView());
+      $item = id(new PHUIObjectItemView());
       $handle = $handles[$object];
 
       $item->setHeader($handle->getFullName());
@@ -41,9 +46,7 @@ final class PhabricatorTokenLeaderController
     $nav = $this->buildSideNav();
     $nav->setCrumbs(
       $this->buildApplicationCrumbs()
-        ->addCrumb(
-          id(new PhabricatorCrumbView())
-            ->setName($title)));
+        ->addTextCrumb($title));
     $nav->selectFilter('leaders/');
 
     $nav->appendChild($list);
@@ -53,8 +56,6 @@ final class PhabricatorTokenLeaderController
       $nav,
       array(
         'title' => $title,
-        'device' => true,
-        'dust' => true
       ));
   }
 

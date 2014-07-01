@@ -1,6 +1,7 @@
 <?php
 
-final class DifferentialChangeset extends DifferentialDAO {
+final class DifferentialChangeset extends DifferentialDAO
+  implements PhabricatorPolicyInterface {
 
   protected $diffID;
   protected $oldFile;
@@ -15,7 +16,8 @@ final class DifferentialChangeset extends DifferentialDAO {
   protected $delLines;
 
   private $unsavedHunks = array();
-  private $hunks;
+  private $hunks = self::ATTACHABLE;
+  private $diff = self::ATTACHABLE;
 
   const TABLE_CACHE = 'differential_changeset_parse_cache';
 
@@ -40,10 +42,7 @@ final class DifferentialChangeset extends DifferentialDAO {
   }
 
   public function getHunks() {
-    if ($this->hunks === null) {
-      throw new Exception("Must load and attach hunks first!");
-    }
-    return $this->hunks;
+    return $this->assertAttached($this->hunks);
   }
 
   public function getDisplayFilename() {
@@ -55,21 +54,12 @@ final class DifferentialChangeset extends DifferentialDAO {
   }
 
   public function addUnsavedHunk(DifferentialHunk $hunk) {
-    if ($this->hunks === null) {
+    if ($this->hunks === self::ATTACHABLE) {
       $this->hunks = array();
     }
     $this->hunks[] = $hunk;
     $this->unsavedHunks[] = $hunk;
     return $this;
-  }
-
-  public function loadHunks() {
-    if (!$this->getID()) {
-      return array();
-    }
-    return id(new DifferentialHunk())->loadAllWhere(
-      'changesetID = %d',
-      $this->getID());
   }
 
   public function save() {
@@ -85,9 +75,21 @@ final class DifferentialChangeset extends DifferentialDAO {
 
   public function delete() {
     $this->openTransaction();
-      foreach ($this->loadHunks() as $hunk) {
-        $hunk->delete();
+
+      $legacy_hunks = id(new DifferentialHunkLegacy())->loadAllWhere(
+        'changesetID = %d',
+        $this->getID());
+      foreach ($legacy_hunks as $legacy_hunk) {
+        $legacy_hunk->delete();
       }
+
+      $modern_hunks = id(new DifferentialHunkModern())->loadAllWhere(
+        'changesetID = %d',
+        $this->getID());
+      foreach ($modern_hunks as $modern_hunk) {
+        $modern_hunk->delete();
+      }
+
       $this->unsavedHunks = array();
 
       queryfx(
@@ -173,6 +175,37 @@ final class DifferentialChangeset extends DifferentialDAO {
     }
 
     return false;
+  }
+
+  public function attachDiff(DifferentialDiff $diff) {
+    $this->diff = $diff;
+    return $this;
+  }
+
+  public function getDiff() {
+    return $this->assertAttached($this->diff);
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+    );
+  }
+
+  public function getPolicy($capability) {
+    return $this->getDiff()->getPolicy($capability);
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    return $this->getDiff()->hasAutomaticCapability($capability, $viewer);
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return null;
   }
 
 }

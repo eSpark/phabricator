@@ -7,7 +7,7 @@ final class ConduitAPI_maniphest_createtask_Method
   extends ConduitAPI_maniphest_Method {
 
   public function getMethodDescription() {
-    return "Create a new Maniphest task.";
+    return 'Create a new Maniphest task.';
   }
 
   public function defineParamTypes() {
@@ -25,9 +25,7 @@ final class ConduitAPI_maniphest_createtask_Method
   }
 
   protected function execute(ConduitAPIRequest $request) {
-    $task = new ManiphestTask();
-    $task->setPriority(ManiphestTaskPriority::getDefaultPriority());
-    $task->setAuthorPHID($request->getUser()->getPHID());
+    $task = ManiphestTask::initializeNewTask($request->getUser());
 
     $this->applyRequest($task, $request, $is_new = true);
 
