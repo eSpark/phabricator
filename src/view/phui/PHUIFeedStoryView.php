@@ -15,6 +15,16 @@ final class PHUIFeedStoryView extends AphrontView {
   private $projects = array();
   private $actions = array();
   private $chronologicalKey;
+  private $tags;
+
+  public function setTags($tags) {
+    $this->tags = $tags;
+    return $this;
+  }
+
+  public function getTags() {
+    return $this->tags;
+  }
 
   public function setChronologicalKey($chronological_key) {
     $this->chronologicalKey = $chronological_key;
@@ -235,6 +245,13 @@ final class PHUIFeedStoryView extends AphrontView {
         $body_content);
     }
 
+    $tags = null;
+    if ($this->tags) {
+      $tags = array(
+        " \xC2\xB7 ",
+        $this->tags);
+    }
+
     $foot = phutil_tag(
       'div',
       array(
@@ -242,7 +259,9 @@ final class PHUIFeedStoryView extends AphrontView {
       ),
       array(
         $icon,
-        $foot));
+        $foot,
+        $tags,
+      ));
 
     $classes = array('phui-feed-story');
 
@@ -255,19 +274,19 @@ final class PHUIFeedStoryView extends AphrontView {
 
   public function setAppIconFromPHID($phid) {
     switch (phid_get_type($phid)) {
-      case PholioPHIDTypeMock::TYPECONST:
+      case PholioMockPHIDType::TYPECONST:
         $this->setAppIcon('pholio-dark');
         break;
-      case PhabricatorMacroPHIDTypeMacro::TYPECONST:
+      case PhabricatorMacroMacroPHIDType::TYPECONST:
         $this->setAppIcon('macro-dark');
         break;
-      case ManiphestPHIDTypeTask::TYPECONST:
+      case ManiphestTaskPHIDType::TYPECONST:
         $this->setAppIcon('maniphest-dark');
         break;
-      case DifferentialPHIDTypeRevision::TYPECONST:
+      case DifferentialRevisionPHIDType::TYPECONST:
         $this->setAppIcon('differential-dark');
         break;
-      case PhabricatorCalendarPHIDTypeEvent::TYPECONST:
+      case PhabricatorCalendarEventPHIDType::TYPECONST:
         $this->setAppIcon('calendar-dark');
         break;
     }

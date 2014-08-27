@@ -101,6 +101,37 @@ abstract class HeraldAdapter {
   private $contentSource;
   private $isNewObject;
   private $customFields = false;
+  private $customActions = null;
+  private $queuedTransactions = array();
+
+  public function getCustomActions() {
+    if ($this->customActions === null) {
+      $custom_actions = id(new PhutilSymbolLoader())
+        ->setAncestorClass('HeraldCustomAction')
+        ->loadObjects();
+
+      foreach ($custom_actions as $key => $object) {
+        if (!$object->appliesToAdapter($this)) {
+          unset($custom_actions[$key]);
+        }
+      }
+
+      $this->customActions = array();
+      foreach ($custom_actions as $action) {
+        $key = $action->getActionKey();
+
+        if (array_key_exists($key, $this->customActions)) {
+          throw new Exception(
+            'More than one Herald custom action implementation '.
+            'handles the action key: \''.$key.'\'.');
+        }
+
+        $this->customActions[$key] = $action;
+      }
+    }
+
+    return $this->customActions;
+  }
 
   public function setContentSource(PhabricatorContentSource $content_source) {
     $this->contentSource = $content_source;
@@ -147,6 +178,19 @@ abstract class HeraldAdapter {
 
   abstract public function applyHeraldEffects(array $effects);
 
+  protected function handleCustomHeraldEffect(HeraldEffect $effect) {
+    $custom_action = idx($this->getCustomActions(), $effect->getAction());
+
+    if ($custom_action !== null) {
+      return $custom_action->applyEffect(
+        $this,
+        $this->getObject(),
+        $effect);
+    }
+
+    return null;
+  }
+
   public function isAvailableToUser(PhabricatorUser $viewer) {
     $applications = id(new PhabricatorApplicationQuery())
       ->setViewer($viewer)
@@ -155,6 +199,14 @@ abstract class HeraldAdapter {
       ->execute();
 
     return !empty($applications);
+  }
+
+  public function queueTransaction($transaction) {
+    $this->queuedTransactions[] = $transaction;
+  }
+
+  public function getQueuedTransactions() {
+    return $this->queuedTransactions;
   }
 
 
@@ -645,13 +697,26 @@ abstract class HeraldAdapter {
 
 /* -(  Actions  )------------------------------------------------------------ */
 
-  abstract public function getActions($rule_type);
+  public function getCustomActionsForRuleType($rule_type) {
+    $results = array();
+    foreach ($this->getCustomActions() as $custom_action) {
+      if ($custom_action->appliesToRuleType($rule_type)) {
+        $results[] = $custom_action;
+      }
+    }
+    return $results;
+  }
+
+  public function getActions($rule_type) {
+    $custom_actions = $this->getCustomActionsForRuleType($rule_type);
+    return mpull($custom_actions, 'getActionKey');
+  }
 
   public function getActionNameMap($rule_type) {
     switch ($rule_type) {
       case HeraldRuleTypeConfig::RULE_TYPE_GLOBAL:
       case HeraldRuleTypeConfig::RULE_TYPE_OBJECT:
-        return array(
+        $standard = array(
           self::ACTION_NOTHING      => pht('Do nothing'),
           self::ACTION_ADD_CC       => pht('Add emails to CC'),
           self::ACTION_REMOVE_CC    => pht('Remove emails from CC'),
@@ -666,8 +731,9 @@ abstract class HeraldAdapter {
           self::ACTION_REQUIRE_SIGNATURE => pht('Require legal signatures'),
           self::ACTION_BLOCK => pht('Block change with message'),
         );
+        break;
       case HeraldRuleTypeConfig::RULE_TYPE_PERSONAL:
-        return array(
+        $standard = array(
           self::ACTION_NOTHING      => pht('Do nothing'),
           self::ACTION_ADD_CC       => pht('Add me to CC'),
           self::ACTION_REMOVE_CC    => pht('Remove me from CC'),
@@ -680,9 +746,15 @@ abstract class HeraldAdapter {
           self::ACTION_ADD_BLOCKING_REVIEWERS =>
             pht('Add me as a blocking reviewer'),
         );
+        break;
       default:
         throw new Exception("Unknown rule type '{$rule_type}'!");
     }
+
+    $custom_actions = $this->getCustomActionsForRuleType($rule_type);
+    $standard += mpull($custom_actions, 'getActionName', 'getActionKey');
+
+    return $standard;
   }
 
   public function willSaveAction(
@@ -814,7 +886,7 @@ abstract class HeraldAdapter {
     }
   }
 
-  public static function getValueTypeForAction($action, $rule_type) {
+  public function getValueTypeForAction($action, $rule_type) {
     $is_personal = ($rule_type == HeraldRuleTypeConfig::RULE_TYPE_PERSONAL);
 
     if ($is_personal) {
@@ -832,8 +904,6 @@ abstract class HeraldAdapter {
           return self::VALUE_FLAG_COLOR;
         case self::ACTION_ADD_PROJECTS:
           return self::VALUE_PROJECT;
-        default:
-          throw new Exception("Unknown or invalid action '{$action}'.");
       }
     } else {
       switch ($action) {
@@ -859,10 +929,15 @@ abstract class HeraldAdapter {
           return self::VALUE_LEGAL_DOCUMENTS;
         case self::ACTION_BLOCK:
           return self::VALUE_TEXT;
-        default:
-          throw new Exception("Unknown or invalid action '{$action}'.");
       }
     }
+
+    $custom_action = idx($this->getCustomActions(), $action);
+    if ($custom_action !== null) {
+      return $custom_action->getActionType();
+    }
+
+    throw new Exception("Unknown or invalid action '".$action."'.");
   }
 
 

@@ -8,7 +8,7 @@ final class PhabricatorCalendarEventSearchEngine
   }
 
   public function getApplicationClassName() {
-    return 'PhabricatorApplicationCalendar';
+    return 'PhabricatorCalendarApplication';
   }
 
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
@@ -106,13 +106,13 @@ final class PhabricatorCalendarEventSearchEngine
     $form
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setDatasource('/typeahead/common/accounts/')
+          ->setDatasource(new PhabricatorPeopleDatasource())
           ->setName('creators')
           ->setLabel(pht('Created By'))
           ->setValue($creator_handles))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setDatasource('/typeahead/common/accounts/')
+          ->setDatasource(new PhabricatorPeopleDatasource())
           ->setName('invited')
           ->setLabel(pht('Invited'))
           ->setValue($invited_handles))
@@ -137,7 +137,6 @@ final class PhabricatorCalendarEventSearchEngine
             1,
             pht('Show only upcoming events.'),
             $upcoming));
-
   }
 
   protected function getURI($path) {
@@ -147,14 +146,13 @@ final class PhabricatorCalendarEventSearchEngine
   public function getBuiltinQueryNames() {
     $names = array(
       'upcoming' => pht('Upcoming Events'),
-      'all' => pht('All Events'),
+      'all'      => pht('All Events'),
     );
 
     return $names;
   }
 
   public function buildSavedQueryFromBuiltin($query_key) {
-
     $query = $this->newSavedQuery();
     $query->setQueryKey($query_key);
 
@@ -166,6 +164,16 @@ final class PhabricatorCalendarEventSearchEngine
     }
 
     return parent::buildSavedQueryFromBuiltin($query_key);
+  }
+
+  protected function getRequiredHandlePHIDsForResultList(
+    array $objects,
+    PhabricatorSavedQuery $query) {
+    $phids = array();
+    foreach ($objects as $event) {
+      $phids[$event->getUserPHID()] = 1;
+    }
+    return array_keys($phids);
   }
 
   protected function renderResultList(
@@ -194,6 +202,7 @@ final class PhabricatorCalendarEventSearchEngine
       }
       $from = phabricator_datetime($event->getDateFrom(), $viewer);
       $to   = phabricator_datetime($event->getDateTo(), $viewer);
+      $creator_handle = $handles[$event->getUserPHID()];
 
       $color = ($event->getStatus() == PhabricatorCalendarEvent::STATUS_AWAY)
         ? 'red'
@@ -203,6 +212,7 @@ final class PhabricatorCalendarEventSearchEngine
         ->setHeader($event->getTerseSummary($viewer))
         ->setHref($href)
         ->setBarColor($color)
+        ->addByline(pht('Creator: %s', $creator_handle->renderLink()))
         ->addAttribute(pht('From %s to %s', $from, $to))
         ->addAttribute(
             phutil_utf8_shorten($event->getDescription(), 64));

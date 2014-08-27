@@ -255,7 +255,7 @@ final class PHUITimelineEventView extends AphrontView {
 
     if ($items || $has_menu) {
       $icon = id(new PHUIIconView())
-        ->setIconFont('fa-cog');
+        ->setIconFont('fa-caret-down');
       $aural = javelin_tag(
         'span',
         array(
@@ -495,26 +495,26 @@ final class PHUITimelineEventView extends AphrontView {
     $xaction_phid = $this->getTransactionPHID();
 
     $items = array();
-    if ($this->getQuoteTargetID()) {
 
+    if ($this->getIsEditable()) {
+      $items[] = id(new PhabricatorActionView())
+        ->setIcon('fa-pencil')
+        ->setHref('/transactions/edit/'.$xaction_phid.'/')
+        ->setName(pht('Edit Comment'))
+        ->addSigil('transaction-edit')
+        ->setMetadata(
+          array(
+            'anchor' => $anchor,
+          ));
+    }
+
+    if ($this->getQuoteTargetID()) {
       $ref = null;
       if ($this->getQuoteRef()) {
         $ref = $this->getQuoteRef();
         if ($anchor) {
           $ref = $ref.'#'.$anchor;
         }
-      }
-
-      if ($this->getIsEditable()) {
-        $items[] = id(new PhabricatorActionView())
-          ->setIcon('fa-pencil')
-          ->setHref('/transactions/edit/'.$xaction_phid.'/')
-          ->setName(pht('Edit Comment'))
-          ->addSigil('transaction-edit')
-          ->setMetadata(
-            array(
-              'anchor' => $anchor,
-            ));
       }
 
       $items[] = id(new PhabricatorActionView())
@@ -528,6 +528,34 @@ final class PHUITimelineEventView extends AphrontView {
             'uri' => '/transactions/quote/'.$xaction_phid.'/',
             'ref' => $ref,
           ));
+
+      // if there is something to quote then there is something to view raw
+      $items[] = id(new PhabricatorActionView())
+        ->setIcon('fa-cutlery')
+        ->setHref('/transactions/raw/'.$xaction_phid.'/')
+        ->setName(pht('View Raw'))
+        ->addSigil('transaction-raw')
+        ->setMetadata(
+          array(
+            'anchor' => $anchor,
+          ));
+
+      $content_source = $this->getContentSource();
+      $source_email = PhabricatorContentSource::SOURCE_EMAIL;
+      if ($content_source->getSource() == $source_email) {
+        $source_id = $content_source->getParam('id');
+        if ($source_id) {
+          $items[] = id(new PhabricatorActionView())
+            ->setIcon('fa-envelope-o')
+            ->setHref('/transactions/raw/'.$xaction_phid.'/?email')
+            ->setName(pht('View Email Body'))
+            ->addSigil('transaction-raw')
+            ->setMetadata(
+              array(
+                'anchor' => $anchor,
+              ));
+        }
+      }
     }
 
     if ($this->getIsRemovable()) {

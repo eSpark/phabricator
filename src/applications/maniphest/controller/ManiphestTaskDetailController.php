@@ -13,7 +13,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
   }
 
   public function processRequest() {
-
     $request = $this->getRequest();
     $user = $request->getUser();
 
@@ -51,10 +50,10 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ->setViewer($user)
       ->readFieldsFromStorage($task);
 
-    $e_commit = PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT;
+    $e_commit = ManiphestTaskHasCommitEdgeType::EDGECONST;
     $e_dep_on = PhabricatorEdgeConfig::TYPE_TASK_DEPENDS_ON_TASK;
     $e_dep_by = PhabricatorEdgeConfig::TYPE_TASK_DEPENDED_ON_BY_TASK;
-    $e_rev    = PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV;
+    $e_rev    = ManiphestTaskHasRevisionEdgeType::EDGECONST;
     $e_mock   = PhabricatorEdgeConfig::TYPE_TASK_HAS_MOCK;
 
     $phid = $task->getPHID();
@@ -162,13 +161,13 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     $requires = array(
       ManiphestTransaction::TYPE_OWNER =>
-        ManiphestCapabilityEditAssign::CAPABILITY,
+        ManiphestEditAssignCapability::CAPABILITY,
       ManiphestTransaction::TYPE_PRIORITY =>
-        ManiphestCapabilityEditPriority::CAPABILITY,
+        ManiphestEditPriorityCapability::CAPABILITY,
       ManiphestTransaction::TYPE_PROJECTS =>
-        ManiphestCapabilityEditProjects::CAPABILITY,
+        ManiphestEditProjectsCapability::CAPABILITY,
       ManiphestTransaction::TYPE_STATUS =>
-        ManiphestCapabilityEditStatus::CAPABILITY,
+        ManiphestEditStatusCapability::CAPABILITY,
     );
 
     foreach ($transaction_types as $type => $name) {
@@ -282,23 +281,27 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ManiphestTransaction::TYPE_PROJECTS => 'projects',
     );
 
+    $projects_source = new PhabricatorProjectDatasource();
+    $users_source = new PhabricatorPeopleDatasource();
+    $mailable_source = new PhabricatorMetaMTAMailableDatasource();
+
     $tokenizer_map = array(
       ManiphestTransaction::TYPE_PROJECTS => array(
         'id'          => 'projects-tokenizer',
-        'src'         => '/typeahead/common/projects/',
-        'placeholder' => pht('Type a project name...'),
+        'src'         => $projects_source->getDatasourceURI(),
+        'placeholder' => $projects_source->getPlaceholderText(),
       ),
       ManiphestTransaction::TYPE_OWNER => array(
         'id'          => 'assign-tokenizer',
-        'src'         => '/typeahead/common/users/',
+        'src'         => $users_source->getDatasourceURI(),
         'value'       => $default_claim,
         'limit'       => 1,
-        'placeholder' => pht('Type a user name...'),
+        'placeholder' => $users_source->getPlaceholderText(),
       ),
       ManiphestTransaction::TYPE_CCS => array(
         'id'          => 'cc-tokenizer',
-        'src'         => '/typeahead/common/mailable/',
-        'placeholder' => pht('Type a user or mailing list...'),
+        'src'         => $mailable_source->getDatasourceURI(),
+        'placeholder' => $mailable_source->getPlaceholderText(),
       ),
     );
 
@@ -527,81 +530,22 @@ final class ManiphestTaskDetailController extends ManiphestController {
           $source));
     }
 
-    $project_phids = $task->getProjectPHIDs();
-    if ($project_phids) {
-      require_celerity_resource('maniphest-task-summary-css');
-
-      // If we end up with real-world projects with many hundreds of columns, it
-      // might be better to just load all the edges, then load those columns and
-      // work backward that way, or denormalize this data more.
-
-      $columns = id(new PhabricatorProjectColumnQuery())
-        ->setViewer($viewer)
-        ->withProjectPHIDs($project_phids)
-        ->execute();
-      $columns = mpull($columns, null, 'getPHID');
-
-      $column_edge_type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_COLUMN;
-      $all_column_phids = array_keys($columns);
-
-      $column_edge_query = id(new PhabricatorEdgeQuery())
-        ->withSourcePHIDs(array($task->getPHID()))
-        ->withEdgeTypes(array($column_edge_type))
-        ->withDestinationPHIDs($all_column_phids);
-      $column_edge_query->execute();
-      $in_column_phids = array_fuse($column_edge_query->getDestinationPHIDs());
-
-      $column_groups = mgroup($columns, 'getProjectPHID');
-
-      $project_handles = array();
-      $project_annotations = array();
-      foreach ($project_phids as $project_phid) {
-        $handle = $this->getHandle($project_phid);
-        $project_handles[] = $handle;
-
-        $columns = idx($column_groups, $project_phid, array());
-        $column = head(array_intersect_key($columns, $in_column_phids));
-        if ($column) {
-          $column_name = pht('(%s)', $column->getDisplayName());
-          $column_link = phutil_tag(
-            'a',
-            array(
-              'href' => $handle->getURI().'board/',
-              'class' => 'maniphest-board-link',
-            ),
-            $column_name);
-
-          $project_annotations[$project_phid] = array(
-            ' ',
-            $column_link);
-        }
-      }
-
-      $project_rows = id(new PHUIHandleTagListView())
-        ->setHandles($project_handles)
-        ->setAnnotations($project_annotations);
-    } else {
-      $project_rows = phutil_tag('em', array(), pht('None'));
-    }
-
-    $view->addProperty(pht('Projects'), $project_rows);
-
     $edge_types = array(
       PhabricatorEdgeConfig::TYPE_TASK_DEPENDED_ON_BY_TASK
-      => pht('Blocks'),
+        => pht('Blocks'),
       PhabricatorEdgeConfig::TYPE_TASK_DEPENDS_ON_TASK
-      => pht('Blocked By'),
-      PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV
-      => pht('Differential Revisions'),
+        => pht('Blocked By'),
+      ManiphestTaskHasRevisionEdgeType::EDGECONST
+        => pht('Differential Revisions'),
       PhabricatorEdgeConfig::TYPE_TASK_HAS_MOCK
-      => pht('Pholio Mocks'),
+        => pht('Pholio Mocks'),
     );
 
     $revisions_commits = array();
     $handles = $this->getLoadedHandles();
 
     $commit_phids = array_keys(
-      $edges[PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT]);
+      $edges[ManiphestTaskHasCommitEdgeType::EDGECONST]);
     if ($commit_phids) {
       $commit_drev = PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV;
       $drev_edges = id(new PhabricatorEdgeQuery())
@@ -614,7 +558,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
         $revision_phid = key($drev_edges[$phid][$commit_drev]);
         $revision_handle = idx($handles, $revision_phid);
         if ($revision_handle) {
-          $task_drev = PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV;
+          $task_drev = ManiphestTaskHasRevisionEdgeType::EDGECONST;
           unset($edges[$task_drev][$revision_phid]);
           $revisions_commits[$phid] = hsprintf(
             '%s / %s',
@@ -643,7 +587,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $attached = array();
     }
 
-    $file_infos = idx($attached, PhabricatorFilePHIDTypeFile::TYPECONST);
+    $file_infos = idx($attached, PhabricatorFileFilePHIDType::TYPECONST);
     if ($file_infos) {
       $file_phids = array_keys($file_infos);
 

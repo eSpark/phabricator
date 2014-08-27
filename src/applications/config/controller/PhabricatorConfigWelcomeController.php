@@ -157,8 +157,8 @@ final class PhabricatorConfigWelcomeController
     $dashboard_href = PhabricatorEnv::getURI('/dashboard/');
     $have_dashboard = (bool)PhabricatorDashboardInstall::getDashboard(
       $viewer,
-      PhabricatorApplicationHome::DASHBOARD_DEFAULT,
-      'PhabricatorApplicationHome');
+      PhabricatorHomeApplication::DASHBOARD_DEFAULT,
+      'PhabricatorHomeApplication');
     if ($have_dashboard) {
       $content = pht(
         "You've installed a default dashboard to replace this welcome screen ".
@@ -216,7 +216,7 @@ final class PhabricatorConfigWelcomeController
     $content = pht(
       'Having trouble getting something set up? See '.
       '**[[ %s | Give Feedback! Get Support! ]]** for ways to get in touch '.
-      'to get answeres to questions, report bugs, and request features.',
+      'to get answers to questions, report bugs, and request features.',
       $support_href);
 
     $explore[] = $this->newItem(

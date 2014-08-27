@@ -83,9 +83,10 @@ final class ManiphestReportController extends ManiphestController {
       $joins = qsprintf(
         $conn,
         'JOIN %T t ON x.objectPHID = t.phid
-          JOIN %T p ON p.taskPHID = t.phid AND p.projectPHID = %s',
+          JOIN %T p ON p.src = t.phid AND p.type = %d AND p.dst = %s',
         id(new ManiphestTask())->getTableName(),
-        id(new ManiphestTaskProject())->getTableName(),
+        PhabricatorEdgeConfig::TABLE_NAME_EDGE,
+        PhabricatorProjectObjectHasProjectEdgeType::EDGECONST,
         $project_phid);
     }
 
@@ -320,7 +321,7 @@ final class ManiphestReportController extends ManiphestController {
       ->setUser($user)
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setDatasource('/typeahead/common/searchproject/')
+          ->setDatasource(new PhabricatorProjectDatasource())
           ->setLabel(pht('Project'))
           ->setLimit(1)
           ->setName('set_project')
@@ -670,9 +671,9 @@ final class ManiphestReportController extends ManiphestController {
       $open_status_list[] = json_encode((string)$constant);
     }
 
-    $tasks = queryfx_all(
+    $rows = queryfx_all(
       $conn_r,
-      'SELECT t.* FROM %T t JOIN %T x ON x.objectPHID = t.phid
+      'SELECT t.id FROM %T t JOIN %T x ON x.objectPHID = t.phid
         WHERE t.status NOT IN (%Ls)
         AND x.oldValue IN (null, %Ls)
         AND x.newValue NOT IN (%Ls)
@@ -686,7 +687,16 @@ final class ManiphestReportController extends ManiphestController {
       $window_epoch,
       $window_epoch);
 
-    return id(new ManiphestTask())->loadAllFromArray($tasks);
+    if (!$rows) {
+      return array();
+    }
+
+    $ids = ipull($rows, 'id');
+
+    return id(new ManiphestTaskQuery())
+      ->setViewer($this->getRequest()->getUser())
+      ->withIDs($ids)
+      ->execute();
   }
 
   /**

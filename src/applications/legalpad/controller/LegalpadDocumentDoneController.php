@@ -2,8 +2,8 @@
 
 final class LegalpadDocumentDoneController extends LegalpadController {
 
-  public function shouldRequireLogin() {
-    return false;
+  public function shouldAllowPublic() {
+    return true;
   }
 
   public function processRequest() {

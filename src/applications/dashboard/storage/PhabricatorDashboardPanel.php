@@ -7,12 +7,14 @@ final class PhabricatorDashboardPanel
   extends PhabricatorDashboardDAO
   implements
     PhabricatorPolicyInterface,
-    PhabricatorCustomFieldInterface {
+    PhabricatorCustomFieldInterface,
+    PhabricatorDestructibleInterface {
 
   protected $name;
   protected $panelType;
   protected $viewPolicy;
   protected $editPolicy;
+  protected $isArchived = 0;
   protected $properties = array();
 
   private $customFields = self::ATTACHABLE;
@@ -46,7 +48,7 @@ final class PhabricatorDashboardPanel
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorDashboardPHIDTypePanel::TYPECONST);
+      PhabricatorDashboardPanelPHIDType::TYPECONST);
   }
 
   public function getProperty($key, $default = null) {
@@ -128,6 +130,18 @@ final class PhabricatorDashboardPanel
   public function attachCustomFields(PhabricatorCustomFieldAttachment $fields) {
     $this->customFields = $fields;
     return $this;
+  }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $this->delete();
+    $this->saveTransaction();
   }
 
 }

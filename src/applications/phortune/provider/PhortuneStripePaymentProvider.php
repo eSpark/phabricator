@@ -27,6 +27,10 @@ final class PhortuneStripePaymentProvider extends PhortunePaymentProvider {
     return pht('Processed by Stripe');
   }
 
+  public function getDefaultPaymentMethodDisplayName(
+    PhortunePaymentMethod $method) {
+    return pht('Credit/Debit Card');
+  }
 
   public function canHandlePaymentMethod(PhortunePaymentMethod $method) {
     $type = $method->getMetadataValue('type');
@@ -39,6 +43,9 @@ final class PhortuneStripePaymentProvider extends PhortunePaymentProvider {
   protected function executeCharge(
     PhortunePaymentMethod $method,
     PhortuneCharge $charge) {
+
+    $root = dirname(phutil_get_library_root('phabricator'));
+    require_once $root.'/externals/stripe-php/lib/Stripe.php';
 
     $secret_key = $this->getSecretKey();
     $params = array(
@@ -110,8 +117,9 @@ final class PhortuneStripePaymentProvider extends PhortunePaymentProvider {
     $customer = Stripe_Customer::create($params, $secret_key);
 
     $card = $info->card;
+
     $method
-      ->setBrand($card->type)
+      ->setBrand($card->brand)
       ->setLastFourDigits($card->last4)
       ->setExpires($card->exp_year, $card->exp_month)
       ->setMetadata(

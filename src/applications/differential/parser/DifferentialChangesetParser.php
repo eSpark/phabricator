@@ -598,7 +598,7 @@ final class DifferentialChangesetParser {
     if ($changetype == DifferentialChangeType::TYPE_MOVE_AWAY) {
       // sometimes we show moved files as unchanged, sometimes deleted,
       // and sometimes inconsistent with what actually happened at the
-      // destination of the move.  Rather than make a false claim,
+      // destination of the move. Rather than make a false claim,
       // omit the 'not changed' notice if this is the source of a move
       $unchanged = false;
     }
@@ -690,22 +690,6 @@ final class DifferentialChangesetParser {
       return false;
     }
 
-    $old = $changeset->getOldProperties();
-    $new = $changeset->getNewProperties();
-
-    if ($old === $new) {
-      return false;
-    }
-
-    if ($changeset->getChangeType() == DifferentialChangeType::TYPE_ADD &&
-        $new == array('unix:filemode' => '100644')) {
-      return false;
-    }
-
-    if ($changeset->getChangeType() == DifferentialChangeType::TYPE_DELETE &&
-        $old == array('unix:filemode' => '100644')) {
-      return false;
-    }
     return true;
   }
 
@@ -926,6 +910,9 @@ final class DifferentialChangesetParser {
             }
           }
         }
+
+        $renderer->attachOldFile($old);
+        $renderer->attachNewFile($new);
 
         return $renderer->renderFileChange($old, $new, $id, $vs);
       case DifferentialChangeType::FILE_DIRECTORY:

@@ -9,6 +9,10 @@ final class PhabricatorMacroViewController
     $this->id = $data['id'];
   }
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
@@ -118,9 +122,8 @@ final class PhabricatorMacroViewController
   }
 
   private function buildActionView(PhabricatorFileImageMacro $macro) {
-
     $can_manage = $this->hasApplicationCapability(
-      PhabricatorMacroCapabilityManage::CAPABILITY);
+      PhabricatorMacroManageCapability::CAPABILITY);
 
     $request = $this->getRequest();
     $view = id(new PhabricatorActionListView())

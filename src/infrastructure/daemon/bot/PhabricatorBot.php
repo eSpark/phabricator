@@ -7,8 +7,6 @@
  * script system interactions and integrate with other systems.
  *
  * NOTE: This is super janky and experimental right now.
- *
- * @group irc
  */
 final class PhabricatorBot extends PhabricatorDaemon {
 
@@ -85,6 +83,8 @@ final class PhabricatorBot extends PhabricatorDaemon {
       ->connect();
 
     $this->runLoop();
+
+    $this->protocolAdapter->disconnect();
   }
 
   public function getConfig($key, $default = null) {
@@ -105,7 +105,8 @@ final class PhabricatorBot extends PhabricatorDaemon {
       foreach ($this->handlers as $handler) {
         $handler->runBackgroundTasks();
       }
-    } while (true);
+    } while (!$this->shouldExit());
+
   }
 
   public function writeMessage(PhabricatorBotMessage $message) {

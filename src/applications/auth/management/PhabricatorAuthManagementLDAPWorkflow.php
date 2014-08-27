@@ -15,7 +15,9 @@ final class PhabricatorAuthManagementLDAPWorkflow
     $console = PhutilConsole::getConsole();
     $console->getServer()->setEnableLog(true);
 
-    $provider = PhabricatorAuthProviderLDAP::getLDAPProvider();
+    PhabricatorLDAPAuthProvider::assertLDAPExtensionInstalled();
+
+    $provider = PhabricatorLDAPAuthProvider::getLDAPProvider();
     if (!$provider) {
       $console->writeOut(
         "%s\n",

@@ -9,11 +9,14 @@ final class LegalpadDocumentSignature
 
   protected $documentPHID;
   protected $documentVersion;
+  protected $signatureType;
   protected $signerPHID;
   protected $signerName;
   protected $signerEmail;
   protected $signatureData = array();
   protected $verified;
+  protected $isExemption = 0;
+  protected $exemptionPHID;
   protected $secretKey;
 
   private $document = self::ATTACHABLE;

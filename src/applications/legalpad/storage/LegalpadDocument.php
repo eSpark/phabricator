@@ -5,7 +5,7 @@ final class LegalpadDocument extends LegalpadDAO
     PhabricatorPolicyInterface,
     PhabricatorSubscribableInterface,
     PhabricatorApplicationTransactionInterface,
-    PhabricatorDestructableInterface {
+    PhabricatorDestructibleInterface {
 
   protected $title;
   protected $contributorCount;
@@ -16,6 +16,11 @@ final class LegalpadDocument extends LegalpadDAO
   protected $viewPolicy;
   protected $editPolicy;
   protected $mailKey;
+  protected $signatureType;
+  protected $preamble;
+
+  const SIGNATURE_TYPE_INDIVIDUAL = 'user';
+  const SIGNATURE_TYPE_CORPORATION = 'corp';
 
   private $documentBody = self::ATTACHABLE;
   private $contributors = self::ATTACHABLE;
@@ -25,11 +30,11 @@ final class LegalpadDocument extends LegalpadDAO
   public static function initializeNewDocument(PhabricatorUser $actor) {
     $app = id(new PhabricatorApplicationQuery())
       ->setViewer($actor)
-      ->withClasses(array('PhabricatorApplicationLegalpad'))
+      ->withClasses(array('PhabricatorLegalpadApplication'))
       ->executeOne();
 
-    $view_policy = $app->getPolicy(LegalpadCapabilityDefaultView::CAPABILITY);
-    $edit_policy = $app->getPolicy(LegalpadCapabilityDefaultEdit::CAPABILITY);
+    $view_policy = $app->getPolicy(LegalpadDefaultViewCapability::CAPABILITY);
+    $edit_policy = $app->getPolicy(LegalpadDefaultEditCapability::CAPABILITY);
 
     return id(new LegalpadDocument())
       ->setVersions(0)
@@ -37,6 +42,8 @@ final class LegalpadDocument extends LegalpadDAO
       ->setContributorCount(0)
       ->setRecentContributorPHIDs(array())
       ->attachSignatures(array())
+      ->setSignatureType(self::SIGNATURE_TYPE_INDIVIDUAL)
+      ->setPreamble('')
       ->setViewPolicy($view_policy)
       ->setEditPolicy($edit_policy);
   }
@@ -52,7 +59,7 @@ final class LegalpadDocument extends LegalpadDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorLegalpadPHIDTypeDocument::TYPECONST);
+      PhabricatorLegalpadDocumentPHIDType::TYPECONST);
   }
 
   public function getDocumentBody() {
@@ -102,6 +109,28 @@ final class LegalpadDocument extends LegalpadDAO
     LegalpadDocumentSignature $signature = null) {
     $this->userSignatures[$user_phid] = $signature;
     return $this;
+  }
+
+  public static function getSignatureTypeMap() {
+    return array(
+      self::SIGNATURE_TYPE_INDIVIDUAL => pht('Individuals'),
+      self::SIGNATURE_TYPE_CORPORATION => pht('Corporations'),
+    );
+  }
+
+  public function getSignatureTypeName() {
+    $type = $this->getSignatureType();
+    return idx(self::getSignatureTypeMap(), $type, $type);
+  }
+
+  public function getSignatureTypeIcon() {
+    $type = $this->getSignatureType();
+    $map = array(
+      self::SIGNATURE_TYPE_INDIVIDUAL => 'fa-user grey',
+      self::SIGNATURE_TYPE_CORPORATION => 'fa-building-o grey',
+    );
+
+    return idx($map, $type, 'fa-user grey');
   }
 
 
@@ -172,7 +201,7 @@ final class LegalpadDocument extends LegalpadDAO
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
 
   public function destroyObjectPermanently(

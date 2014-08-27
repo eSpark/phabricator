@@ -28,7 +28,7 @@ final class DifferentialRequiredSignaturesField
   }
 
   public static function loadForRevision($revision) {
-    $app_legalpad = 'PhabricatorApplicationLegalpad';
+    $app_legalpad = 'PhabricatorLegalpadApplication';
     if (!PhabricatorApplication::isClassInstalled($app_legalpad)) {
       return array();
     }
@@ -130,5 +130,16 @@ final class DifferentialRequiredSignaturesField
     return false;
   }
 
+  public function getWarningsForRevisionHeader(array $handles) {
+    if (!$this->haveAnyUnsignedDocuments()) {
+      return array();
+    }
+
+    return array(
+      pht(
+        'This revision can not be accepted until the required legal '.
+        'agreements have been signed.'),
+    );
+  }
 
 }

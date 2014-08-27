@@ -279,7 +279,7 @@ final class PhabricatorMainMenuView extends AphrontView {
 
     $message_tag = '';
     $message_notification_dropdown = '';
-    $conpherence = 'PhabricatorApplicationConpherence';
+    $conpherence = 'PhabricatorConpherenceApplication';
     if (PhabricatorApplication::isClassInstalledForViewer(
       $conpherence,
       $user)) {
@@ -365,7 +365,7 @@ final class PhabricatorMainMenuView extends AphrontView {
 
     $bubble_tag = '';
     $notification_dropdown = '';
-    $notification_app = 'PhabricatorApplicationNotifications';
+    $notification_app = 'PhabricatorNotificationsApplication';
     if (PhabricatorApplication::isClassInstalledForViewer(
       $notification_app,
       $user)) {

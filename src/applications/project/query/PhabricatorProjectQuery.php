@@ -9,6 +9,9 @@ final class PhabricatorProjectQuery
   private $slugs;
   private $phrictionSlugs;
   private $names;
+  private $datasourceQuery;
+  private $icons;
+  private $colors;
 
   private $status       = 'status-any';
   const STATUS_ANY      = 'status-any';
@@ -54,6 +57,21 @@ final class PhabricatorProjectQuery
 
   public function withNames(array $names) {
     $this->names = $names;
+    return $this;
+  }
+
+  public function withDatasourceQuery($string) {
+    $this->datasourceQuery = $string;
+    return $this;
+  }
+
+  public function withIcons(array $icons) {
+    $this->icons = $icons;
+    return $this;
+  }
+
+  public function withColors(array $colors) {
+    $this->colors = $colors;
     return $this;
   }
 
@@ -238,46 +256,65 @@ final class PhabricatorProjectQuery
         $filter);
     }
 
-    if ($this->ids) {
+    if ($this->ids !== null) {
       $where[] = qsprintf(
         $conn_r,
         'id IN (%Ld)',
         $this->ids);
     }
 
-    if ($this->phids) {
+    if ($this->phids !== null) {
       $where[] = qsprintf(
         $conn_r,
         'phid IN (%Ls)',
         $this->phids);
     }
 
-    if ($this->memberPHIDs) {
+    if ($this->memberPHIDs !== null) {
       $where[] = qsprintf(
         $conn_r,
         'e.dst IN (%Ls)',
         $this->memberPHIDs);
     }
 
-    if ($this->slugs) {
+    if ($this->slugs !== null) {
+      $slugs = array();
+      foreach ($this->slugs as $slug) {
+        $slugs[] = rtrim(PhabricatorSlug::normalize($slug), '/');
+      }
+
       $where[] = qsprintf(
         $conn_r,
         'slug.slug IN (%Ls)',
-        $this->slugs);
+        $slugs);
     }
 
-    if ($this->phrictionSlugs) {
+    if ($this->phrictionSlugs !== null) {
       $where[] = qsprintf(
         $conn_r,
         'phrictionSlug IN (%Ls)',
         $this->phrictionSlugs);
     }
 
-    if ($this->names) {
+    if ($this->names !== null) {
       $where[] = qsprintf(
         $conn_r,
         'name IN (%Ls)',
         $this->names);
+    }
+
+    if ($this->icons !== null) {
+      $where[] = qsprintf(
+        $conn_r,
+        'icon IN (%Ls)',
+        $this->icons);
+    }
+
+    if ($this->colors !== null) {
+      $where[] = qsprintf(
+        $conn_r,
+        'color IN (%Ls)',
+        $this->colors);
     }
 
     $where[] = $this->buildPagingClause($conn_r);
@@ -286,7 +323,7 @@ final class PhabricatorProjectQuery
   }
 
   private function buildGroupClause($conn_r) {
-    if ($this->memberPHIDs) {
+    if ($this->memberPHIDs || $this->datasourceQuery) {
       return 'GROUP BY p.id';
     } else {
       return $this->buildApplicationSearchGroupClause($conn_r);
@@ -296,7 +333,7 @@ final class PhabricatorProjectQuery
   private function buildJoinClause($conn_r) {
     $joins = array();
 
-    if (!$this->needMembers) {
+    if (!$this->needMembers !== null) {
       $joins[] = qsprintf(
         $conn_r,
         'LEFT JOIN %T vm ON vm.src = p.phid AND vm.type = %d AND vm.dst = %s',
@@ -305,7 +342,7 @@ final class PhabricatorProjectQuery
         $this->getViewer()->getPHID());
     }
 
-    if ($this->memberPHIDs) {
+    if ($this->memberPHIDs !== null) {
       $joins[] = qsprintf(
         $conn_r,
         'JOIN %T e ON e.src = p.phid AND e.type = %d',
@@ -313,11 +350,30 @@ final class PhabricatorProjectQuery
         PhabricatorEdgeConfig::TYPE_PROJ_MEMBER);
     }
 
-    if ($this->slugs) {
+    if ($this->slugs !== null) {
       $joins[] = qsprintf(
         $conn_r,
         'JOIN %T slug on slug.projectPHID = p.phid',
         id(new PhabricatorProjectSlug())->getTableName());
+    }
+
+    if ($this->datasourceQuery !== null) {
+      $tokens = PhabricatorTypeaheadDatasource::tokenizeString(
+        $this->datasourceQuery);
+      if (!$tokens) {
+        throw new PhabricatorEmptyQueryException();
+      }
+
+      $likes = array();
+      foreach ($tokens as $token) {
+        $likes[] = qsprintf($conn_r, 'token.token LIKE %>', $token);
+      }
+
+      $joins[] = qsprintf(
+        $conn_r,
+        'JOIN %T token ON token.projectID = p.id AND (%Q)',
+        PhabricatorProject::TABLE_DATASOURCE_TOKEN,
+        '('.implode(') OR (', $likes).')');
     }
 
     $joins[] = $this->buildApplicationSearchJoinClause($conn_r);
@@ -325,9 +381,8 @@ final class PhabricatorProjectQuery
     return implode(' ', $joins);
   }
 
-
   public function getQueryApplicationClass() {
-    return 'PhabricatorApplicationProject';
+    return 'PhabricatorProjectApplication';
   }
 
   protected function getApplicationSearchObjectPHIDColumn() {

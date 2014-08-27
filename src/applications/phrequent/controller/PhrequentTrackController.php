@@ -13,19 +13,16 @@ final class PhrequentTrackController
 
   public function processRequest() {
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
     $phid = $this->phid;
     $handle = id(new PhabricatorHandleQuery())
-      ->setViewer($user)
+      ->setViewer($viewer)
       ->withPHIDs(array($phid))
       ->executeOne();
+    $done_uri = $handle->getURI();
 
-    if (!$this->isStartingTracking() &&
-        !$this->isStoppingTracking()) {
-      throw new Exception('Unrecognized verb: '.$this->verb);
-    }
-
+    $current_timer = null;
     switch ($this->verb) {
       case 'start':
         $button_text = pht('Start Tracking');
@@ -40,62 +37,119 @@ final class PhrequentTrackController
         $inner_text = pht('What time did you stop working?');
         $action_text = pht('Stop Timer');
         $label_text = pht('Stop Time');
+
+
+        $current_timer = id(new PhrequentUserTimeQuery())
+          ->setViewer($viewer)
+          ->withUserPHIDs(array($viewer->getPHID()))
+          ->withObjectPHIDs(array($phid))
+          ->withEnded(PhrequentUserTimeQuery::ENDED_NO)
+          ->executeOne();
+        if (!$current_timer) {
+          return $this->newDialog()
+            ->setTitle(pht('Not Tracking Time'))
+            ->appendParagraph(
+              pht(
+                'You are not currently tracking time on this object.'))
+            ->addCancelButton($done_uri);
+        }
         break;
+      default:
+        return new Aphront404Response();
     }
 
+    $errors = array();
+    $v_note = null;
+    $e_date = null;
+
     $epoch_control = id(new AphrontFormDateControl())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setName('epoch')
       ->setLabel($action_text)
       ->setValue(time());
 
-    $err = array();
-
     if ($request->isDialogFormPost()) {
+      $v_note = $request->getStr('note');
       $timestamp = $epoch_control->readValueFromRequest($request);
-      $note = $request->getStr('note');
 
-      if (!$epoch_control->isValid() || $timestamp > time()) {
-        $err[] = pht('Invalid date, please enter a valid non-future date');
+      if (!$epoch_control->isValid()) {
+        $errors[] = pht('Please choose an valid date.');
+        $e_date = pht('Invalid');
+      } else {
+        $max_time = PhabricatorTime::getNow();
+        if ($timestamp > $max_time) {
+          if ($this->isStoppingTracking()) {
+            $errors[] = pht(
+              'You can not stop tracking time at a future time. Enter the '.
+              'current time, or a time in the past.');
+          } else {
+            $errors[] = pht(
+              'You can not start tracking time at a future time. Enter the '.
+              'current time, or a time in the past.');
+          }
+          $e_date = pht('Invalid');
+        }
+
+        if ($this->isStoppingTracking()) {
+          $min_time = $current_timer->getDateStarted();
+          if ($min_time > $timestamp) {
+            $errors[] = pht(
+              'Stop time must be after start time.');
+            $e_date = pht('Invalid');
+          }
+        }
       }
 
-      if (!$err) {
+      if (!$errors) {
+        $editor = new PhrequentTrackingEditor();
         if ($this->isStartingTracking()) {
-          $this->startTracking($user, $this->phid, $timestamp);
+          $editor->startTracking($viewer, $this->phid, $timestamp);
         } else if ($this->isStoppingTracking()) {
-          $this->stopTracking($user, $this->phid, $timestamp, $note);
+          $editor->stopTracking($viewer, $this->phid, $timestamp, $v_note);
         }
-        return id(new AphrontRedirectResponse());
+
+        return id(new AphrontRedirectResponse())->setURI($done_uri);
       }
 
     }
+
+    $epoch_control->setError($e_date);
 
     $dialog = $this->newDialog()
       ->setTitle($title_text)
-      ->setWidth(AphrontDialogView::WIDTH_FORM);
-
-    if ($err) {
-      $dialog->setErrors($err);
-    }
+      ->setWidth(AphrontDialogView::WIDTH_FORM)
+      ->setErrors($errors)
+      ->appendParagraph($inner_text);
 
     $form = new PHUIFormLayoutView();
-    $form
-      ->appendChild(hsprintf(
-        '<p>%s</p><br />', $inner_text));
+
+    if ($this->isStoppingTracking()) {
+      $start_time = $current_timer->getDateStarted();
+      $start_string = pht(
+        '%s (%s ago)',
+        phabricator_datetime($start_time, $viewer),
+        phutil_format_relative_time(PhabricatorTime::getNow() - $start_time));
+
+      $form->appendChild(
+        id(new AphrontFormStaticControl())
+          ->setLabel(pht('Started At'))
+          ->setValue($start_string));
+    }
 
     $form->appendChild($epoch_control);
 
     if ($this->isStoppingTracking()) {
-      $form
-        ->appendChild(
-          id(new AphrontFormTextControl())
-            ->setLabel(pht('Note'))
-            ->setName('note'));
+      $form->appendChild(
+        id(new AphrontFormTextControl())
+          ->setLabel(pht('Note'))
+          ->setName('note')
+          ->setValue($v_note));
     }
 
     $dialog->appendChild($form);
 
-    $dialog->addCancelButton($handle->getURI());
+    $dialog->addCancelButton($done_uri);
+
     $dialog->addSubmitButton($action_text);
 
     return $dialog;
@@ -108,39 +162,4 @@ final class PhrequentTrackController
   private function isStoppingTracking() {
     return $this->verb === 'stop';
   }
-
-  private function startTracking($user, $phid, $timestamp) {
-    $usertime = new PhrequentUserTime();
-    $usertime->setDateStarted($timestamp);
-    $usertime->setUserPHID($user->getPHID());
-    $usertime->setObjectPHID($phid);
-    $usertime->save();
-  }
-
-  private function stopTracking($user, $phid, $timestamp, $note) {
-    if (!PhrequentUserTimeQuery::isUserTrackingObject($user, $phid)) {
-      // Don't do anything, it's not being tracked.
-      return;
-    }
-
-    $usertime_dao = new PhrequentUserTime();
-    $conn = $usertime_dao->establishConnection('r');
-
-    queryfx(
-      $conn,
-      'UPDATE %T usertime '.
-      'SET usertime.dateEnded = %d, '.
-      'usertime.note = %s '.
-      'WHERE usertime.userPHID = %s '.
-      'AND usertime.objectPHID = %s '.
-      'AND usertime.dateEnded IS NULL '.
-      'ORDER BY usertime.dateStarted, usertime.id DESC '.
-      'LIMIT 1',
-      $usertime_dao->getTableName(),
-      $timestamp,
-      $note,
-      $user->getPHID(),
-      $phid);
-  }
-
 }

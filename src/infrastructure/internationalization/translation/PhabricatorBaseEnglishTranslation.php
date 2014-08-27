@@ -9,6 +9,10 @@ abstract class PhabricatorBaseEnglishTranslation
 
   public function getTranslations() {
     return array(
+      'No daemon(s) with id(s) "%s" exist!' => array(
+        'No daemon with id %s exists!',
+        'No daemons with ids %s exist!',
+      ),
       'These %d configuration value(s) are related:' => array(
         'This configuration value is related:',
         'These configuration values are related:',
@@ -674,6 +678,11 @@ abstract class PhabricatorBaseEnglishTranslation
         'The current Phabricator configuration has these values:',
       ),
 
+      'The current MySQL configuration has these %d value(s):' => array(
+        'The current MySQL configuration has this value:',
+        'The current MySQL configuration has these values:',
+      ),
+
       'To update these %d value(s), run these command(s) from the command line:'
       => array(
         'To update this value, run this command from the command line:',
@@ -936,7 +945,143 @@ abstract class PhabricatorBaseEnglishTranslation
       '%s updated JIRA issue(s): added %d %s; removed %d %s.' =>
         '%s updated JIRA issues: added %3$s; removed %5$s.',
 
+      '%s added %s task(s): %s.' => array(
+        array(
+          '%s added a task: %3$s.',
+          '%s added tasks: %3$s.',
+        ),
+      ),
+
+      '%s removed %s task(s): %s.' => array(
+        array(
+          '%s removed a task: %3$s.',
+          '%s removed tasks: %3$s.',
+        ),
+      ),
+
+      '%s edited %s task(s), added %s: %s; removed %s: %s.' =>
+        '%s edited tasks, added %4$s; removed %6$s.',
+
+      '%s added %s task(s) to %s: %s.' => array(
+        array(
+          '%s added a task to %3$s: %4$s.',
+          '%s added tasks to %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s task(s) from %s: %s.' => array(
+        array(
+          '%s removed a task from %3$s: %4$s.',
+          '%s removed tasks from %3$s: %4$s.',
+        ),
+      ),
+
+      '%s edited %s task(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited tasks for %3$s, added: %5$s; removed %7$s.',
+
+      '%s added %s commit(s): %s.' => array(
+        array(
+          '%s added a commit: %3$s.',
+          '%s added commits: %3$s.',
+        ),
+      ),
+
+      '%s removed %s commit(s): %s.' => array(
+        array(
+          '%s removed a commit: %3$s.',
+          '%s removed commits: %3$s.',
+        ),
+      ),
+
+      '%s edited %s commit(s), added %s: %s; removed %s: %s.' =>
+        '%s edited commits, added %4$s; removed %6$s.',
+
+      '%s added %s commit(s) to %s: %s.' => array(
+        array(
+          '%s added a commit to %3$s: %4$s.',
+          '%s added commits to %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s commit(s) from %s: %s.' => array(
+        array(
+          '%s removed a commit from %3$s: %4$s.',
+          '%s removed commits from %3$s: %4$s.',
+        ),
+      ),
+
+      '%s edited %s commit(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited commits for %3$s, added: %5$s; removed %7$s.',
+
+      '%s added %s revision(s): %s.' => array(
+        array(
+          '%s added a revision: %3$s.',
+          '%s added revisionss: %3$s.',
+        ),
+      ),
+
+      '%s removed %s revision(s): %s.' => array(
+        array(
+          '%s removed a revision: %3$s.',
+          '%s removed revisions: %3$s.',
+        ),
+      ),
+
+      '%s edited %s revision(s), added %s: %s; removed %s: %s.' =>
+        '%s edited revisions, added %4$s; removed %6$s.',
+
+      '%s added %s revision(s) to %s: %s.' => array(
+        array(
+          '%s added a revision to %3$s: %4$s.',
+          '%s added revisions to %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s revision(s) from %s: %s.' => array(
+        array(
+          '%s removed a revision from %3$s: %4$s.',
+          '%s removed revisions from %3$s: %4$s.',
+        ),
+      ),
+
+      '%s edited %s revision(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited revisions for %3$s, added: %5$s; removed %7$s.',
+
+      '%s added %s project(s): %s.' => array(
+        array(
+          '%s added a project: %3$s.',
+          '%s added projects: %3$s.',
+        ),
+      ),
+
+      '%s removed %s project(s): %s.' => array(
+        array(
+          '%s removed a project: %3$s.',
+          '%s removed projects: %3$s.',
+        ),
+      ),
+
+      '%s edited %s project(s), added %s: %s; removed %s: %s.' =>
+        '%s edited projects, added %4$s; removed %6$s.',
+
+      '%s added %s project(s) to %s: %s.' => array(
+        array(
+          '%s added a project to %3$s: %4$s.',
+          '%s added projects to %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s project(s) from %s: %s.' => array(
+        array(
+          '%s removed a project from %3$s: %4$s.',
+          '%s removed projects from %3$s: %4$s.',
+        ),
+      ),
+
+      '%s edited %s project(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited projects for %3$s, added: %5$s; removed %7$s.',
+
     );
   }
 
-  }
+}

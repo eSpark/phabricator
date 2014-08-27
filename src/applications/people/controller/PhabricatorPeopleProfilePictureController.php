@@ -53,6 +53,7 @@ final class PhabricatorPeopleProfilePictureController
             $_FILES['picture'],
             array(
               'authorPHID' => $viewer->getPHID(),
+              'canCDN' => true,
             ));
         } else {
           $e_file = pht('Required');
@@ -125,6 +126,11 @@ final class PhabricatorPeopleProfilePictureController
       ->setViewer($viewer)
       ->withUserPHIDs(array($user->getPHID()))
       ->needImages(true)
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
       ->execute();
 
     foreach ($accounts as $account) {

@@ -17,7 +17,7 @@ you need to build new classes. For instance:
   - if you want to configure linters, or add new linters, you need to create a
     new class which extends @{class@arcanist:ArcanistLintEngine}.
   - if you want to integrate with a unit testing framework, you need to create a
-    new class which extends @{class@arcanist:ArcanistBaseUnitTestEngine}.
+    new class which extends @{class@arcanist:ArcanistUnitTestEngine}.
   - if you you want to change how workflows behave, or add new workflows, you
     need to create a new class which extends
     @{class@arcanist:ArcanistConfiguration}.
@@ -57,13 +57,13 @@ When you run ##arc list --trace##, you should see a message to the effect that
 it has loaded your library.
 
 For debugging or testing, you can also run Arcanist with the
-##--load-phutil-library## flag:
+`--load-phutil-library` flag:
 
   arc --load-phutil-library=/path/to/library <command>
 
 You can specify this flag more than once to load several libraries. Note that
 if you use this flag, Arcanist will ignore any libraries listed in
-##.arcconfig##.
+`.arcconfig`.
 
 = Use the Class =
 

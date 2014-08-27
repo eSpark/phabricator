@@ -1,7 +1,8 @@
 <?php
 
 final class PassphraseCredential extends PassphraseDAO
-  implements PhabricatorPolicyInterface {
+  implements PhabricatorPolicyInterface,
+  PhabricatorDestructibleInterface {
 
   protected $name;
   protected $credentialType;
@@ -13,6 +14,7 @@ final class PassphraseCredential extends PassphraseDAO
   protected $secretID;
   protected $isDestroyed;
   protected $isLocked = 0;
+  protected $allowConduit = 0;
 
   private $secret = self::ATTACHABLE;
 
@@ -38,7 +40,7 @@ final class PassphraseCredential extends PassphraseDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PassphrasePHIDTypeCredential::TYPECONST);
+      PassphraseCredentialPHIDType::TYPECONST);
   }
 
   public function attachSecret(PhutilOpaqueEnvelope $secret = null) {
@@ -83,4 +85,19 @@ final class PassphraseCredential extends PassphraseDAO
     return null;
   }
 
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $secrets = id(new PassphraseSecret())->loadAllWhere(
+        'id = %d',
+        $this->getSecretID());
+      foreach ($secrets as $secret) {
+        $secret->delete();
+      }
+      $this->delete();
+    $this->saveTransaction();
+  }
 }

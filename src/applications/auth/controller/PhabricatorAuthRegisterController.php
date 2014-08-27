@@ -304,7 +304,7 @@ final class PhabricatorAuthRegisterController
           }
 
           return $this->loginUser($user);
-        } catch (AphrontQueryDuplicateKeyException $exception) {
+        } catch (AphrontDuplicateKeyQueryException $exception) {
           $same_username = id(new PhabricatorUser())->loadOneWhere(
             'userName = %s',
             $user->getUserName());
@@ -494,7 +494,7 @@ final class PhabricatorAuthRegisterController
   }
 
   private function loadSetupAccount() {
-    $provider = new PhabricatorAuthProviderPassword();
+    $provider = new PhabricatorPasswordAuthProvider();
     $provider->attachProviderConfig(
       id(new PhabricatorAuthProviderConfig())
         ->setShouldAllowRegistration(1)
