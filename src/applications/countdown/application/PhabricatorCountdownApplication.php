@@ -6,8 +6,8 @@ final class PhabricatorCountdownApplication extends PhabricatorApplication {
     return '/countdown/';
   }
 
-  public function getIconName() {
-    return 'countdown';
+  public function getFontIcon() {
+    return 'fa-rocket';
   }
 
   public function getName() {
@@ -43,12 +43,12 @@ final class PhabricatorCountdownApplication extends PhabricatorApplication {
           => 'PhabricatorCountdownListController',
         '(?P<id>[1-9]\d*)/' => 'PhabricatorCountdownViewController',
         'edit/(?:(?P<id>[1-9]\d*)/)?' => 'PhabricatorCountdownEditController',
-        'delete/(?P<id>[1-9]\d*)/' => 'PhabricatorCountdownDeleteController'
+        'delete/(?P<id>[1-9]\d*)/' => 'PhabricatorCountdownDeleteController',
       ),
     );
   }
 
-  public function getCustomCapabilities() {
+  protected function getCustomCapabilities() {
     return array(
       PhabricatorCountdownDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for new countdowns.'),

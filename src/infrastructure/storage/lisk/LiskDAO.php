@@ -169,6 +169,9 @@ abstract class LiskDAO {
   const CONFIG_AUX_PHID             = 'auxiliary-phid';
   const CONFIG_SERIALIZATION        = 'col-serialization';
   const CONFIG_BINARY               = 'binary';
+  const CONFIG_COLUMN_SCHEMA        = 'col-schema';
+  const CONFIG_KEY_SCHEMA           = 'key-schema';
+  const CONFIG_NO_TABLE             = 'no-table';
 
   const SERIALIZATION_NONE          = 'id';
   const SERIALIZATION_JSON          = 'json';
@@ -284,7 +287,7 @@ abstract class LiskDAO {
    * to change these behaviors, you should override this method in your child
    * class and change the options you're interested in. For example:
    *
-   *   public function getConfiguration() {
+   *   protected function getConfiguration() {
    *     return array(
    *       Lisk_DataAccessObject::CONFIG_EXAMPLE => true,
    *     ) + parent::getConfiguration();
@@ -342,6 +345,16 @@ abstract class LiskDAO {
    * You can optionally provide a map of columns to a flag indicating that
    * they store binary data. These columns will not raise an error when
    * handling binary writes.
+   *
+   * CONFIG_COLUMN_SCHEMA
+   * Provide a map of columns to schema column types.
+   *
+   * CONFIG_KEY_SCHEMA
+   * Provide a map of key names to key specifications.
+   *
+   * CONFIG_NO_TABLE
+   * Allows you to specify that this object does not actually have a table in
+   * the database.
    *
    * @return dictionary  Map of configuration options to values.
    *
@@ -1160,7 +1173,7 @@ abstract class LiskDAO {
         $id_key = $this->getIDKeyForUse();
         if (empty($data[$id_key])) {
           $counter_name = $this->getTableName();
-          $id = self::loadNextCounterID($conn, $counter_name);
+          $id = self::loadNextCounterValue($conn, $counter_name);
           $this->setID($id);
           $data[$id_key] = $id;
         }
@@ -1278,7 +1291,7 @@ abstract class LiskDAO {
    *
    * @task   hook
    */
-  protected function generatePHID() {
+  public function generatePHID() {
     throw new Exception(
       'To use CONFIG_AUX_PHID, you need to overload '.
       'generatePHID() to perform PHID generation.');
@@ -1675,6 +1688,7 @@ abstract class LiskDAO {
     $this->$name = $value;
   }
 
+
   /**
    * Increments a named counter and returns the next value.
    *
@@ -1684,7 +1698,7 @@ abstract class LiskDAO {
    *
    * @task util
    */
-  public static function loadNextCounterID(
+  public static function loadNextCounterValue(
     AphrontDatabaseConnection $conn_w,
     $counter_name) {
 
@@ -1708,8 +1722,172 @@ abstract class LiskDAO {
     return $conn_w->getInsertID();
   }
 
+
+  /**
+   * Returns the current value of a named counter.
+   *
+   * @param AphrontDatabaseConnection Database where the counter resides.
+   * @param string Counter name to read.
+   * @return int|null Current value, or `null` if the counter does not exist.
+   *
+   * @task util
+   */
+  public static function loadCurrentCounterValue(
+    AphrontDatabaseConnection $conn_r,
+    $counter_name) {
+
+    $row = queryfx_one(
+      $conn_r,
+      'SELECT counterValue FROM %T WHERE counterName = %s',
+      self::COUNTER_TABLE_NAME,
+      $counter_name);
+    if (!$row) {
+      return null;
+    }
+
+    return (int)$row['counterValue'];
+  }
+
+
+  /**
+   * Overwrite a named counter, forcing it to a specific value.
+   *
+   * If the counter does not exist, it is created.
+   *
+   * @param AphrontDatabaseConnection Database where the counter resides.
+   * @param string Counter name to create or overwrite.
+   * @return void
+   *
+   * @task util
+   */
+  public static function overwriteCounterValue(
+    AphrontDatabaseConnection $conn_w,
+    $counter_name,
+    $counter_value) {
+
+    queryfx(
+      $conn_w,
+      'INSERT INTO %T (counterName, counterValue) VALUES (%s, %d)
+        ON DUPLICATE KEY UPDATE counterValue = VALUES(counterValue)',
+      self::COUNTER_TABLE_NAME,
+      $counter_name,
+      $counter_value);
+  }
+
   private function getBinaryColumns() {
     return $this->getConfigOption(self::CONFIG_BINARY);
+  }
+
+
+  public function getSchemaColumns() {
+    $custom_map = $this->getConfigOption(self::CONFIG_COLUMN_SCHEMA);
+    if (!$custom_map) {
+      $custom_map = array();
+    }
+
+    $serialization = $this->getConfigOption(self::CONFIG_SERIALIZATION);
+    if (!$serialization) {
+      $serialization = array();
+    }
+
+    $serialization_map = array(
+      self::SERIALIZATION_JSON => 'text',
+      self::SERIALIZATION_PHP => 'bytes',
+    );
+
+    $binary_map = $this->getBinaryColumns();
+
+    $id_mechanism = $this->getConfigOption(self::CONFIG_IDS);
+    if ($id_mechanism == self::IDS_AUTOINCREMENT) {
+      $id_type = 'auto';
+    } else {
+      $id_type = 'id';
+    }
+
+    $builtin = array(
+      'id' => $id_type,
+      'phid' => 'phid',
+      'viewPolicy' => 'policy',
+      'editPolicy' => 'policy',
+      'epoch' => 'epoch',
+      'dateCreated' => 'epoch',
+      'dateModified' => 'epoch',
+    );
+
+    $map = array();
+    foreach ($this->getAllLiskProperties() as $property) {
+      // First, use types specified explicitly in the table configuration.
+      if (array_key_exists($property, $custom_map)) {
+        $map[$property] = $custom_map[$property];
+        continue;
+      }
+
+      // If we don't have an explicit type, try a builtin type for the
+      // column.
+      $type = idx($builtin, $property);
+      if ($type) {
+        $map[$property] = $type;
+        continue;
+      }
+
+      // If the column has serialization, we can infer the column type.
+      if (isset($serialization[$property])) {
+        $type = idx($serialization_map, $serialization[$property]);
+        if ($type) {
+          $map[$property] = $type;
+          continue;
+        }
+      }
+
+      if (isset($binary_map[$property])) {
+        $map[$property] = 'bytes';
+        continue;
+      }
+
+      // If the column is named `somethingPHID`, infer it is a PHID.
+      if (preg_match('/[a-z]PHID$/', $property)) {
+        $map[$property] = 'phid';
+        continue;
+      }
+
+      // If the column is named `somethingID`, infer it is an ID.
+      if (preg_match('/[a-z]ID$/', $property)) {
+        $map[$property] = 'id';
+        continue;
+      }
+
+      // We don't know the type of this column.
+      $map[$property] = PhabricatorConfigSchemaSpec::DATATYPE_UNKNOWN;
+    }
+
+    return $map;
+  }
+
+  public function getSchemaKeys() {
+    $custom_map = $this->getConfigOption(self::CONFIG_KEY_SCHEMA);
+    if (!$custom_map) {
+      $custom_map = array();
+    }
+
+    $default_map = array();
+    foreach ($this->getAllLiskProperties() as $property) {
+      switch ($property) {
+        case 'id':
+          $default_map['PRIMARY'] = array(
+            'columns' => array('id'),
+            'unique' => true,
+          );
+          break;
+        case 'phid':
+          $default_map['key_phid'] = array(
+            'columns' => array('phid'),
+            'unique' => true,
+          );
+          break;
+      }
+    }
+
+    return $custom_map + $default_map;
   }
 
 }

@@ -24,7 +24,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->setImage(celerity_get_resource_uri('/rsrc/image/people/harding.png'))
       ->setImageHref('http://en.wikipedia.org/wiki/Warren_G._Harding')
       ->setEpoch(1)
-      ->setAppIcon('differential-dark')
+      ->setAppIcon('fa-star')
       ->setUser($user);
 
     /* Text Story, useful in Blogs, Ponders, Status */
@@ -32,7 +32,8 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       'like-1',
       'like-2',
       'heart-1',
-      'heart-2');
+      'heart-2',
+    );
     $tokenview = array();
     foreach ($tokens as $token) {
       $tokenview[] =
@@ -47,7 +48,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->setImage(celerity_get_resource_uri('/rsrc/image/people/lincoln.png'))
       ->setImageHref('http://en.wikipedia.org/wiki/Abraham_Lincoln')
       ->setEpoch(strtotime('November 19, 1863'))
-      ->setAppIcon('phame-dark')
+      ->setAppIcon('fa-star')
       ->setUser($user)
       ->setTokenBar($tokenview)
       ->setPontification('Four score and seven years ago our fathers brought '.
@@ -79,7 +80,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->appendChild($token)
       ->setEpoch(1)
       ->addAction($action1)
-      ->setAppIcon('token-dark')
+      ->setAppIcon('fa-trophy')
       ->setUser($user);
 
     /* Image Story, used in Pholio, Macro */
@@ -96,7 +97,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->setImage(celerity_get_resource_uri('/rsrc/image/people/harding.png'))
       ->setImageHref('http://en.wikipedia.org/wiki/Warren_G._Harding')
       ->setEpoch(1)
-      ->setAppIcon('ponder-dark')
+      ->setAppIcon('fa-cogs')
       ->setPontification('Why does inline-block add space under my spans and '.
         'anchors?')
       ->addAction($action1)
@@ -111,7 +112,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->setImage(celerity_get_resource_uri('/rsrc/image/people/lincoln.png'))
       ->setImageHref('http://en.wikipedia.org/wiki/Abraham_Lincoln')
       ->setEpoch(strtotime('November 19, 1863'))
-      ->setAppIcon('phame-dark')
+      ->setAppIcon('fa-rocket')
       ->setUser($user)
       ->setPontification('If we ever create a lightweight status app '.
       'this story would be how that would be displayed.');
@@ -125,7 +126,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
       ->setImage(celerity_get_resource_uri('/rsrc/image/people/harding.png'))
       ->setImageHref('http://en.wikipedia.org/wiki/Warren_G._Harding')
       ->setEpoch(1)
-      ->setAppIcon('differential-dark')
+      ->setAppIcon('fa-wifi')
       ->setUser($user);
 
 
@@ -152,42 +153,48 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
         id(new PHUIBoxView())
           ->appendChild($story1)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     $wrap2 =
       array(
         id(new PHUIBoxView())
           ->appendChild($story2)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     $wrap3 =
       array(
         id(new PHUIBoxView())
           ->appendChild($story3)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     $wrap4 =
       array(
         id(new PHUIBoxView())
           ->appendChild($story4)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     $wrap5 =
       array(
         id(new PHUIBoxView())
           ->appendChild($story5)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     $wrap6 =
       array(
         id(new PHUIBoxView())
           ->appendChild($story6)
           ->addMargin(PHUI::MARGIN_MEDIUM)
-          ->addPadding(PHUI::PADDING_SMALL));
+          ->addPadding(PHUI::PADDING_SMALL),
+      );
 
     return phutil_tag(
       'div',
@@ -204,7 +211,7 @@ final class PHUIFeedStoryExample extends PhabricatorUIExample {
           $head5,
           $wrap5,
           $head6,
-          $wrap6
+          $wrap6,
         ));
   }
 }

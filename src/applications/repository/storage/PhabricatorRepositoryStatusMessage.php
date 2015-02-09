@@ -17,11 +17,21 @@ final class PhabricatorRepositoryStatusMessage
   protected $parameters = array();
   protected $epoch;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_SERIALIZATION => array(
         'parameters' => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'statusType' => 'text32',
+        'statusCode' => 'text32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'repositoryID' => array(
+          'columns' => array('repositoryID', 'statusType'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }

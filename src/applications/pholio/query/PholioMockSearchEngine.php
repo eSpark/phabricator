@@ -46,7 +46,8 @@ final class PholioMockSearchEngine extends PhabricatorApplicationSearchEngine {
     $statuses = array(
       '' => pht('Any Status'),
       'closed' => pht('Closed'),
-      'open' => pht('Open'));
+      'open' => pht('Open'),
+    );
 
     $status = $saved_query->getParameter('statuses', array());
     $status = head($status);
@@ -70,7 +71,7 @@ final class PholioMockSearchEngine extends PhabricatorApplicationSearchEngine {
     return '/pholio/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'open' => pht('Open Mocks'),
       'all' => pht('All Mocks'),

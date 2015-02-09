@@ -16,6 +16,7 @@ final class PHUIDocumentView extends AphrontTagView {
   private $bookdescription;
   private $mobileview;
   private $fontKit;
+  private $actionListID;
 
   public function setOffset($offset) {
     $this->offset = $offset;
@@ -57,7 +58,12 @@ final class PHUIDocumentView extends AphrontTagView {
     return $this;
   }
 
-  public function getTagAttributes() {
+  public function setActionListID($id) {
+    $this->actionListID = $id;
+    return $this;
+  }
+
+  protected function getTagAttributes() {
     $classes = array();
 
     if ($this->offset) {
@@ -69,7 +75,7 @@ final class PHUIDocumentView extends AphrontTagView {
     );
   }
 
-  public function getTagContent() {
+  protected function getTagContent() {
     require_celerity_resource('phui-document-view-css');
     if ($this->fontKit) {
       require_celerity_resource('phui-fontkit-css');
@@ -95,7 +101,7 @@ final class PHUIDocumentView extends AphrontTagView {
       $sidenav = phutil_tag(
         'div',
         array(
-          'class' => 'phui-document-sidenav'
+          'class' => 'phui-document-sidenav',
         ),
         $this->sidenav);
     }
@@ -105,7 +111,7 @@ final class PHUIDocumentView extends AphrontTagView {
       $book = phutil_tag(
         'div',
         array(
-          'class' => 'phui-document-bookname grouped'
+          'class' => 'phui-document-bookname grouped',
         ),
         array(
           phutil_tag(
@@ -115,7 +121,8 @@ final class PHUIDocumentView extends AphrontTagView {
           phutil_tag(
             'span',
             array('class' => 'bookdescription'),
-          $this->bookdescription)));
+          $this->bookdescription),
+        ));
     }
 
     $topnav = null;
@@ -123,7 +130,7 @@ final class PHUIDocumentView extends AphrontTagView {
       $topnav = phutil_tag(
         'div',
         array(
-          'class' => 'phui-document-topnav'
+          'class' => 'phui-document-topnav',
         ),
         $this->topnav);
     }
@@ -133,7 +140,7 @@ final class PHUIDocumentView extends AphrontTagView {
       $crumbs = phutil_tag(
         'div',
         array(
-          'class' => 'phui-document-crumbs'
+          'class' => 'phui-document-crumbs',
         ),
         $this->bookName);
     }
@@ -142,11 +149,32 @@ final class PHUIDocumentView extends AphrontTagView {
       $main_content = phutil_tag(
         'div',
         array(
-          'class' => 'phui-font-'.$this->fontKit
+          'class' => 'phui-font-'.$this->fontKit,
         ),
         $this->renderChildren());
     } else {
       $main_content = $this->renderChildren();
+    }
+
+    if ($this->actionListID) {
+      $icon_id = celerity_generate_unique_node_id();
+      $icon = id(new PHUIIconView())
+        ->setIconFont('fa-bars');
+      $meta = array(
+        'map' => array(
+          $this->actionListID => 'phabricator-action-list-toggle',
+          $icon_id => 'phuix-dropdown-open',
+        ),);
+      $mobile_menu = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setText(pht('Actions'))
+        ->setHref('#')
+        ->setIcon($icon)
+        ->addClass('phui-mobile-menu')
+        ->setID($icon_id)
+        ->addSigil('jx-toggle-class')
+        ->setMetadata($meta);
+      $this->header->addActionLink($mobile_menu);
     }
 
     $content_inner = phutil_tag(
@@ -159,7 +187,7 @@ final class PHUIDocumentView extends AphrontTagView {
           $this->header,
           $topnav,
           $main_content,
-          $crumbs
+          $crumbs,
         ));
 
     if ($this->mobileview == self::NAV_BOTTOM) {

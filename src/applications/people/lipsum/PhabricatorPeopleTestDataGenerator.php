@@ -25,13 +25,12 @@ final class PhabricatorPeopleTestDataGenerator
           ->createNewUser($user, $email_object);
 
         return $user;
-      } catch (AphrontDuplicateKeyQueryException $ex) {
-      }
+      } catch (AphrontDuplicateKeyQueryException $ex) {}
     }
   }
 
   protected function generateRealname() {
-    $realname_generator = new PhutilRealnameContextFreeGrammar();
+    $realname_generator = new PhutilRealNameContextFreeGrammar();
     $random_real_name = $realname_generator->generate();
     return $random_real_name;
   }
@@ -47,8 +46,7 @@ final class PhabricatorPeopleTestDataGenerator
       foreach ($words as $w) {
          if ($w == end($words)) {
           $reduced .= $w;
-        }
-        else {
+        } else {
           $reduced .= $w[0];
         }
       }
@@ -56,8 +54,7 @@ final class PhabricatorPeopleTestDataGenerator
         foreach ($words as $w) {
           if ($w == $words[0]) {
             $reduced .= $w;
-          }
-          else {
+          } else {
             $reduced .= $w[0];
           }
         }
@@ -65,8 +62,7 @@ final class PhabricatorPeopleTestDataGenerator
         foreach ($words as $w) {
           if ($w == $words[0] || $w == end($words)) {
             $reduced .= $w;
-          }
-          else {
+          } else {
             $reduced .= $w[0];
           }
         }
@@ -74,8 +70,7 @@ final class PhabricatorPeopleTestDataGenerator
         foreach ($words as $w) {
           if ($w == $words[0] || $w == end($words)) {
             $reduced .= $w;
-          }
-          else {
+          } else {
             $reduced .= $w[0].'.';
           }
         }
@@ -83,8 +78,7 @@ final class PhabricatorPeopleTestDataGenerator
         foreach ($words as $w) {
           if ($w == $words[0] || $w == end($words)) {
             $reduced .= $w;
-          }
-          else {
+          } else {
             $reduced .= $w[0].'_';
           }
         }

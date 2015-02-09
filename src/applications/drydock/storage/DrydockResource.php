@@ -16,12 +16,25 @@ final class DrydockResource extends DrydockDAO
 
   private $blueprint;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_SERIALIZATION => array(
         'attributes'    => self::SERIALIZATION_JSON,
         'capabilities'  => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'name' => 'text255',
+        'ownerPHID' => 'phid?',
+        'status' => 'uint32',
+        'type' => 'text64',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'phid' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }

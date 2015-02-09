@@ -6,20 +6,26 @@ final class DiffusionDiffController extends DiffusionController {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
+  protected function shouldLoadDiffusionRequest() {
+    return false;
+  }
+
+  protected function processDiffusionRequest(AphrontRequest $request) {
+    $data = $request->getURIMap();
     $data = $data + array(
       'dblob' => $this->getRequest()->getStr('ref'),
     );
-    $drequest = DiffusionRequest::newFromAphrontRequestDictionary(
-      $data,
-      $this->getRequest());
+    try {
+      $drequest = DiffusionRequest::newFromAphrontRequestDictionary(
+        $data,
+        $request);
+    } catch (Exception $ex) {
+      return id(new Aphront404Response())
+        ->setRequest($request);
+    }
+    $this->setDiffusionRequest($drequest);
 
-    $this->diffusionRequest = $drequest;
-  }
-
-  public function processRequest() {
     $drequest = $this->getDiffusionRequest();
-    $request = $this->getRequest();
     $user = $request->getUser();
 
     if (!$request->isAjax()) {
@@ -50,10 +56,12 @@ final class DiffusionDiffController extends DiffusionController {
       'diffusion.diffquery',
       array(
         'commit' => $drequest->getCommit(),
-        'path' => $drequest->getPath()));
+        'path' => $drequest->getPath(),
+      ));
     $drequest->updateSymbolicCommit($data['effectiveCommit']);
     $raw_changes = ArcanistDiffChange::newFromConduit($data['changes']);
-    $diff = DifferentialDiff::newFromRawChanges($raw_changes);
+    $diff = DifferentialDiff::newEphemeralFromRawChanges(
+      $raw_changes);
     $changesets = $diff->getChangesets();
     $changeset = reset($changesets);
 
@@ -66,7 +74,8 @@ final class DiffusionDiffController extends DiffusionController {
     $parser->setChangeset($changeset);
     $parser->setRenderingReference($drequest->generateURI(
       array(
-        'action' => 'rendering-ref')));
+        'action' => 'rendering-ref',
+      )));
 
     $parser->setCharacterEncoding($request->getStr('encoding'));
     $parser->setHighlightAs($request->getStr('highlight'));

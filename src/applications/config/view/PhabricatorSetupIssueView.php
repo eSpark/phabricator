@@ -26,7 +26,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
 
     $configs = $issue->getPHPConfig();
     if ($configs) {
-      $description[] = $this->renderPHPConfig($configs);
+      $description[] = $this->renderPHPConfig($configs, $issue);
     }
 
     $configs = $issue->getMySQLConfig();
@@ -107,12 +107,71 @@ final class PhabricatorSetupIssueView extends AphrontView {
 
     }
 
-    $next = phutil_tag(
-      'div',
-      array(
-        'class' => 'setup-issue-next',
-      ),
-      pht('To continue, resolve this problem and reload the page.'));
+    $related_links = $issue->getLinks();
+    if ($related_links) {
+      $description[] = $this->renderRelatedLinks($related_links);
+    }
+
+    $actions = array();
+    if (!$issue->getIsFatal()) {
+      if ($issue->getIsIgnored()) {
+        $actions[] = javelin_tag(
+          'a',
+          array(
+            'href' => '/config/unignore/'.$issue->getIssueKey().'/',
+            'sigil' => 'workflow',
+            'class' => 'button grey',
+          ),
+          pht('Unignore Setup Issue'));
+      } else {
+        $actions[] = javelin_tag(
+          'a',
+          array(
+            'href' => '/config/ignore/'.$issue->getIssueKey().'/',
+            'sigil' => 'workflow',
+            'class' => 'button grey',
+          ),
+          pht('Ignore Setup Issue'));
+      }
+
+      $actions[] = javelin_tag(
+        'a',
+        array(
+          'href' => '/config/issue/'.$issue->getIssueKey().'/',
+          'class' => 'button grey',
+          'style' => 'float: right',
+        ),
+        pht('Reload Page'));
+    }
+
+    if ($actions) {
+      $actions = phutil_tag(
+        'div',
+        array(
+          'class' => 'setup-issue-actions',
+        ),
+        $actions);
+    }
+
+    if ($issue->getIsIgnored()) {
+      $status = phutil_tag(
+        'div',
+        array(
+          'class' => 'setup-issue-status',
+        ),
+        pht(
+          'This issue is currently ignored, and does not show a global '.
+          'warning.'));
+      $next = null;
+    } else {
+      $status = null;
+      $next = phutil_tag(
+        'div',
+        array(
+          'class' => 'setup-issue-next',
+        ),
+        pht('To continue, resolve this problem and reload the page.'));
+    }
 
     $name = phutil_tag(
       'div',
@@ -121,15 +180,29 @@ final class PhabricatorSetupIssueView extends AphrontView {
       ),
       $issue->getName());
 
+    $head = phutil_tag(
+      'div',
+      array(
+        'class' => 'setup-issue-head',
+      ),
+      array($name, $status));
+
+    $tail = phutil_tag(
+      'div',
+      array(
+        'class' => 'setup-issue-tail',
+      ),
+      array($actions, $next));
+
     $issue = phutil_tag(
       'div',
       array(
         'class' => 'setup-issue',
       ),
       array(
-        $name,
+        $head,
         $description,
-        $next,
+        $tail,
       ));
 
     $debug_info = phutil_tag(
@@ -243,7 +316,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       ));
   }
 
-  private function renderPHPConfig(array $configs) {
+  private function renderPHPConfig(array $configs, $issue) {
     $table_info = phutil_tag(
       'p',
       array(),
@@ -253,7 +326,9 @@ final class PhabricatorSetupIssueView extends AphrontView {
 
     $dict = array();
     foreach ($configs as $key) {
-      $dict[$key] = ini_get($key);
+      $dict[$key] = $issue->getPHPConfigOriginalValue(
+        $key,
+        ini_get($key));
     }
 
     $table = $this->renderValueTable($dict);
@@ -355,7 +430,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
   private function renderMySQLConfig(array $config) {
     $values = array();
     foreach ($config as $key) {
-      $value = PhabricatorSetupCheckMySQL::loadRawConfigValue($key);
+      $value = PhabricatorMySQLSetupCheck::loadRawConfigValue($key);
       if ($value === null) {
         $value = phutil_tag(
           'em',
@@ -436,6 +511,39 @@ final class PhabricatorSetupIssueView extends AphrontView {
     } else {
       return PhabricatorConfigJSON::prettyPrintJSON($value);
     }
+  }
+
+  private function renderRelatedLinks(array $links) {
+    $link_info = phutil_tag(
+      'p',
+      array(),
+      pht(
+        '%d related link(s):',
+        count($links)));
+
+    $link_list = array();
+    foreach ($links as $link) {
+      $link_tag = phutil_tag(
+        'a',
+        array(
+          'target' => '_blank',
+          'href' => $link['href'],
+        ),
+        $link['name']);
+      $link_item = phutil_tag('li', array(), $link_tag);
+      $link_list[] = $link_item;
+    }
+    $link_list = phutil_tag('ul', array(), $link_list);
+
+    return phutil_tag(
+      'div',
+      array(
+        'class' => 'setup-issue-config',
+      ),
+      array(
+        $link_info,
+        $link_list,
+      ));
   }
 
 }

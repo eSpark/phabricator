@@ -10,8 +10,8 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
     return '/auth/';
   }
 
-  public function getIconName() {
-    return 'authentication';
+  public function getFontIcon() {
+    return 'fa-key';
   }
 
   public function isPinnedByDefault(PhabricatorUser $viewer) {
@@ -48,7 +48,7 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
       $item = id(new PHUIListItemView())
         ->addClass('core-menu-item')
         ->setName(pht('Log Out'))
-        ->setIcon('logout-sm')
+        ->setIcon('fa-sign-out')
         ->setWorkflow(true)
         ->setHref('/logout/')
         ->setSelected(($controller instanceof PhabricatorLogoutController))
@@ -60,12 +60,17 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
         // Don't show the "Login" item on auth controllers, since they're
         // generally all related to logging in anyway.
       } else {
+        $uri = new PhutilURI('/auth/start/');
+        if ($controller) {
+          $path = $controller->getRequest()->getPath();
+          $uri->setQueryParam('next', $path);
+        }
         $item = id(new PHUIListItemView())
           ->addClass('core-menu-item')
           ->setName(pht('Log In'))
           // TODO: Login icon?
-          ->setIcon('power')
-          ->setHref('/auth/start/')
+          ->setIcon('fa-sign-in')
+          ->setHref($uri)
           ->setAural(pht('Log In'))
           ->setOrder(900);
         $items[] = $item;
@@ -92,6 +97,7 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
         ),
         'login/(?P<pkey>[^/]+)/(?:(?P<extra>[^/]+)/)?'
           => 'PhabricatorAuthLoginController',
+        '(?P<loggedout>loggedout)/' => 'PhabricatorAuthStartController',
         'register/(?:(?P<akey>[^/]+)/)?' => 'PhabricatorAuthRegisterController',
         'start/' => 'PhabricatorAuthStartController',
         'validate/' => 'PhabricatorAuthValidateController',
@@ -109,6 +115,12 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
           => 'PhabricatorAuthDowngradeSessionController',
         'multifactor/'
           => 'PhabricatorAuthNeedsMultiFactorController',
+        'sshkey/' => array(
+          'generate/' => 'PhabricatorAuthSSHKeyGenerateController',
+          'upload/' => 'PhabricatorAuthSSHKeyEditController',
+          'edit/(?P<id>\d+)/' => 'PhabricatorAuthSSHKeyEditController',
+          'delete/(?P<id>\d+)/' => 'PhabricatorAuthSSHKeyDeleteController',
+        ),
       ),
 
       '/oauth/(?P<provider>\w+)/login/'
@@ -133,4 +145,11 @@ final class PhabricatorAuthApplication extends PhabricatorApplication {
     );
   }
 
+  protected function getCustomCapabilities() {
+    return array(
+      AuthManageProvidersCapability::CAPABILITY => array(
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
+      ),
+    );
+  }
 }

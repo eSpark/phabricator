@@ -13,8 +13,7 @@ final class LegalpadDocumentListController extends LegalpadController {
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new LegalpadDocumentSearchEngine())
       ->setNavigation($this->buildSideNav());
@@ -22,7 +21,7 @@ final class LegalpadDocumentListController extends LegalpadController {
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $can_create = $this->hasApplicationCapability(

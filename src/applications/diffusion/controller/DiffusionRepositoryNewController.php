@@ -2,8 +2,7 @@
 
 final class DiffusionRepositoryNewController extends DiffusionController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
 
     $this->requireApplicationCapability(
@@ -47,8 +46,7 @@ final class DiffusionRepositoryNewController extends DiffusionController {
             array(
               pht(
                 'Create a new, empty repository which Phabricator will host. '.
-                'For instructions on configuring repository hosting, see %s. '.
-                'This feature is new and in beta!',
+                'For instructions on configuring repository hosting, see %s.',
                 $doc_link),
             ))
           ->addButton(

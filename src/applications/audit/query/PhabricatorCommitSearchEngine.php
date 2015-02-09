@@ -7,6 +7,10 @@ final class PhabricatorCommitSearchEngine
     return pht('Commits');
   }
 
+  public function getApplicationClassName() {
+    return 'PhabricatorDiffusionApplication';
+  }
+
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
     $saved = new PhabricatorSavedQuery();
 
@@ -82,7 +86,8 @@ final class PhabricatorCommitSearchEngine
       array(
         $auditor_phids,
         $commit_author_phids,
-        $repository_phids));
+        $repository_phids,
+      ));
 
     $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->requireViewer())
@@ -121,7 +126,7 @@ final class PhabricatorCommitSearchEngine
     return '/audit/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array();
 
     if ($this->requireViewer()->isLoggedIn()) {

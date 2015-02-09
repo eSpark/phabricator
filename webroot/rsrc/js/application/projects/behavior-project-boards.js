@@ -3,6 +3,7 @@
  * @requires javelin-behavior
  *           javelin-dom
  *           javelin-util
+ *           javelin-vector
  *           javelin-stratcom
  *           javelin-workflow
  *           phabricator-draggable-list
@@ -47,8 +48,8 @@ JX.behavior('project-boards', function(config) {
       'project-panel-over-limit': over_limit
     };
     var panel = JX.DOM.findAbove(col, 'div', 'workpanel');
-    for (var k in panel_map) {
-      JX.DOM.alterClass(panel, k, !!panel_map[k]);
+    for (var p in panel_map) {
+      JX.DOM.alterClass(panel, p, !!panel_map[p]);
     }
 
     var color_map = {
@@ -56,8 +57,8 @@ JX.behavior('project-boards', function(config) {
       'phui-tag-shade-blue': (sum > 0 && !over_limit),
       'phui-tag-shade-red': (over_limit)
     };
-    for (var k in color_map) {
-      JX.DOM.alterClass(data.countTagNode, k, !!color_map[k]);
+    for (var c in color_map) {
+      JX.DOM.alterClass(data.countTagNode, c, !!color_map[c]);
     }
   }
 
@@ -86,6 +87,41 @@ JX.behavior('project-boards', function(config) {
     }
 
     return 0;
+  }
+
+  function getcontainer() {
+    return JX.DOM.find(
+      JX.$(config.boardID),
+      'div',
+      'aphront-multi-column-view');
+  }
+
+  function onbegindrag(item) {
+    // If the longest column on the board is taller than the window, the board
+    // will scroll vertically. Dragging an item to the longest column may
+    // make it longer, by the total height of the board, plus the height of
+    // the drop target.
+
+    // If this happens, the scrollbar will jump around and the scroll position
+    // can be adjusted in a disorienting way. To reproduce this, drag a task
+    // to the bottom of the longest column on a scrolling board and wave the
+    // task in and out of the column. The scroll bar will jump around and
+    // it will be hard to lock onto a target.
+
+    // To fix this, set the minimum board height to the current board height
+    // plus the size of the drop target (which is the size of the item plus
+    // a bit of margin). This makes sure the scroll bar never needs to
+    // recalculate.
+
+    var item_size = JX.Vector.getDim(item);
+    var container = getcontainer();
+    var container_size = JX.Vector.getDim(container);
+
+    container.style.minHeight = (item_size.y + container_size.y + 12) + 'px';
+  }
+
+  function onenddrag() {
+    getcontainer().style.minHeight = '';
   }
 
   function ondrop(list, item, after) {
@@ -151,6 +187,9 @@ JX.behavior('project-boards', function(config) {
 
     list.listen('didDrop', JX.bind(null, ondrop, list));
 
+    list.listen('didBeginDrag', JX.bind(null, onbegindrag));
+    list.listen('didEndDrag', JX.bind(null, onenddrag));
+
     lists.push(list);
 
     onupdate(cols[ii]);
@@ -165,6 +204,7 @@ JX.behavior('project-boards', function(config) {
     var new_data = JX.Stratcom.getData(new_card);
     var items = finditems(column);
     var edited = false;
+    var remove_index = null;
 
     for (var ii = 0; ii < items.length; ii++) {
       var item = items[ii];
@@ -173,6 +213,9 @@ JX.behavior('project-boards', function(config) {
       var phid = data.objectPHID;
 
       if (phid == new_data.objectPHID) {
+        if (r.data.removeFromBoard) {
+          remove_index = ii;
+        }
         items[ii] = new_card;
         data = new_data;
         edited = true;
@@ -185,6 +228,10 @@ JX.behavior('project-boards', function(config) {
     if (!edited) {
       items[items.length + 1] = new_card;
       new_data.sort = r.data.sortMap[new_data.objectPHID] || new_data.sort;
+    }
+
+    if (remove_index !== null) {
+      items.splice(remove_index, 1);
     }
 
     items.sort(colsort);

@@ -60,7 +60,7 @@ final class ManiphestTaskResultListView extends ManiphestView {
                 ($group_parameter == 'none' || $group_parameter == 'priority');
 
     if (!$viewer->isLoggedIn()) {
-      // TODO: (T603) Eventually, we conceivably need to make each task
+      // TODO: (T7131) Eventually, we conceivably need to make each task
       // draggable individually, since the user may be able to edit some but
       // not others.
       $can_drag = false;
@@ -93,7 +93,7 @@ final class ManiphestTaskResultListView extends ManiphestView {
       $lists[] = phutil_tag(
         'div',
         array(
-          'class' => 'maniphest-task-group'
+          'class' => 'maniphest-task-group',
         ),
         array(
           $header,

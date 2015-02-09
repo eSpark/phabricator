@@ -6,9 +6,8 @@ final class DiffusionTagListController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->getDiffusionRequest();
-    $request = $this->getRequest();
     $viewer = $request->getUser();
 
     $repository = $drequest->getRepository();
@@ -19,7 +18,8 @@ final class DiffusionTagListController extends DiffusionController {
 
     $params = array(
       'limit' => $pager->getPageSize() + 1,
-      'offset' => $pager->getOffset());
+      'offset' => $pager->getOffset(),
+    );
 
     if ($drequest->getSymbolicCommit()) {
       $is_commit = true;
@@ -88,9 +88,8 @@ final class DiffusionTagListController extends DiffusionController {
       array(
         'title' => array(
           pht('Tags'),
-          $repository->getCallsign().' Repository',
+          pht('%s Repository', $repository->getCallsign()),
         ),
-        'device' => false,
       ));
   }
 

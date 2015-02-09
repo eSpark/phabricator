@@ -28,7 +28,7 @@ final class ReleephProductViewController extends ReleephProductController
     }
     $this->setProduct($product);
 
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setPreface($this->renderPreface())
       ->setSearchEngine(
@@ -148,7 +148,7 @@ final class ReleephProductViewController extends ReleephProductController
     return $nav;
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $product = $this->getProduct();

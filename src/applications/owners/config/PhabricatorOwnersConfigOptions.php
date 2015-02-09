@@ -11,6 +11,10 @@ final class PhabricatorOwnersConfigOptions
     return pht('Configure Owners.');
   }
 
+  public function getFontIcon() {
+    return 'fa-gift';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption(
@@ -20,7 +24,7 @@ final class PhabricatorOwnersConfigOptions
         ->setBaseClass('PhabricatorMailReplyHandler')
         ->setDescription(pht('Reply handler for owners mail.')),
       $this->newOption('metamta.package.subject-prefix', 'string', '[Package]')
-        ->setDescription(pht('Subject prefix for Owners email.'))
+        ->setDescription(pht('Subject prefix for Owners email.')),
     );
   }
 

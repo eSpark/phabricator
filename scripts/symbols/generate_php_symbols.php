@@ -20,10 +20,12 @@ $futures = array();
 foreach ($input as $file) {
   $file = Filesystem::readablePath($file);
   $data[$file] = Filesystem::readFile($file);
-  $futures[$file] = xhpast_get_parser_future($data[$file]);
+  $futures[$file] = PhutilXHPASTBinary::getParserFuture($data[$file]);
 }
 
-foreach (Futures($futures)->limit(8) as $file => $future) {
+$futures = id(new FutureIterator($futures))
+  ->limit(8);
+foreach ($futures as $file => $future) {
   $tree = XHPASTTree::newFromDataAndResolvedExecFuture(
     $data[$file],
     $future->resolve());
@@ -98,7 +100,7 @@ foreach (Futures($futures)->limit(8) as $file => $future) {
   }
 }
 
-function print_symbol($file, $type, $token, $context=null) {
+function print_symbol($file, $type, $token, $context = null) {
   $parts = array(
     $context ? $context->getConcreteString() : '',
     // variable tokens are `$name`, not just `name`, so strip the $ off of

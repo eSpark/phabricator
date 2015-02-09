@@ -3,7 +3,7 @@
 final class PhabricatorStorageManagementDestroyWorkflow
   extends PhabricatorStorageManagementWorkflow {
 
-  public function didConstruct() {
+  protected function didConstruct() {
     $this
       ->setName('destroy')
       ->setExamples('**destroy** [__options__]')
@@ -14,7 +14,8 @@ final class PhabricatorStorageManagementDestroyWorkflow
             'name'  => 'unittest-fixtures',
             'help'  => 'Restrict **destroy** operations to databases created '.
                        'by PhabricatorTestCase test fixtures.',
-          )));
+          ),
+        ));
   }
 
   public function execute(PhutilArgumentParser $args) {

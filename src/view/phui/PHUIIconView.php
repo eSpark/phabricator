@@ -2,9 +2,7 @@
 
 final class PHUIIconView extends AphrontTagView {
 
-  const SPRITE_APPS = 'apps';
   const SPRITE_TOKENS = 'tokens';
-  const SPRITE_PAYMENTS = 'payments';
   const SPRITE_LOGIN = 'login';
   const SPRITE_PROJECTS = 'projects';
 
@@ -57,7 +55,7 @@ final class PHUIIconView extends AphrontTagView {
     return $this;
   }
 
-  public function getTagName() {
+  protected function getTagName() {
     $tag = 'span';
     if ($this->href) {
       $tag = 'a';
@@ -65,7 +63,7 @@ final class PHUIIconView extends AphrontTagView {
     return $tag;
   }
 
-  public function getTagAttributes() {
+  protected function getTagAttributes() {
     require_celerity_resource('phui-icon-view-css');
 
     $style = null;
@@ -565,6 +563,90 @@ final class PHUIIconView extends AphrontTagView {
       'fa-share-alt',
       'fa-share-alt-square',
       'fa-bomb',
+      'fa-soccer-ball',
+      'fa-futbol-o',
+      'fa-tty',
+      'fa-binoculars',
+      'fa-plug',
+      'fa-slideshare',
+      'fa-twitch',
+      'fa-yelp',
+      'fa-newspaper-o',
+      'fa-wifi',
+      'fa-calculator',
+      'fa-paypal',
+      'fa-google-wallet',
+      'fa-cc-visa',
+      'fa-cc-mastercard',
+      'fa-cc-discover',
+      'fa-cc-amex',
+      'fa-cc-paypal',
+      'fa-cc-stripe',
+      'fa-bell-slash',
+      'fa-bell-slash-o',
+      'fa-trash',
+      'fa-copyright',
+      'fa-at',
+      'fa-eyedropper',
+      'fa-paint-brush',
+      'fa-birthday-cake',
+      'fa-area-chart',
+      'fa-pie-chart',
+      'fa-line-chart',
+      'fa-lastfm',
+      'fa-lastfm-square',
+      'fa-toggle-off',
+      'fa-toggle-on',
+      'fa-bicycle',
+      'fa-bus',
+      'fa-ioxhost',
+      'fa-angellist',
+      'fa-cc',
+      'fa-shekel',
+      'fa-sheqel',
+      'fa-ils',
+      'fa-meanpath',
+      'fa-buysellads',
+      'fa-connectdevelop',
+      'fa-dashcube',
+      'fa-forumbee',
+      'fa-leanpub',
+      'fa-sellsy',
+      'fa-shirtsinbulk',
+      'fa-simplybuilt',
+      'fa-skyatlas',
+      'fa-cart-plus',
+      'fa-cart-arrow-down',
+      'fa-diamond',
+      'fa-ship',
+      'fa-user-secret',
+      'fa-motorcycle',
+      'fa-street-view',
+      'fa-heartbeat',
+      'fa-venus',
+      'fa-mars',
+      'fa-mercury',
+      'fa-transgender',
+      'fa-transgender-alt',
+      'fa-venus-double',
+      'fa-mars-double',
+      'fa-venus-mars',
+      'fa-mars-stroke',
+      'fa-mars-stroke-v',
+      'fa-mars-stroke-h',
+      'fa-neuter',
+      'fa-facebook-official',
+      'fa-pinterest-p',
+      'fa-whatsapp',
+      'fa-server',
+      'fa-user-plus',
+      'fa-user-times',
+      'fa-hotel',
+      'fa-bed',
+      'fa-viacoin',
+      'fa-train',
+      'fa-subway',
+      'fa-medium',
     );
   }
 
@@ -580,6 +662,7 @@ final class PHUIIconView extends AphrontTagView {
       'sky',
       'indigo',
       'violet',
+      'pink',
       'lightgreytext',
       'lightbluetext',
     );

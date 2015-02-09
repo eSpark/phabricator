@@ -3,8 +3,7 @@
 final class DiffusionRepositoryEditBasicController
   extends DiffusionRepositoryEditController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $user = $request->getUser();
     $drequest = $this->diffusionRequest;
     $repository = $drequest->getRepository();
@@ -120,6 +119,7 @@ final class DiffusionRepositoryEditBasicController
     $form
       ->appendChild(
         id(new PhabricatorRemarkupControl())
+          ->setUser($user)
           ->setName('description')
           ->setLabel(pht('Description'))
           ->setValue($v_desc))
@@ -144,7 +144,8 @@ final class DiffusionRepositoryEditBasicController
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $object_box),
+        $object_box,
+      ),
       array(
         'title' => $title,
       ));

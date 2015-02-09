@@ -22,8 +22,8 @@ final class PhabricatorTokenGivenFeedStory
 
   public function renderView() {
     $view = $this->newStoryView();
-    $view->setAppIcon('token-dark');
     $author_phid = $this->getValue('authorPHID');
+    $view->setAppIcon('fa-trophy');
 
     $href = $this->getHandle($this->getPrimaryObjectPHID())->getURI();
     $view->setHref($href);
@@ -52,5 +52,14 @@ final class PhabricatorTokenGivenFeedStory
     $this->setRenderingTarget($old_target);
     return $title;
   }
+
+  public function renderAsTextForDoorkeeper(
+    DoorkeeperFeedStoryPublisher $publisher) {
+    // TODO: This is slightly wrong, as it does not respect implied context
+    // on the publisher, so it will always say "awarded D123 a token" when it
+    // should sometimes say "awarded this revision a token".
+    return $this->renderText();
+  }
+
 
 }

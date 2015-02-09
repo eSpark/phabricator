@@ -209,7 +209,7 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
     return parent::getTitle();
   }
 
-  public function getTitleForFeed(PhabricatorFeedStory $story) {
+  public function getTitleForFeed() {
     $author_phid = $this->getAuthorPHID();
     $object_phid = $this->getObjectPHID();
 
@@ -278,7 +278,7 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
         break;
     }
 
-    return parent::getTitleForFeed($story);
+    return parent::getTitleForFeed();
   }
 
   public function getBodyForFeed(PhabricatorFeedStory $story) {
@@ -297,7 +297,9 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
 
     if ($text) {
       return phutil_escape_html_newlines(
-        phutil_utf8_shorten($text, 128));
+        id(new PhutilUTF8StringTruncator())
+        ->setMaximumGlyphs(128)
+        ->truncateString($text));
     }
 
     return parent::getBodyForFeed($story);

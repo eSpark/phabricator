@@ -83,7 +83,7 @@
 }
 
 .device-phone .maniphest-list-container {
-  padding: 20px 4px;
+  padding: 20px 8px;
 }
 
 .maniphest-board-link {
@@ -101,5 +101,6 @@
 }
 
 .dashboard-panel .maniphest-task-group-header {
-  display: none;
+  border-left: 1px solid {$lightblueborder};
+  border-right: 1px solid {$lightblueborder};
 }

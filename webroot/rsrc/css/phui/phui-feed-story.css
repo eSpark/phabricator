@@ -17,14 +17,14 @@
 }
 
 .phui-feed-story-head {
- padding: 8px;
- overflow: hidden;
- color: {$greytext};
+  padding: 8px;
+  overflow: hidden;
+  color: {$greytext};
 }
 
 .phui-feed-story-head .phui-link-person {
- color: {$darkgreytext};
- font-weight: bold;
+  color: {$darkgreytext};
+  font-weight: bold;
 }
 
 .phui-feed-story-body {
@@ -33,6 +33,10 @@
   word-break: break-word;
   max-height: 300px;
   overflow: hidden;
+}
+
+.phui-feed-story-body.phabricator-remarkup {
+  line-height: inherit;
 }
 
 .phui-feed-story-foot {
@@ -47,10 +51,7 @@
   color: {$greytext};
 }
 
-.phui-feed-story-foot .phui-icon-view,
-.phui-feed-story-oneline-foot .phui-icon-view {
-  float: left;
-  display: inline-block;
+.phui-feed-story-foot .phui-icon-view {
   margin-right: 5px;
 }
 
@@ -93,21 +94,4 @@
 
 .phui-feed-story-action-list .phui-icon-view {
   display: block;
-}
-
-.phui-feed-story-oneline .phui-feed-story-head {
-  padding: 8px;
-}
-
-.phui-feed-story-oneline .phui-feed-story-body {
-  padding: 0;
-}
-
-.phui-feed-story-oneline-foot,
-.phui-feed-story-oneline-foot a {
-  font-size: 11px;
-  color: {$lightgreytext};
-  margin-top: 2px;
-  line-height: 14px;
-  font-weight: normal;
 }

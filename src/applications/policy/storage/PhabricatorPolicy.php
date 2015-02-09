@@ -2,7 +2,9 @@
 
 final class PhabricatorPolicy
   extends PhabricatorPolicyDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   const ACTION_ALLOW = 'allow';
   const ACTION_DENY = 'deny';
@@ -19,11 +21,21 @@ final class PhabricatorPolicy
 
   private $ruleObjects = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_SERIALIZATION => array(
         'rules' => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'defaultAction' => 'text32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'phid' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }
@@ -235,7 +247,7 @@ final class PhabricatorPolicy
     }
   }
 
-  public function renderDescription($icon=false) {
+  public function renderDescription($icon = false) {
     $img = null;
     if ($icon) {
       $img = id(new PHUIIconView())
@@ -350,5 +362,16 @@ final class PhabricatorPolicy
   public function describeAutomaticCapability($capability) {
     return null;
   }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->delete();
+  }
+
 
 }

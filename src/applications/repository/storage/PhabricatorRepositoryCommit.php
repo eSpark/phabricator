@@ -5,8 +5,10 @@ final class PhabricatorRepositoryCommit
   implements
     PhabricatorPolicyInterface,
     PhabricatorFlaggableInterface,
+    PhabricatorProjectInterface,
     PhabricatorTokenReceiverInterface,
     PhabricatorSubscribableInterface,
+    PhabricatorMentionableInterface,
     HarbormasterBuildableInterface,
     PhabricatorCustomFieldInterface,
     PhabricatorApplicationTransactionInterface {
@@ -39,8 +41,11 @@ final class PhabricatorRepositoryCommit
     return $this;
   }
 
-  public function getRepository() {
-    return $this->assertAttached($this->repository);
+  public function getRepository($assert_attached = true) {
+    if ($assert_attached) {
+      return $this->assertAttached($this->repository);
+    }
+    return $this->repository;
   }
 
   public function isPartiallyImported($mask) {
@@ -58,13 +63,42 @@ final class PhabricatorRepositoryCommit
       $this->getTableName(),
       $flag,
       $this->getID());
+    $this->setImportStatus($this->getImportStatus() | $flag);
     return $this;
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID   => true,
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'commitIdentifier' => 'text40',
+        'mailKey' => 'bytes20',
+        'authorPHID' => 'phid?',
+        'auditStatus' => 'uint32',
+        'summary' => 'text80',
+        'importStatus' => 'uint32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'phid' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
+        'repositoryID' => array(
+          'columns' => array('repositoryID', 'importStatus'),
+        ),
+        'authorPHID' => array(
+          'columns' => array('authorPHID', 'auditStatus', 'epoch'),
+        ),
+        'repositoryID_2' => array(
+          'columns' => array('repositoryID', 'epoch'),
+        ),
+        'key_commit_identity' => array(
+          'columns' => array('commitIdentifier', 'repositoryID'),
+          'unique' => true,
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -222,8 +256,6 @@ final class PhabricatorRepositoryCommit
       case PhabricatorPolicyCapability::CAN_VIEW:
         return $this->getRepository()->getPolicy($capability);
       case PhabricatorPolicyCapability::CAN_EDIT:
-        // TODO: (T603) Who should be able to edit a commit? For now, retain
-        // the existing policy.
         return PhabricatorPolicies::POLICY_USER;
     }
   }
@@ -366,6 +398,33 @@ final class PhabricatorRepositoryCommit
 
   public function getApplicationTransactionTemplate() {
     return new PhabricatorAuditTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+
+    $xactions = $timeline->getTransactions();
+
+    $path_ids = array();
+    foreach ($xactions as $xaction) {
+      if ($xaction->hasComment()) {
+        $path_id = $xaction->getComment()->getPathID();
+        if ($path_id) {
+          $path_ids[] = $path_id;
+        }
+      }
+    }
+
+    $path_map = array();
+    if ($path_ids) {
+      $path_map = id(new DiffusionPathQuery())
+        ->withPathIDs($path_ids)
+        ->execute();
+      $path_map = ipull($path_map, 'path', 'id');
+    }
+
+    return $timeline->setPathMap($path_map);
   }
 
 }

@@ -14,8 +14,7 @@ final class PhabricatorDashboardListController
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new PhabricatorDashboardSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -40,7 +39,7 @@ final class PhabricatorDashboardListController
     return $nav;
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $crumbs->addAction(

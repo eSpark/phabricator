@@ -27,10 +27,29 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
     parent::__construct();
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_SERIALIZATION => array(
         'parameters'  => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'status' => 'text32',
+        'relatedPHID' => 'phid?',
+
+        // T6203/NULLABILITY
+        // This should just be empty if there's no body.
+        'message' => 'text?',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'status' => array(
+          'columns' => array('status'),
+        ),
+        'relatedPHID' => array(
+          'columns' => array('relatedPHID'),
+        ),
+        'key_created' => array(
+          'columns' => array('dateCreated'),
+        ),
       ),
     ) + parent::getConfiguration();
   }
@@ -323,7 +342,9 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
       $mailer_task = PhabricatorWorker::scheduleTask(
         'PhabricatorMetaMTAWorker',
         $this->getID(),
-        PhabricatorWorker::PRIORITY_ALERTS);
+        array(
+          'priority' => PhabricatorWorker::PRIORITY_ALERTS,
+        ));
 
     $this->saveTransaction();
 
@@ -563,7 +584,9 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
       $body = idx($params, 'body', '');
       $max = PhabricatorEnv::getEnvConfig('metamta.email-body-limit');
       if (strlen($body) > $max) {
-        $body = phutil_utf8_shorten($body, $max);
+        $body = id(new PhutilUTF8StringTruncator())
+          ->setMaximumBytes($max)
+          ->truncateString($body);
         $body .= "\n";
         $body .= pht('(This email was truncated at %d bytes.)', $max);
       }

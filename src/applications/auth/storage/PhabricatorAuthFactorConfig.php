@@ -8,12 +8,22 @@ final class PhabricatorAuthFactorConfig extends PhabricatorAuthDAO {
   protected $factorSecret;
   protected $properties = array();
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_SERIALIZATION => array(
         'properties' => self::SERIALIZATION_JSON,
       ),
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'factorKey' => 'text64',
+        'factorName' => 'text',
+        'factorSecret' => 'text',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_user' => array(
+          'columns' => array('userPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

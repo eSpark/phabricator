@@ -11,6 +11,10 @@ final class PhabricatorProjectConfigOptions
     return pht('Configure Projects.');
   }
 
+  public function getFontIcon() {
+    return 'fa-briefcase';
+  }
+
   public function getOptions() {
     $default_fields = array(
       'std:project:internal:description' => true,
@@ -32,7 +36,7 @@ final class PhabricatorProjectConfigOptions
             'Array of custom fields for Projects.'))
         ->addExample(
           '{"mycompany:motto": {"name": "Project Motto", '.
-          '"type": "string"}}',
+          '"type": "text"}}',
           pht('Valid Setting')),
       $this->newOption('projects.fields', $custom_field_type, $default_fields)
         ->setCustomData(id(new PhabricatorProject())->getCustomFieldBaseClass())

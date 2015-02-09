@@ -25,7 +25,7 @@ final class PhabricatorPeopleCalendarController
       return new Aphront404Response();
     }
 
-    $picture = $user->loadProfileImageURI();
+    $picture = $user->getProfileImageURI();
 
     $now     = time();
     $request = $this->getRequest();
@@ -73,19 +73,18 @@ final class PhabricatorPeopleCalendarController
       $month_view->addEvent($event);
     }
 
-    $date = new DateTime("{$year}-{$month}-01");
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(
-      $user->getUsername(),
-      '/p/'.$user->getUsername().'/');
-    $crumbs->addTextCrumb($date->format('F Y'));
+    $name = $user->getUsername();
+
+    $nav = $this->buildIconNavView($user);
+    $nav->selectFilter("{$name}/calendar/");
+    $nav->appendChild($month_view);
 
     return $this->buildApplicationPage(
+      array(
+        $nav,
+     ),
      array(
-      $crumbs,
-      $month_view),
-     array(
-        'title' => pht('Calendar'),
-      ));
+       'title' => pht('Calendar'),
+     ));
   }
 }

@@ -6,8 +6,7 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
   private $lintMessages;
   private $coverage;
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->getDiffusionRequest();
     $viewer = $request->getUser();
 
@@ -119,8 +118,8 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
 
     $follow  = $request->getStr('follow');
     if ($follow) {
-      $notice = new AphrontErrorView();
-      $notice->setSeverity(AphrontErrorView::SEVERITY_WARNING);
+      $notice = new PHUIErrorView();
+      $notice->setSeverity(PHUIErrorView::SEVERITY_WARNING);
       $notice->setTitle(pht('Unable to Continue'));
       switch ($follow) {
         case 'first':
@@ -139,8 +138,8 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
 
     $renamed = $request->getStr('renamed');
     if ($renamed) {
-      $notice = new AphrontErrorView();
-      $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+      $notice = new PHUIErrorView();
+      $notice->setSeverity(PHUIErrorView::SEVERITY_NOTICE);
       $notice->setTitle(pht('File Renamed'));
       $notice->appendChild(
         pht("File history passes through a rename from '%s' to '%s'.",
@@ -167,7 +166,6 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
       ),
       array(
         'title' => $basename,
-        'device' => false,
       ));
   }
 
@@ -684,7 +682,10 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
                 'size'  => 600,
               ),
             ),
-            phutil_utf8_shorten($line['commit'], 9, ''));
+            id(new PhutilUTF8StringTruncator())
+            ->setMaximumGlyphs(9)
+            ->setTerminator('')
+            ->truncateString($line['commit']));
 
           $revision_id = null;
           if (idx($commits, $commit)) {
@@ -878,7 +879,6 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
 
     $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
       $file->attachToObject(
-        $this->getRequest()->getUser(),
         $this->getDiffusionRequest()->getRepository()->getPHID());
     unset($unguarded);
 
@@ -1014,7 +1014,8 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
       array(
         'commit' => $drequest->getCommit(),
         'path' => $drequest->getPath(),
-        'againstCommit' => $target_commit));
+        'againstCommit' => $target_commit,
+      ));
     $old_line = 0;
     $new_line = 0;
 

@@ -3,23 +3,18 @@
 final class PhabricatorApplicationDetailViewController
   extends PhabricatorApplicationsController {
 
-  private $application;
 
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->application = $data['application'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
+  public function handleRequest(AphrontRequest $request) {
     $user = $request->getUser();
+    $application = $request->getURIData('application');
 
     $selected = id(new PhabricatorApplicationQuery())
       ->setViewer($user)
-      ->withClasses(array($this->application))
+      ->withClasses(array($application))
       ->executeOne();
     if (!$selected) {
       return new Aphront404Response();
@@ -77,10 +72,22 @@ final class PhabricatorApplicationDetailViewController
         phutil_tag('em', array(), $application->getFlavorText()));
     }
 
-    if ($application->isBeta()) {
+    if ($application->isPrototype()) {
+      $proto_href = PhabricatorEnv::getDoclink(
+        'User Guide: Prototype Applications');
+      $learn_more = phutil_tag(
+        'a',
+        array(
+          'href' => $proto_href,
+          'target' => '_blank',
+        ),
+        pht('Learn More'));
+
       $properties->addProperty(
-        pht('Release'),
-        pht('Beta'));
+        pht('Prototype'),
+        pht(
+          'This application is a prototype. %s',
+          $learn_more));
     }
 
     $overview = $application->getOverview();
@@ -105,6 +112,26 @@ final class PhabricatorApplicationDetailViewController
       $properties->addProperty(
         $application->getCapabilityLabel($capability),
         idx($descriptions, $capability));
+    }
+
+    if ($application->supportsEmailIntegration()) {
+      $properties->addSectionHeader(pht('Application Emails'));
+      $properties->addTextContent($application->getAppEmailBlurb());
+      $email_addresses = id(new PhabricatorMetaMTAApplicationEmailQuery())
+        ->setViewer($viewer)
+        ->withApplicationPHIDs(array($application->getPHID()))
+        ->execute();
+      if (empty($email_addresses)) {
+        $properties->addProperty(
+          null,
+          pht('No email addresses configured.'));
+      } else {
+        foreach ($email_addresses as $email_address) {
+          $properties->addProperty(
+            null,
+            $email_address->getAddress());
+        }
+      }
     }
 
     return $properties;
@@ -141,6 +168,18 @@ final class PhabricatorApplicationDetailViewController
         ->setWorkflow(!$can_edit)
         ->setHref($edit_uri));
 
+    if ($selected->supportsEmailIntegration()) {
+      $edit_email_uri = $this->getApplicationURI(
+        'editemail/'.get_class($selected).'/');
+      $view->addAction(
+        id(new PhabricatorActionView())
+        ->setName(pht('Edit Application Emails'))
+        ->setIcon('fa-envelope')
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit)
+        ->setHref($edit_email_uri));
+    }
+
     if ($selected->canUninstall()) {
       if ($selected->isInstalled()) {
         $view->addAction(
@@ -160,9 +199,9 @@ final class PhabricatorApplicationDetailViewController
           ->setHref(
              $this->getApplicationURI(get_class($selected).'/install/'));
 
-        $beta_enabled = PhabricatorEnv::getEnvConfig(
-          'phabricator.show-beta-applications');
-        if ($selected->isBeta() && !$beta_enabled) {
+        $prototypes_enabled = PhabricatorEnv::getEnvConfig(
+          'phabricator.show-prototypes');
+        if ($selected->isPrototype() && !$prototypes_enabled) {
           $action->setDisabled(true);
         }
 

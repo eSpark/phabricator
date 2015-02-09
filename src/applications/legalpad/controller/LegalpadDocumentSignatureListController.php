@@ -38,7 +38,7 @@ final class LegalpadDocumentSignatureListController extends LegalpadController {
       $engine->setDocument($this->document);
     }
 
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine($engine)
       ->setNavigation($this->buildSideNav());
@@ -64,7 +64,7 @@ final class LegalpadDocumentSignatureListController extends LegalpadController {
     return $nav;
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     if ($this->document) {

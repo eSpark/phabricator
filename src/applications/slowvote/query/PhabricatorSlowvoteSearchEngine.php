@@ -7,6 +7,10 @@ final class PhabricatorSlowvoteSearchEngine
     return pht('Slowvotes');
   }
 
+  public function getApplicationClassName() {
+    return 'PhabricatorSlowvoteApplication';
+  }
+
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
     $saved = new PhabricatorSavedQuery();
     $saved->setParameter(
@@ -85,7 +89,7 @@ final class PhabricatorSlowvoteSearchEngine
     return '/vote/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'open' => pht('Open Polls'),
       'all' => pht('All Polls'),
@@ -119,7 +123,7 @@ final class PhabricatorSlowvoteSearchEngine
     return parent::buildSavedQueryFromBuiltin($query_key);
   }
 
-  public function getRequiredHandlePHIDsForResultList(
+  protected function getRequiredHandlePHIDsForResultList(
     array $polls,
     PhabricatorSavedQuery $query) {
     return mpull($polls, 'getAuthorPHID');
@@ -155,7 +159,9 @@ final class PhabricatorSlowvoteSearchEngine
 
       $description = $poll->getDescription();
       if (strlen($description)) {
-        $item->addAttribute(phutil_utf8_shorten($poll->getDescription(), 120));
+        $item->addAttribute(id(new PhutilUTF8StringTruncator())
+          ->setMaximumGlyphs(120)
+          ->truncateString($poll->getDescription()));
       }
 
       if ($author) {

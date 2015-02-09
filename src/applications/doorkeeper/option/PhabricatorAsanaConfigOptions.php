@@ -11,6 +11,10 @@ final class PhabricatorAsanaConfigOptions
     return pht('Asana integration options.');
   }
 
+  public function getFontIcon() {
+    return 'fa-exchange';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption('asana.workspace-id', 'string', null)
@@ -30,7 +34,7 @@ final class PhabricatorAsanaConfigOptions
             'object in Phabricator comes from. For example, you can add code '.
             'reviews in Asana to a "Differential" project.'.
             "\n\n".
-            'NOTE: This feature is new and experimental.'))
+            'NOTE: This feature is new and experimental.')),
     );
   }
 

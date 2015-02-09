@@ -7,6 +7,10 @@ final class PhrictionSearchEngine
     return pht('Wiki Documents');
   }
 
+  public function getApplicationClassName() {
+    return 'PhabricatorPhrictionApplication';
+  }
+
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
     $saved = new PhabricatorSavedQuery();
 
@@ -59,7 +63,7 @@ final class PhrictionSearchEngine
     return '/phriction/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'active' => pht('Active'),
       'updated' => pht('Updated'),
@@ -121,9 +125,6 @@ final class PhrictionSearchEngine
     $phids = array();
     foreach ($documents as $document) {
       $content = $document->getContent();
-      if ($document->hasProject()) {
-        $phids[] = $document->getProject()->getPHID();
-      }
       $phids[] = $content->getAuthorPHID();
     }
 
@@ -160,11 +161,6 @@ final class PhrictionSearchEngine
         ->setHref($slug_uri)
         ->addByline($byline)
         ->addIcon('none', $updated);
-
-      if ($document->hasProject()) {
-        $item->addAttribute(
-          $handles[$document->getProject()->getPHID()]->renderLink());
-      }
 
       $item->addAttribute($slug_uri);
 

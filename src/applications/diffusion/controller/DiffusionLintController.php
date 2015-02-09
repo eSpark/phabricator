@@ -6,13 +6,12 @@ final class DiffusionLintController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $this->getRequest()->getUser();
+  protected function processDiffusionRequest(AphrontRequest $request) {
+    $user = $request->getUser();
     $drequest = $this->diffusionRequest;
 
     if ($request->getStr('lint') !== null) {
-      $controller = new DiffusionLintDetailsController($request);
+      $controller = new DiffusionLintDetailsController();
       $controller->setDiffusionRequest($drequest);
       $controller->setCurrentApplication($this->getCurrentApplication());
       return $this->delegateToController($controller);
@@ -172,7 +171,6 @@ final class DiffusionLintController extends DiffusionController {
       ),
       array(
         'title' => $title,
-        'device' => false,
       ));
   }
 

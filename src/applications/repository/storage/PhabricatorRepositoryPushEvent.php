@@ -24,10 +24,21 @@ final class PhabricatorRepositoryPushEvent
       ->setPusherPHID($viewer->getPHID());
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'remoteAddress' => 'uint32?',
+        'remoteProtocol' => 'text32?',
+        'rejectCode' => 'uint32',
+        'rejectDetails' => 'text64?',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_repository' => array(
+          'columns' => array('repositoryPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

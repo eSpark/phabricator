@@ -4,6 +4,10 @@ final class PhrictionDiffController extends PhrictionController {
 
   private $id;
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function willProcessRequest(array $data) {
     $this->id = $data['id'];
   }
@@ -67,6 +71,7 @@ final class PhrictionDiffController extends PhrictionController {
     $whitespace_mode = DifferentialChangesetParser::WHITESPACE_SHOW_ALL;
 
     $parser = new DifferentialChangesetParser();
+    $parser->setUser($user);
     $parser->setChangeset($changeset);
     $parser->setRenderingReference("{$l},{$r}");
     $parser->setWhitespaceMode($whitespace_mode);

@@ -9,9 +9,18 @@ final class PhabricatorOwnersOwner extends PhabricatorOwnersDAO {
   // you want to recursively grab all user ids that own a package
   protected $userPHID;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_KEY_SCHEMA => array(
+        'packageID' => array(
+          'columns' => array('packageID', 'userPHID'),
+          'unique' => true,
+        ),
+        'userPHID' => array(
+          'columns' => array('userPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -48,7 +57,9 @@ final class PhabricatorOwnersOwner extends PhabricatorOwnersDAO {
     if ($project_phids) {
       $query = id(new PhabricatorEdgeQuery())
         ->withSourcePHIDs($project_phids)
-        ->withEdgeTypes(array(PhabricatorEdgeConfig::TYPE_PROJ_MEMBER));
+        ->withEdgeTypes(array(
+          PhabricatorProjectProjectHasMemberEdgeType::EDGECONST,
+        ));
       $query->execute();
       $users_in_project_phids = $query->getDestinationPHIDs();
     }

@@ -14,8 +14,8 @@ final class PhabricatorPholioApplication extends PhabricatorApplication {
     return pht('Review Mocks and Design');
   }
 
-  public function getIconName() {
-    return 'pholio';
+  public function getFontIcon() {
+    return 'fa-camera-retro';
   }
 
   public function getTitleGlyph() {
@@ -49,7 +49,7 @@ final class PhabricatorPholioApplication extends PhabricatorApplication {
         'inline/' => array(
           '(?:(?P<id>\d+)/)?' => 'PholioInlineController',
           'list/(?P<id>\d+)/' => 'PholioInlineListController',
-          'thumb/(?P<imageid>\d+)/' => 'PholioInlineThumbController'
+          'thumb/(?P<imageid>\d+)/' => 'PholioInlineThumbController',
         ),
         'image/' => array(
           'upload/' => 'PholioImageUploadController',

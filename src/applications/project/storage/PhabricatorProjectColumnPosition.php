@@ -10,9 +10,24 @@ final class PhabricatorProjectColumnPosition extends PhabricatorProjectDAO
 
   private $column = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'sequence' => 'uint32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'boardPHID' => array(
+          'columns' => array('boardPHID', 'columnPHID', 'objectPHID'),
+          'unique' => true,
+        ),
+        'objectPHID' => array(
+          'columns' => array('objectPHID', 'boardPHID'),
+        ),
+        'boardPHID_2' => array(
+          'columns' => array('boardPHID', 'columnPHID', 'sequence'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

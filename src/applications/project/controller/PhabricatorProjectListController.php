@@ -14,8 +14,7 @@ final class PhabricatorProjectListController
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new PhabricatorProjectSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -23,7 +22,11 @@ final class PhabricatorProjectListController
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  public function buildApplicationMenu() {
+    return $this->buildSideNavView(true)->getMenu();
+  }
+
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $can_create = $this->hasApplicationCapability(

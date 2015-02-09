@@ -6,9 +6,8 @@ final class DiffusionHistoryController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->diffusionRequest;
-    $request = $this->getRequest();
     $viewer = $request->getUser();
     $repository = $drequest->getRepository();
 
@@ -19,7 +18,8 @@ final class DiffusionHistoryController extends DiffusionController {
       'commit' => $drequest->getCommit(),
       'path' => $drequest->getPath(),
       'offset' => $offset,
-      'limit' => $page_size + 1);
+      'limit' => $page_size + 1,
+    );
 
     if (!$request->getBool('copies')) {
       $params['needDirectChanges'] = true;

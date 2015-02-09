@@ -13,8 +13,7 @@ final class PhabricatorFileListController extends PhabricatorFileController {
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->key)
       ->setSearchEngine(new PhabricatorFileSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -22,7 +21,7 @@ final class PhabricatorFileListController extends PhabricatorFileController {
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
     $crumbs->addAction(
       id(new PHUIListItemView())

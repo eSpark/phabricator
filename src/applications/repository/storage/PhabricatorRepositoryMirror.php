@@ -14,9 +14,18 @@ final class PhabricatorRepositoryMirror extends PhabricatorRepositoryDAO
       ->setRemoteURI('');
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'remoteURI' => 'text255',
+        'credentialPHID' => 'phid?',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_repository' => array(
+          'columns' => array('repositoryPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

@@ -11,7 +11,7 @@ final class AphrontGlyphBarView extends AphrontBarView {
   private $fgGlyph;
   private $bgGlyph;
 
-  public function getDefaultColor() {
+  protected function getDefaultColor() {
     return AphrontBarView::COLOR_AUTO_GOODNESS;
   }
 
@@ -90,12 +90,12 @@ final class AphrontGlyphBarView extends AphrontBarView {
             phutil_tag(
               'div',
               array(),
-              $bg_glyphs)
+              $bg_glyphs),
           )),
         phutil_tag(
           'div',
           array('class' => 'caption'),
-          $this->getCaption())
+          $this->getCaption()),
       ));
   }
 

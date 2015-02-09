@@ -13,9 +13,19 @@ final class PhabricatorChatLogEvent
 
   private $channel = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'author' => 'text64',
+        'type' => 'text4',
+        'message' => 'text',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'channel' => array(
+          'columns' => array('epoch'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

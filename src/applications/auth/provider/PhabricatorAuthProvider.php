@@ -243,7 +243,7 @@ abstract class PhabricatorAuthProvider {
             $image_uri,
             array(
               'name' => $name,
-              'canCDN' => true
+              'canCDN' => true,
             ));
         unset($unguarded);
 
@@ -449,7 +449,7 @@ abstract class PhabricatorAuthProvider {
     return null;
   }
 
-  protected function getAuthCSRFCode(AphrontRequest $request) {
+  public function getAuthCSRFCode(AphrontRequest $request) {
     $phcid = $request->getCookie(PhabricatorCookies::COOKIE_CLIENTID);
     if (!strlen($phcid)) {
       throw new Exception(

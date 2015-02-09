@@ -21,6 +21,8 @@ abstract class PhabricatorApplicationTransactionEditor
   private $heraldAdapter;
   private $heraldTranscript;
   private $subscribers;
+  private $unmentionablePHIDMap = array();
+  private $applicationEmail;
 
   private $isPreview;
   private $isHeraldEditor;
@@ -173,6 +175,25 @@ abstract class PhabricatorApplicationTransactionEditor
 
   public function getDisableEmail() {
     return $this->disableEmail;
+  }
+
+  public function setUnmentionablePHIDMap(array $map) {
+    $this->unmentionablePHIDMap = $map;
+    return $this;
+  }
+
+  public function getUnmentionablePHIDMap() {
+    return $this->unmentionablePHIDMap;
+  }
+
+  public function setApplicationEmail(
+    PhabricatorMetaMTAApplicationEmail $email) {
+    $this->applicationEmail = $email;
+    return $this;
+  }
+
+  public function getApplicationEmail() {
+    return $this->applicationEmail;
   }
 
   public function getTransactionTypes() {
@@ -723,6 +744,13 @@ abstract class PhabricatorApplicationTransactionEditor
       // We are the Herald editor, so stop work here and return the updated
       // transactions.
       return $xactions;
+    } else if ($this->getIsInverseEdgeEditor()) {
+      // If we're applying inverse edge transactions, don't trigger Herald.
+      // From a product perspective, the current set of inverse edges (most
+      // often, mentions) aren't things users would expect to trigger Herald.
+      // From a technical perspective, objects loaded by the inverse editor may
+      // not have enough data to execute rules. At least for now, just stop
+      // Herald from executing when applying inverse edges.
     } else if ($this->shouldApplyHeraldRules($object, $xactions)) {
       // We are not the Herald editor, so try to apply Herald rules.
       $herald_xactions = $this->applyHeraldRules($object, $xactions);
@@ -783,7 +811,9 @@ abstract class PhabricatorApplicationTransactionEditor
 
     if ($this->supportsSearch()) {
       id(new PhabricatorSearchIndexer())
-        ->queueDocumentForIndexing($object->getPHID());
+        ->queueDocumentForIndexing(
+          $object->getPHID(),
+          $this->getSearchContextParameter($object, $xactions));
     }
 
     if ($this->shouldPublishFeedStory($object, $xactions)) {
@@ -1013,7 +1043,7 @@ abstract class PhabricatorApplicationTransactionEditor
     }
   }
 
-  private function buildMentionTransaction(
+  private function buildSubscribeTransaction(
     PhabricatorLiskDAO $object,
     array $xactions,
     array $blocks) {
@@ -1036,13 +1066,32 @@ abstract class PhabricatorApplicationTransactionEditor
       $phids = array_diff($phids, $this->subscribers);
     }
 
-    foreach ($phids as $key => $phid) {
-      if ($object->isAutomaticallySubscribed($phid)) {
-        unset($phids[$key]);
-      }
-    }
-    $phids = array_values($phids);
+    if ($phids) {
+      $users = id(new PhabricatorPeopleQuery())
+        ->setViewer($this->getActor())
+        ->withPHIDs($phids)
+        ->execute();
+      $users = mpull($users, null, 'getPHID');
 
+      foreach ($phids as $key => $phid) {
+        // Do not subscribe mentioned users
+        // who do not have VIEW Permissions
+        if ($object instanceof PhabricatorPolicyInterface
+          && !PhabricatorPolicyFilter::hasCapability(
+          $users[$phid],
+          $object,
+          PhabricatorPolicyCapability::CAN_VIEW)
+        ) {
+          unset($phids[$key]);
+        } else {
+          if ($object->isAutomaticallySubscribed($phid)) {
+            unset($phids[$key]);
+          }
+        }
+      }
+      $phids = array_values($phids);
+    }
+    // No else here to properly return null should we unset all subscriber
     if (!$phids) {
       return null;
     }
@@ -1107,6 +1156,29 @@ abstract class PhabricatorApplicationTransactionEditor
   }
 
 
+  public function getExpandedSupportTransactions(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    $xactions = array($xaction);
+    $xactions = $this->expandSupportTransactions(
+      $object,
+      $xactions);
+
+    if (count($xactions) == 1) {
+      return array();
+    }
+
+    foreach ($xactions as $index => $cxaction) {
+      if ($cxaction === $xaction) {
+        unset($xactions[$index]);
+        break;
+      }
+    }
+
+    return $xactions;
+  }
+
   private function expandSupportTransactions(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -1119,12 +1191,12 @@ abstract class PhabricatorApplicationTransactionEditor
       $blocks[$key] = $this->getRemarkupBlocksFromTransaction($xaction);
     }
 
-    $mention_xaction = $this->buildMentionTransaction(
+    $subscribe_xaction = $this->buildSubscribeTransaction(
       $object,
       $xactions,
       $blocks);
-    if ($mention_xaction) {
-      $xactions[] = $mention_xaction;
+    if ($subscribe_xaction) {
+      $xactions[] = $subscribe_xaction;
     }
 
     // TODO: For now, this is just a placeholder.
@@ -1156,32 +1228,46 @@ abstract class PhabricatorApplicationTransactionEditor
       $blocks,
       $engine);
 
-    if ($object instanceof PhabricatorProjectInterface) {
-      $phids = array();
-      foreach ($blocks as $key => $xaction_blocks) {
-        foreach ($xaction_blocks as $block) {
-          $engine->markupText($block);
-          $phids += $engine->getTextMetadata(
-            PhabricatorObjectRemarkupRule::KEY_MENTIONED_OBJECTS,
-            array());
-        }
+    $mentioned_phids = array();
+    foreach ($blocks as $key => $xaction_blocks) {
+      foreach ($xaction_blocks as $block) {
+        $engine->markupText($block);
+        $mentioned_phids += $engine->getTextMetadata(
+          PhabricatorObjectRemarkupRule::KEY_MENTIONED_OBJECTS,
+          array());
       }
+    }
 
-      $project_type = PhabricatorProjectProjectPHIDType::TYPECONST;
-      foreach ($phids as $key => $phid) {
-        if (phid_get_type($phid) != $project_type) {
-          unset($phids[$key]);
-        }
-      }
+    if (!$mentioned_phids) {
+      return $block_xactions;
+    }
 
-      if ($phids) {
-        $edge_type = PhabricatorProjectObjectHasProjectEdgeType::EDGECONST;
-        $block_xactions[] = newv(get_class(head($xactions)), array())
-          ->setIgnoreOnNoEffect(true)
-          ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
-          ->setMetadataValue('edge:type', $edge_type)
-          ->setNewValue(array('+' => $phids));
+    $mentioned_objects = id(new PhabricatorObjectQuery())
+      ->setViewer($this->getActor())
+      ->withPHIDs($mentioned_phids)
+      ->execute();
+
+    $mentionable_phids = array();
+    foreach ($mentioned_objects as $mentioned_object) {
+      if ($mentioned_object instanceof PhabricatorMentionableInterface) {
+        $mentioned_phid = $mentioned_object->getPHID();
+        if (idx($this->getUnmentionablePHIDMap(), $mentioned_phid)) {
+          continue;
+        }
+        // don't let objects mention themselves
+        if ($object->getPHID() && $mentioned_phid == $object->getPHID()) {
+          continue;
+        }
+        $mentionable_phids[$mentioned_phid] = $mentioned_phid;
       }
+    }
+    if ($mentionable_phids) {
+      $edge_type = PhabricatorObjectMentionsObjectEdgeType::EDGECONST;
+      $block_xactions[] = newv(get_class(head($xactions)), array())
+        ->setIgnoreOnNoEffect(true)
+        ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+        ->setMetadataValue('edge:type', $edge_type)
+        ->setNewValue(array('+' => $mentionable_phids));
     }
 
     return $block_xactions;
@@ -1774,7 +1860,7 @@ abstract class PhabricatorApplicationTransactionEditor
 
       $unsub = PhabricatorEdgeQuery::loadDestinationPHIDs(
         $object->getPHID(),
-        PhabricatorEdgeConfig::TYPE_OBJECT_HAS_UNSUBSCRIBER);
+        PhabricatorObjectHasUnsubscriberEdgeType::EDGECONST);
       $unsub = array_fuse($unsub);
       if (isset($unsub[$actor_phid])) {
         // If the user has previously unsubscribed from this object explicitly,
@@ -1855,6 +1941,8 @@ abstract class PhabricatorApplicationTransactionEditor
     if ($reply_section !== null) {
       $body->addReplySection($reply_section);
     }
+
+    $body->addEmailPreferenceSection();
 
     $template
       ->setFrom($this->getActingAsPHID())
@@ -1970,7 +2058,6 @@ abstract class PhabricatorApplicationTransactionEditor
     throw new Exception('Capability not supported.');
   }
 
-
   /**
    * @task mail
    */
@@ -2047,7 +2134,7 @@ abstract class PhabricatorApplicationTransactionEditor
         PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
 
       if ($project_phids) {
-        $watcher_type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_WATCHER;
+        $watcher_type = PhabricatorObjectHasWatcherEdgeType::EDGECONST;
 
         $query = id(new PhabricatorEdgeQuery())
           ->withSourcePHIDs($project_phids)
@@ -2096,6 +2183,21 @@ abstract class PhabricatorApplicationTransactionEditor
     PhabricatorLiskDAO $object,
     array $xactions) {
 
+    $body = new PhabricatorMetaMTAMailBody();
+    $body->setViewer($this->requireActor());
+
+    $this->addHeadersAndCommentsToMailBody($body, $xactions);
+    $this->addCustomFieldsToMailBody($body, $object, $xactions);
+    return $body;
+  }
+
+  /**
+   * @task mail
+   */
+  protected function addHeadersAndCommentsToMailBody(
+    PhabricatorMetaMTAMailBody $body,
+    array $xactions) {
+
     $headers = array();
     $comments = array();
 
@@ -2114,13 +2216,20 @@ abstract class PhabricatorApplicationTransactionEditor
         $comments[] = $comment;
       }
     }
-
-    $body = new PhabricatorMetaMTAMailBody();
     $body->addRawSection(implode("\n", $headers));
 
     foreach ($comments as $comment) {
-      $body->addRawSection($comment);
+      $body->addRemarkupSection($comment);
     }
+  }
+
+  /**
+   * @task mail
+   */
+  protected function addCustomFieldsToMailBody(
+    PhabricatorMetaMTAMailBody $body,
+    PhabricatorLiskDAO $object,
+    array $xactions) {
 
     if ($object instanceof PhabricatorCustomFieldInterface) {
       $field_list = PhabricatorCustomField::getObjectFields(
@@ -2136,9 +2245,8 @@ abstract class PhabricatorApplicationTransactionEditor
           $xactions);
       }
     }
-
-    return $body;
   }
+
 
 
 /* -(  Publishing Feed Stories  )-------------------------------------------- */
@@ -2261,6 +2369,15 @@ abstract class PhabricatorApplicationTransactionEditor
     return false;
   }
 
+  /**
+   * @task search
+   */
+  protected function getSearchContextParameter(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return null;
+  }
+
 
 /* -(  Herald Integration )-------------------------------------------------- */
 
@@ -2302,6 +2419,9 @@ abstract class PhabricatorApplicationTransactionEditor
     $adapter = $this->buildHeraldAdapter($object, $xactions);
     $adapter->setContentSource($this->getContentSource());
     $adapter->setIsNewObject($this->getIsNewObject());
+    if ($this->getApplicationEmail()) {
+      $adapter->setApplicationEmail($this->getApplicationEmail());
+    }
     $xscript = HeraldEngine::loadAndApplyRules($adapter);
 
     $this->setHeraldAdapter($adapter);
@@ -2431,7 +2551,7 @@ abstract class PhabricatorApplicationTransactionEditor
     $editor = new PhabricatorEdgeEditor();
 
     $src = $object->getPHID();
-    $type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_FILE;
+    $type = PhabricatorObjectHasFileEdgeType::EDGECONST;
     foreach ($file_phids as $dst) {
       $editor->addEdge($src, $type, $dst);
     }

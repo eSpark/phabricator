@@ -14,15 +14,12 @@ final class PhabricatorReleephApplication extends PhabricatorApplication {
     return '/releeph/';
   }
 
-  public function getIconName() {
-    return 'releeph';
+  public function getFontIcon() {
+    return 'fa-flag-checkered';
   }
 
-  public function isInstalled() {
-    if (PhabricatorEnv::getEnvConfig('releeph.installed')) {
-      return parent::isInstalled();
-    }
-    return false;
+  public function isPrototype() {
+    return true;
   }
 
   public function getRoutes() {
@@ -77,7 +74,7 @@ final class PhabricatorReleephApplication extends PhabricatorApplication {
           'comment/(?P<requestID>[1-9]\d*)/'
             => 'ReleephRequestCommentController',
         ),
-      )
+      ),
     );
   }
 

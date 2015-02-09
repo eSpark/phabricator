@@ -6,15 +6,15 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
     return pht('Nuance');
   }
 
-  public function getIconName() {
-    return 'nuance';
+  public function getFontIcon() {
+    return 'fa-fax';
   }
 
   public function getTitleGlyph() {
     return "\xE2\x98\x8E";
   }
 
-  public function isBeta() {
+  public function isPrototype() {
     return true;
   }
 

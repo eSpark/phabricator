@@ -52,7 +52,7 @@ final class DifferentialRevisionLandController extends DifferentialController {
         } else {
           $text = phutil_tag('pre', array(), $ex->getMessage());
         }
-        $text = id(new AphrontErrorView())
+        $text = id(new PHUIErrorView())
            ->appendChild($text);
       }
 
@@ -145,8 +145,8 @@ final class DifferentialRevisionLandController extends DifferentialController {
     $looksoon = new ConduitCall(
       'diffusion.looksoon',
       array(
-        'callsigns' => array($repository->getCallsign())
-        ));
+        'callsigns' => array($repository->getCallsign()),
+      ));
     $looksoon->setUser($request->getUser());
     $looksoon->execute();
 

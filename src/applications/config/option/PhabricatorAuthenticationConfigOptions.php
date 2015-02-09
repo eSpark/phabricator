@@ -11,13 +11,17 @@ final class PhabricatorAuthenticationConfigOptions
     return pht('Options relating to authentication.');
   }
 
+  public function getFontIcon() {
+    return 'fa-key';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption('auth.require-email-verification', 'bool', false)
         ->setBoolOptions(
           array(
             pht('Require email verification'),
-            pht("Don't require email verification")
+            pht("Don't require email verification"),
           ))
         ->setSummary(
           pht('Require email verification before a user can log in.'))
@@ -77,7 +81,7 @@ final class PhabricatorAuthenticationConfigOptions
         ->setBoolOptions(
           array(
             pht('Allow editing'),
-            pht('Prevent editing')
+            pht('Prevent editing'),
           ))
         ->setSummary(
           pht(

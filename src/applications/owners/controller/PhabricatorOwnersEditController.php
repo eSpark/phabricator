@@ -87,9 +87,11 @@ final class PhabricatorOwnersEditController
         $package->attachUnsavedPaths($path_refs);
         $package->attachOldAuditingEnabled($old_auditing_enabled);
         $package->attachOldPrimaryOwnerPHID($old_primary);
-        $package->attachActorPHID($user->getPHID());
         try {
-          $package->save();
+          id(new PhabricatorOwnersPackageEditor())
+            ->setActor($user)
+            ->setPackage($package)
+            ->save();
           return id(new AphrontRedirectResponse())
             ->setURI('/owners/package/'.$package->getID().'/');
         } catch (AphrontDuplicateKeyQueryException $ex) {
@@ -145,6 +147,7 @@ final class PhabricatorOwnersEditController
     }
 
     $repos = mpull($repos, 'getCallsign', 'getPHID');
+    asort($repos);
 
     $template = new AphrontTypeaheadTemplateView();
     $template = $template->render();
@@ -211,7 +214,7 @@ final class PhabricatorOwnersEditController
               ? 'enabled'
               : 'disabled'))
       ->appendChild(
-        id(new AphrontFormInsetView())
+        id(new PHUIFormInsetView())
           ->setTitle(pht('Paths'))
           ->addDivAttributes(array('id' => 'path-editor'))
           ->setRightButton(javelin_tag(

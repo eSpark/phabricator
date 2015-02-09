@@ -14,8 +14,8 @@ final class PhabricatorDrydockApplication extends PhabricatorApplication {
     return pht('Allocate Software Resources');
   }
 
-  public function getIconName() {
-    return 'drydock';
+  public function getFontIcon() {
+    return 'fa-truck';
   }
 
   public function getTitleGlyph() {
@@ -30,7 +30,7 @@ final class PhabricatorDrydockApplication extends PhabricatorApplication {
     return self::GROUP_UTILITIES;
   }
 
-  public function isBeta() {
+  public function isPrototype() {
     return true;
   }
 

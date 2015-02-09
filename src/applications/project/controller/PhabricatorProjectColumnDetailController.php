@@ -22,6 +22,7 @@ final class PhabricatorProjectColumnDetailController
           PhabricatorPolicyCapability::CAN_VIEW,
         ))
       ->withIDs(array($this->projectID))
+      ->needImages(true)
       ->executeOne();
 
     if (!$project) {
@@ -41,25 +42,12 @@ final class PhabricatorProjectColumnDetailController
       return new Aphront404Response();
     }
 
-    $xactions = id(new PhabricatorProjectColumnTransactionQuery())
-      ->setViewer($viewer)
-      ->withObjectPHIDs(array($column->getPHID()))
-      ->execute();
-
-    $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($viewer);
-
-    $timeline = id(new PhabricatorApplicationTransactionView())
-      ->setUser($viewer)
-      ->setObjectPHID($column->getPHID())
-      ->setTransactions($xactions);
+    $timeline = $this->buildTransactionTimeline(
+      $column,
+      new PhabricatorProjectColumnTransactionQuery());
+    $timeline->setShouldTerminate(true);
 
     $title = pht('%s', $column->getDisplayName());
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(
-      pht('Board'),
-      $this->getApplicationURI('board/'.$project->getID().'/'));
-    $crumbs->addTextCrumb($title);
 
     $header = $this->buildHeaderView($column);
     $actions = $this->buildActionView($column);
@@ -69,11 +57,13 @@ final class PhabricatorProjectColumnDetailController
       ->setHeader($header)
       ->addPropertyList($properties);
 
+    $nav = $this->buildIconNavView($project);
+    $nav->appendChild($box);
+    $nav->appendChild($timeline);
+
     return $this->buildApplicationPage(
       array(
-        $crumbs,
-        $box,
-        $timeline,
+        $nav,
       ),
       array(
         'title' => $title,
@@ -118,26 +108,6 @@ final class PhabricatorProjectColumnDetailController
         ->setHref($this->getApplicationURI($base_uri.'edit/'.$id.'/'))
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
-
-    $can_hide = ($can_edit && !$column->isDefaultColumn());
-
-    if (!$column->isHidden()) {
-      $actions->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Hide Column'))
-          ->setIcon('fa-eye-slash')
-          ->setHref($this->getApplicationURI($base_uri.'delete/'.$id.'/'))
-          ->setDisabled(!$can_hide)
-          ->setWorkflow(true));
-    } else {
-      $actions->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Show Column'))
-          ->setIcon('fa-eye')
-          ->setHref($this->getApplicationURI($base_uri.'delete/'.$id.'/'))
-          ->setDisabled(!$can_hide)
-          ->setWorkflow(true));
-    }
 
     return $actions;
   }

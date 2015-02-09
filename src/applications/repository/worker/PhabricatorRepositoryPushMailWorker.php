@@ -3,7 +3,7 @@
 final class PhabricatorRepositoryPushMailWorker
   extends PhabricatorWorker {
 
-  public function doWork() {
+  protected function doWork() {
     $viewer = PhabricatorUser::getOmnipotentUser();
 
     $task_data = $this->getTaskData();
@@ -70,7 +70,7 @@ final class PhabricatorRepositoryPushMailWorker
     $body = new PhabricatorMetaMTAMailBody();
     $body->addRawSection($overview);
 
-    $body->addTextSection(pht('DETAILS'), $details_uri);
+    $body->addLinkSection(pht('DETAILS'), $details_uri);
 
     if ($commit_lines) {
       $body->addTextSection(pht('COMMITS'), implode("\n", $commit_lines));

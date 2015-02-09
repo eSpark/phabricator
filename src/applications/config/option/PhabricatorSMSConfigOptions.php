@@ -11,6 +11,10 @@ final class PhabricatorSMSConfigOptions
     return pht('Configure SMS.');
   }
 
+  public function getFontIcon() {
+    return 'fa-mobile';
+  }
+
   public function getOptions() {
     $adapter_description = $this->deformat(pht(<<<EODOC
 Adapter class to use to transmit SMS to an external provider. A given external
@@ -48,7 +52,7 @@ EODOC
         ->setDescription(pht('Authorization token from Twilio service.'))
         ->setLocked(true)
         ->setHidden(true)
-        ->addExample('f3jsi4i67wiwt6w54hf2zwvy3fjf5h', pht('30 characters'))
+        ->addExample('f3jsi4i67wiwt6w54hf2zwvy3fjf5h', pht('30 characters')),
     );
   }
 

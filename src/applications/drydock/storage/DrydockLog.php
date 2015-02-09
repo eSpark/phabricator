@@ -11,9 +11,25 @@ final class DrydockLog extends DrydockDAO
   private $resource = self::ATTACHABLE;
   private $lease = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'resourceID' => 'id?',
+        'leaseID' => 'id?',
+        'message' => 'text',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'resourceID' => array(
+          'columns' => array('resourceID', 'epoch'),
+        ),
+        'leaseID' => array(
+          'columns' => array('leaseID', 'epoch'),
+        ),
+        'epoch' => array(
+          'columns' => array('epoch'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

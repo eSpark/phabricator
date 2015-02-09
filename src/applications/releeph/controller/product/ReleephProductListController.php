@@ -13,8 +13,7 @@ final class ReleephProductListController extends ReleephController {
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new ReleephProductSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -22,7 +21,7 @@ final class ReleephProductListController extends ReleephController {
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $crumbs->addAction(

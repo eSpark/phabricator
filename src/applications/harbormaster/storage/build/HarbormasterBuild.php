@@ -1,7 +1,9 @@
 <?php
 
 final class HarbormasterBuild extends HarbormasterDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorPolicyInterface {
 
   protected $buildablePHID;
   protected $buildPlanPHID;
@@ -140,9 +142,24 @@ final class HarbormasterBuild extends HarbormasterDAO
     return $result;
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'buildStatus' => 'text32',
+        'buildGeneration' => 'uint32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_buildable' => array(
+          'columns' => array('buildablePHID'),
+        ),
+        'key_plan' => array(
+          'columns' => array('buildPlanPHID'),
+        ),
+        'key_status' => array(
+          'columns' => array('buildStatus'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -196,7 +213,9 @@ final class HarbormasterBuild extends HarbormasterDAO
     $log_source,
     $log_type) {
 
-    $log_source = phutil_utf8_shorten($log_source, 250);
+    $log_source = id(new PhutilUTF8StringTruncator())
+      ->setMaximumBytes(250)
+      ->truncateString($log_source);
 
     $log = HarbormasterBuildLog::initializeNewBuildLog($build_target)
       ->setLogSource($log_source)
@@ -213,7 +232,10 @@ final class HarbormasterBuild extends HarbormasterDAO
 
     $artifact =
       HarbormasterBuildArtifact::initializeNewBuildArtifact($build_target);
-    $artifact->setArtifactKey($this->getPHID(), $artifact_key);
+    $artifact->setArtifactKey(
+      $this->getPHID(),
+      $this->getBuildGeneration(),
+      $artifact_key);
     $artifact->setArtifactType($artifact_type);
     $artifact->save();
     return $artifact;
@@ -224,6 +246,7 @@ final class HarbormasterBuild extends HarbormasterDAO
       ->setViewer(PhabricatorUser::getOmnipotentUser())
       ->withArtifactKeys(
         $this->getPHID(),
+        $this->getBuildGeneration(),
         array($name))
       ->executeOne();
     if ($artifact === null) {
@@ -378,6 +401,29 @@ final class HarbormasterBuild extends HarbormasterDAO
     }
 
     return $this;
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new HarbormasterBuildTransactionEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new HarbormasterBuildTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+
+    return $timeline;
   }
 
 

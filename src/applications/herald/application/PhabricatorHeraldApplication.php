@@ -6,8 +6,8 @@ final class PhabricatorHeraldApplication extends PhabricatorApplication {
     return '/herald/';
   }
 
-  public function getIconName() {
-    return 'herald';
+  public function getFontIcon() {
+    return 'fa-bullhorn';
   }
 
   public function getName() {
@@ -56,8 +56,8 @@ final class PhabricatorHeraldApplication extends PhabricatorApplication {
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'HeraldTranscriptListController',
           '(?P<id>[1-9]\d*)/(?:(?P<filter>\w+)/)?'
             => 'HeraldTranscriptController',
-        )
-      )
+        ),
+      ),
     );
   }
 

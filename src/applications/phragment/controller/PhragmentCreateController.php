@@ -64,7 +64,7 @@ final class PhragmentCreateController extends PhragmentController {
         return id(new AphrontRedirectResponse())
           ->setURI('/phragment/browse/'.trim($parent_path.'/'.$v_name, '/'));
       } else {
-        $error_view = id(new AphrontErrorView())
+        $error_view = id(new PHUIErrorView())
           ->setErrors($errors)
           ->setTitle(pht('Errors while creating fragment'));
       }
@@ -122,7 +122,8 @@ final class PhragmentCreateController extends PhragmentController {
       array(
         $crumbs,
         $this->renderConfigurationWarningIfRequired(),
-        $box),
+        $box,
+      ),
       array(
         'title' => pht('Create Fragment'),
       ));

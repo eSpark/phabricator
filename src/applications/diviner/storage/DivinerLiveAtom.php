@@ -6,12 +6,18 @@ final class DivinerLiveAtom extends DivinerDAO {
   protected $content;
   protected $atomData;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_SERIALIZATION => array(
         'content'  => self::SERIALIZATION_JSON,
         'atomData' => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'symbolPHID' => array(
+          'columns' => array('symbolPHID'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }

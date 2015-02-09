@@ -9,6 +9,7 @@ final class PHUICalendarMonthView extends AphrontView {
   private $events   = array();
   private $browseURI;
   private $image;
+  private $error;
 
   public function setBrowseURI($browse_uri) {
     $this->browseURI = $browse_uri;
@@ -25,6 +26,11 @@ final class PHUICalendarMonthView extends AphrontView {
 
   public function setImage($uri) {
     $this->image = $uri;
+    return $this;
+  }
+
+  public function setErrorView(PHUIErrorView $error) {
+    $this->error = $error;
     return $this;
   }
 
@@ -150,7 +156,8 @@ final class PHUICalendarMonthView extends AphrontView {
           $cells[] = phutil_tag(
             'td',
             array(
-              'class' => 'phui-calendar-month-weekstart'),
+              'class' => 'phui-calendar-month-weekstart',
+            ),
             $cell);
         } else {
           $cells[] = phutil_tag('td', array(), $cell);
@@ -184,6 +191,10 @@ final class PHUICalendarMonthView extends AphrontView {
     $box = id(new PHUIObjectBoxView())
       ->setHeader($this->renderCalendarHeader($first))
       ->appendChild($table);
+    if ($this->error) {
+      $box->setErrorView($this->error);
+
+    }
 
     return $box;
   }

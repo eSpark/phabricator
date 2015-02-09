@@ -11,11 +11,26 @@ final class PhabricatorRepositoryAuditRequest
 
   private $commit = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_SERIALIZATION => array(
         'auditReasons' => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'auditStatus' => 'text64',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'commitPHID' => array(
+          'columns' => array('commitPHID'),
+        ),
+        'auditorPHID' => array(
+          'columns' => array('auditorPHID', 'auditStatus'),
+        ),
+        'key_unique' => array(
+          'columns' => array('commitPHID', 'auditorPHID'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }

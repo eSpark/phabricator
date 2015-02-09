@@ -14,8 +14,7 @@ final class PhabricatorDashboardPanelListController
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new PhabricatorDashboardPanelSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -37,7 +36,7 @@ final class PhabricatorDashboardPanelListController
     return $nav;
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $crumbs->addTextCrumb(pht('Panels'), $this->getApplicationURI().'panel/');

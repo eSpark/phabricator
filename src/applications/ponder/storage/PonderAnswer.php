@@ -2,6 +2,7 @@
 
 final class PonderAnswer extends PonderDAO
   implements
+    PhabricatorApplicationTransactionInterface,
     PhabricatorMarkupInterface,
     PonderVotableInterface,
     PhabricatorPolicyInterface,
@@ -64,9 +65,34 @@ final class PonderAnswer extends PonderDAO
     return $this->comments;
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'voteCount' => 'sint32',
+        'content' => 'text',
+
+        // T6203/NULLABILITY
+        // This should always exist.
+        'contentSource' => 'text?',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'phid' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
+        'key_oneanswerperquestion' => array(
+          'columns' => array('questionID', 'authorPHID'),
+          'unique' => true,
+        ),
+        'questionID' => array(
+          'columns' => array('questionID'),
+        ),
+        'authorPHID' => array(
+          'columns' => array('authorPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -86,6 +112,30 @@ final class PonderAnswer extends PonderDAO
   public function getMarkupField() {
     return self::MARKUP_FIELD_CONTENT;
   }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PonderAnswerEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PonderAnswerTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+
+    return $timeline;
+  }
+
 
   // Markup interface
 
@@ -116,7 +166,7 @@ final class PonderAnswer extends PonderDAO
 
   // votable interface
   public function getUserVoteEdgeType() {
-    return PhabricatorEdgeConfig::TYPE_VOTING_USER_HAS_ANSWER;
+    return PonderVotingUserHasAnswerEdgeType::EDGECONST;
   }
 
   public function getVotablePHID() {

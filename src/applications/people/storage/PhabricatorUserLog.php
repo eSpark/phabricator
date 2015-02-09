@@ -122,12 +122,38 @@ final class PhabricatorUserLog extends PhabricatorUserDAO
     return parent::save();
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_SERIALIZATION => array(
         'oldValue' => self::SERIALIZATION_JSON,
         'newValue' => self::SERIALIZATION_JSON,
         'details'  => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'actorPHID' => 'phid?',
+        'action' => 'text64',
+        'remoteAddr' => 'text64',
+        'session' => 'bytes40?',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'actorPHID' => array(
+          'columns' => array('actorPHID', 'dateCreated'),
+        ),
+        'userPHID' => array(
+          'columns' => array('userPHID', 'dateCreated'),
+        ),
+        'action' => array(
+          'columns' => array('action', 'dateCreated'),
+        ),
+        'dateCreated' => array(
+          'columns' => array('dateCreated'),
+        ),
+        'remoteAddr' => array(
+          'columns' => array('remoteAddr', 'dateCreated'),
+        ),
+        'session' => array(
+          'columns' => array('session', 'dateCreated'),
+        ),
       ),
     ) + parent::getConfiguration();
   }

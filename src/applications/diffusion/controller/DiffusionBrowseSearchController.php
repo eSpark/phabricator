@@ -2,7 +2,7 @@
 
 final class DiffusionBrowseSearchController extends DiffusionBrowseController {
 
-  public function processRequest() {
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->diffusionRequest;
 
     $actions = $this->buildActionView($drequest);
@@ -81,7 +81,7 @@ final class DiffusionBrowseSearchController extends DiffusionBrowseController {
     } catch (ConduitException $ex) {
       $err = $ex->getErrorDescription();
       if ($err != '') {
-        return id(new AphrontErrorView())
+        return id(new PHUIErrorView())
           ->setTitle(pht('Search Error'))
           ->appendChild($err);
       }
@@ -132,9 +132,10 @@ final class DiffusionBrowseSearchController extends DiffusionBrowseController {
     }
 
     try {
-      Futures($futures)->limit(8)->resolveAll();
-    } catch (PhutilSyntaxHighlighterException $ex) {
-    }
+      id(new FutureIterator($futures))
+        ->limit(8)
+        ->resolveAll();
+    } catch (PhutilSyntaxHighlighterException $ex) {}
 
     $rows = array();
     foreach ($results as $result) {
@@ -148,8 +149,7 @@ final class DiffusionBrowseSearchController extends DiffusionBrowseController {
 
       try {
         $string = $futures["{$path}:{$line}"]->resolve();
-      } catch (PhutilSyntaxHighlighterException $ex) {
-      }
+      } catch (PhutilSyntaxHighlighterException $ex) {}
 
       $string = phutil_tag(
         'pre',

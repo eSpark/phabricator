@@ -15,17 +15,17 @@ final class DivinerParameterTableView extends AphrontTagView {
     return $this;
   }
 
-  public function getTagName() {
+  protected function getTagName() {
     return 'div';
   }
 
-  public function getTagAttributes() {
+  protected function getTagAttributes() {
     return array(
       'class' => 'diviner-table-view',
     );
   }
 
-  public function getTagContent() {
+  protected function getTagContent() {
     require_celerity_resource('diviner-shared-css');
 
     $rows = array();
@@ -67,13 +67,14 @@ final class DivinerParameterTableView extends AphrontTagView {
     $table = phutil_tag(
       'table',
       array(
-        'class' => 'diviner-parameter-table-view'),
+        'class' => 'diviner-parameter-table-view',
+      ),
       $rows);
 
     $header = phutil_tag(
       'span',
       array(
-        'class' => 'diviner-table-header'
+        'class' => 'diviner-table-header',
       ),
       $this->header);
 

@@ -20,10 +20,24 @@ final class PhabricatorRepositorySymbol extends PhabricatorRepositoryDAO {
   private $arcanistProject = self::ATTACHABLE;
   private $repository = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_IDS => self::IDS_MANUAL,
       self::CONFIG_TIMESTAMPS => false,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'id' => null,
+        'symbolContext' => 'text128',
+        'symbolName' => 'text128',
+        'symbolType' => 'text12',
+        'symbolLanguage' => 'text32',
+        'lineNumber' => 'uint32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'PRIMARY' => null,
+        'symbolName' => array(
+          'columns' => array('symbolName'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 

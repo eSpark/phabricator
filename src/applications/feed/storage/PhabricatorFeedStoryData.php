@@ -9,11 +9,26 @@ final class PhabricatorFeedStoryData extends PhabricatorFeedDAO {
   protected $authorPHID;
   protected $chronologicalKey;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID       => true,
       self::CONFIG_SERIALIZATION  => array(
         'storyData'  => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'chronologicalKey' => 'uint64',
+        'storyType' => 'text64',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'phid' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
+        'chronologicalKey' => array(
+          'columns' => array('chronologicalKey'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }

@@ -14,8 +14,7 @@ final class PhabricatorOAuthClientListController
   }
 
   public function processRequest() {
-    $request = $this->getRequest();
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine(new PhabricatorOAuthServerClientSearchEngine())
       ->setNavigation($this->buildSideNavView());
@@ -23,7 +22,7 @@ final class PhabricatorOAuthClientListController
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $crumbs->addAction(

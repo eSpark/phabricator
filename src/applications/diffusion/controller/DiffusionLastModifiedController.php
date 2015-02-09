@@ -6,9 +6,8 @@ final class DiffusionLastModifiedController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->getDiffusionRequest();
-    $request = $this->getRequest();
     $viewer = $request->getUser();
 
     $paths = $request->getStr('paths');
@@ -145,10 +144,12 @@ final class DiffusionLastModifiedController extends DiffusionController {
     if ($lint !== null) {
       $return['lint'] = phutil_tag(
         'a',
-        array('href' => $drequest->generateURI(array(
-          'action' => 'lint',
-          'lint' => null,
-        ))),
+        array(
+          'href' => $drequest->generateURI(array(
+            'action' => 'lint',
+            'lint' => null,
+          )),
+        ),
         number_format($lint));
     }
 

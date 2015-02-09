@@ -2,16 +2,31 @@
 
 final class PhabricatorSearchDocument extends PhabricatorSearchDAO {
 
-  protected $phid;
   protected $documentType;
   protected $documentTitle;
   protected $documentCreated;
   protected $documentModified;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_IDS        => self::IDS_MANUAL,
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'documentType' => 'text4',
+        'documentTitle' => 'text255',
+        'documentCreated' => 'epoch',
+        'documentModified' => 'epoch',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_phid' => null,
+        'PRIMARY' => array(
+          'columns' => array('phid'),
+          'unique' => true,
+        ),
+        'documentCreated' => array(
+          'columns' => array('documentCreated'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
