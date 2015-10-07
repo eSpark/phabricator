@@ -60,17 +60,16 @@ final class DiffusionRepositoryController extends DiffusionController {
         }
       } else {
         $empty_title = pht('Empty Repository');
-        $empty_message = pht(
-          'This repository does not have any commits yet.');
+        $empty_message = pht('This repository does not have any commits yet.');
       }
     }
 
     if ($page_has_content) {
       $content[] = $this->buildNormalContent($drequest);
     } else {
-      $content[] = id(new PHUIErrorView())
+      $content[] = id(new PHUIInfoView())
         ->setTitle($empty_title)
-        ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
         ->setErrors(array($empty_message));
     }
 
@@ -178,8 +177,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $content[] = $this->buildHistoryTable(
       $history_results,
       $history,
-      $history_exception,
-      $handles);
+      $history_exception);
 
     try {
       $content[] = $this->buildTagListTable($drequest);
@@ -228,17 +226,8 @@ final class DiffusionRepositoryController extends DiffusionController {
     $actions = $this->buildActionList($repository);
 
     $view = id(new PHUIPropertyListView())
+      ->setObject($repository)
       ->setUser($user);
-
-    $project_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
-      $repository->getPHID(),
-      PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
-    if ($project_phids) {
-      $this->loadHandles($project_phids);
-      $view->addProperty(
-        pht('Projects'),
-        $this->renderHandlesForPHIDs($project_phids));
-    }
 
     if ($repository->isHosted()) {
       $ssh_uri = $repository->getSSHCloneURIObject();
@@ -292,22 +281,64 @@ final class DiffusionRepositoryController extends DiffusionController {
       }
     }
 
+    $view->invokeWillRenderEvent();
+
     $description = $repository->getDetail('description');
     if (strlen($description)) {
       $description = PhabricatorMarkupEngine::renderOneObject(
         $repository,
         'description',
         $user);
-      $view->addSectionHeader(pht('Description'));
+      $view->addSectionHeader(
+        pht('Description'), PHUIPropertyListView::ICON_SUMMARY);
       $view->addTextContent($description);
     }
 
     $view->setActionList($actions);
 
-    return id(new PHUIObjectBoxView())
+    $box = id(new PHUIObjectBoxView())
       ->setHeader($header)
       ->addPropertyList($view);
 
+    $info = null;
+    $drequest = $this->getDiffusionRequest();
+
+    // Try to load alternatives. This may fail for repositories which have not
+    // cloned yet. If it does, just ignore it and continue.
+    try {
+      $alternatives = $drequest->getRefAlternatives();
+    } catch (ConduitClientException $ex) {
+      $alternatives = array();
+    }
+
+    if ($alternatives) {
+      $message = array(
+        pht(
+          'The ref "%s" is ambiguous in this repository.',
+          $drequest->getBranch()),
+        ' ',
+        phutil_tag(
+          'a',
+          array(
+            'href' => $drequest->generateURI(
+              array(
+                'action' => 'refs',
+              )),
+          ),
+          pht('View Alternatives')),
+      );
+
+      $messages = array($message);
+
+      $info = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->setErrors(array($message));
+
+      $box->setInfoView($info);
+    }
+
+
+    return $box;
   }
 
   private function buildBranchListTable(DiffusionRequest $drequest) {
@@ -322,6 +353,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $branches = $this->callConduitWithDiffusionRequest(
       'diffusion.branchquery',
       array(
+        'closed' => false,
         'limit' => $limit + 1,
       ));
     if (!$branches) {
@@ -361,36 +393,36 @@ final class DiffusionRepositoryController extends DiffusionController {
     $button->setTag('a');
     $button->setIcon($icon);
     $button->setHref($drequest->generateURI(
-            array(
-              'action' => 'branches',
-            )));
+      array(
+        'action' => 'branches',
+      )));
 
     $header->addActionLink($button);
     $panel->setHeader($header);
-    $panel->appendChild($table);
+    $panel->setTable($table);
 
     return $panel;
   }
 
   private function buildTagListTable(DiffusionRequest $drequest) {
     $viewer = $this->getRequest()->getUser();
+    $repository = $drequest->getRepository();
 
+    switch ($repository->getVersionControlSystem()) {
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+        // no tags in SVN
+        return null;
+    }
     $tag_limit = 15;
     $tags = array();
-    try {
-      $tags = DiffusionRepositoryTag::newFromConduit(
-        $this->callConduitWithDiffusionRequest(
-          'diffusion.tagsquery',
-          array(
-            // On the home page, we want to find tags on any branch.
-            'commit' => null,
-            'limit' => $tag_limit + 1,
-          )));
-    } catch (ConduitException $e) {
-      if ($e->getMessage() != 'ERR-UNSUPPORTED-VCS') {
-        throw $e;
-      }
-    }
+    $tags = DiffusionRepositoryTag::newFromConduit(
+      $this->callConduitWithDiffusionRequest(
+        'diffusion.tagsquery',
+        array(
+          // On the home page, we want to find tags on any branch.
+          'commit' => null,
+          'limit' => $tag_limit + 1,
+        )));
 
     if (!$tags) {
       return null;
@@ -402,7 +434,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $commits = id(new DiffusionCommitQuery())
       ->setViewer($viewer)
       ->withIdentifiers(mpull($tags, 'getCommitIdentifier'))
-      ->withRepository($drequest->getRepository())
+      ->withRepository($repository)
       ->needCommitData(true)
       ->execute();
 
@@ -440,7 +472,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $header->addActionLink($button);
 
     $panel->setHeader($header);
-    $panel->appendChild($view);
+    $panel->setTable($view);
 
     return $panel;
   }
@@ -487,8 +519,7 @@ final class DiffusionRepositoryController extends DiffusionController {
   private function buildHistoryTable(
     $history_results,
     $history,
-    $history_exception,
-    array $handles) {
+    $history_exception) {
 
     $request = $this->getRequest();
     $viewer = $request->getUser();
@@ -512,7 +543,6 @@ final class DiffusionRepositoryController extends DiffusionController {
     $history_table = id(new DiffusionHistoryTableView())
       ->setUser($viewer)
       ->setDiffusionRequest($drequest)
-      ->setHandles($handles)
       ->setHistory($history);
 
     // TODO: Super sketchy.
@@ -542,7 +572,7 @@ final class DiffusionRepositoryController extends DiffusionController {
       ->setHeader(pht('Recent Commits'))
       ->addActionLink($button);
     $panel->setHeader($header);
-    $panel->appendChild($history_table);
+    $panel->setTable($history_table);
 
     return $panel;
   }
@@ -599,6 +629,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $header->addActionLink($button);
     $browse_panel->setHeader($header);
 
+    $locate_panel = null;
     if ($repository->canUsePathTree()) {
       Javelin::initBehavior(
         'diffusion-locate-file',
@@ -623,14 +654,15 @@ final class DiffusionRepositoryController extends DiffusionController {
             ->setID('locate-input')
             ->setLabel(pht('Locate File')));
       $form_box = id(new PHUIBoxView())
-        ->addClass('diffusion-locate-file-view')
         ->appendChild($form->buildLayoutView());
-      $browse_panel->appendChild($form_box);
+      $locate_panel = id(new PHUIObjectBoxView())
+        ->setHeaderText('Locate File')
+        ->appendChild($form_box);
     }
 
-    $browse_panel->appendChild($browse_table);
+    $browse_panel->setTable($browse_table);
 
-    return $browse_panel;
+    return array($locate_panel, $browse_panel);
   }
 
   private function renderCloneCommand(

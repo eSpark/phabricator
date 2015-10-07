@@ -3,22 +3,15 @@
 final class PhrictionEditController
   extends PhrictionController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $current_version = null;
-    if ($this->id) {
+    if ($id) {
       $document = id(new PhrictionDocumentQuery())
-        ->setViewer($user)
-        ->withIDs(array($this->id))
+        ->setViewer($viewer)
+        ->withIDs(array($id))
         ->needContent(true)
         ->requireCapabilities(
           array(
@@ -53,7 +46,7 @@ final class PhrictionEditController
       }
 
       $document = id(new PhrictionDocumentQuery())
-        ->setViewer($user)
+        ->setViewer($viewer)
         ->withSlugs(array($slug))
         ->needContent(true)
         ->executeOne();
@@ -62,7 +55,7 @@ final class PhrictionEditController
         $content = $document->getContent();
         $current_version = $content->getVersion();
       } else {
-        $document = PhrictionDocument::initializeNewDocument($user, $slug);
+        $document = PhrictionDocument::initializeNewDocument($viewer, $slug);
         $content = $document->getContent();
       }
     }
@@ -78,7 +71,7 @@ final class PhrictionEditController
       }
       $draft = id(new PhabricatorDraft())->loadOneWhere(
         'authorPHID = %s AND draftKey = %s',
-        $user->getPHID(),
+        $viewer->getPHID(),
         $draft_key);
     }
 
@@ -94,12 +87,15 @@ final class PhrictionEditController
         ),
         pht('discard this draft'));
 
-      $draft_note = new PHUIErrorView();
-      $draft_note->setSeverity(PHUIErrorView::SEVERITY_NOTICE);
-      $draft_note->setTitle('Recovered Draft');
-      $draft_note->appendChild(hsprintf(
-        '<p>Showing a saved draft of your edits, you can %s.</p>',
-        $discard));
+      $draft_note = new PHUIInfoView();
+      $draft_note->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
+      $draft_note->setTitle(pht('Recovered Draft'));
+      $draft_note->appendChild(
+        hsprintf(
+          '<p>%s</p>',
+          pht(
+            'Showing a saved draft of your edits, you can %s.',
+            $discard)));
     } else {
       $content_text = $content->getContent();
       $draft_note = null;
@@ -113,6 +109,8 @@ final class PhrictionEditController
     $notes = null;
     $title = $content->getTitle();
     $overwrite = false;
+    $v_cc = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+      $document->getPHID());
 
     if ($request->isFormPost()) {
 
@@ -122,6 +120,7 @@ final class PhrictionEditController
       $current_version = $request->getInt('contentVersion');
       $v_view = $request->getStr('viewPolicy');
       $v_edit = $request->getStr('editPolicy');
+      $v_cc   = $request->getArr('cc');
 
       $xactions = array();
       $xactions[] = id(new PhrictionTransaction())
@@ -136,9 +135,12 @@ final class PhrictionEditController
       $xactions[] = id(new PhrictionTransaction())
         ->setTransactionType(PhabricatorTransactions::TYPE_EDIT_POLICY)
         ->setNewValue($v_edit);
+      $xactions[] = id(new PhrictionTransaction())
+        ->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS)
+        ->setNewValue(array('=' => $v_cc));
 
       $editor = id(new PhrictionTransactionEditor())
-        ->setActor($user)
+        ->setActor($viewer)
         ->setContentSourceFromRequest($request)
         ->setContinueOnNoEffect(true)
         ->setDescription($notes)
@@ -156,10 +158,12 @@ final class PhrictionEditController
         return id(new AphrontRedirectResponse())->setURI($uri);
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
-        $e_title = $ex->getShortMessage(
-          PhrictionTransaction::TYPE_TITLE);
-        $e_content = $ex->getShortMessage(
-          PhrictionTransaction::TYPE_CONTENT);
+        $e_title = nonempty(
+          $ex->getShortMessage(PhrictionTransaction::TYPE_TITLE),
+          true);
+        $e_content = nonempty(
+          $ex->getShortMessage(PhrictionTransaction::TYPE_CONTENT),
+          true);
 
         // if we're not supposed to process the content version error, then
         // overwrite that content...!
@@ -193,14 +197,14 @@ final class PhrictionEditController
     $cancel_uri = PhrictionDocument::getSlugURI($document->getSlug());
 
     $policies = id(new PhabricatorPolicyQuery())
-      ->setViewer($user)
+      ->setViewer($viewer)
       ->setObject($document)
       ->execute();
     $view_capability = PhabricatorPolicyCapability::CAN_VIEW;
     $edit_capability = PhabricatorPolicyCapability::CAN_EDIT;
 
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->addHiddenInput('slug', $document->getSlug())
       ->addHiddenInput('nodraft', $request->getBool('nodraft'))
       ->addHiddenInput('contentVersion', $current_version)
@@ -223,7 +227,14 @@ final class PhrictionEditController
           ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
           ->setName('content')
           ->setID('document-textarea')
-          ->setUser($user))
+          ->setUser($viewer))
+      ->appendControl(
+        id(new AphrontFormTokenizerControl())
+          ->setLabel(pht('Subscribers'))
+          ->setName('cc')
+          ->setValue($v_cc)
+          ->setUser($viewer)
+          ->setDatasource(new PhabricatorMetaMTAMailableDatasource()))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setName('viewPolicy')
@@ -260,7 +271,7 @@ final class PhrictionEditController
       ->setHeader(pht('Document Preview'))
       ->setPreviewURI('/phriction/preview/')
       ->setControlID('document-textarea')
-      ->setSkin('document');
+      ->addClass('phui-document-view');
 
     $crumbs = $this->buildApplicationCrumbs();
     if ($document->getID()) {

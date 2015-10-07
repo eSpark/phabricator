@@ -9,13 +9,9 @@ final class PhabricatorDashboardViewController
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $this->id = $request->getURIData('id');
 
     $dashboard = id(new PhabricatorDashboardQuery())
       ->setViewer($viewer)
@@ -67,8 +63,8 @@ final class PhabricatorDashboardViewController
     $id = $this->id;
     $manage_uri = $this->getApplicationURI("manage/{$id}/");
 
-    return id(new PHUIErrorView())
-      ->setSeverity(PHUIErrorView::SEVERITY_NODATA)
+    return id(new PHUIInfoView())
+      ->setSeverity(PHUIInfoView::SEVERITY_NODATA)
       ->appendChild(
         pht('This dashboard has no panels '.
           'yet. Use %s to add panels.',

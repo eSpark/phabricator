@@ -1,19 +1,34 @@
 <?php
 
-final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
-  implements PhabricatorPolicyInterface {
+final class PhabricatorOwnersPackage
+  extends PhabricatorOwnersDAO
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorCustomFieldInterface {
 
   protected $name;
   protected $originalName;
   protected $auditingEnabled;
   protected $description;
   protected $primaryOwnerPHID;
+  protected $mailKey;
+  protected $status;
 
-  private $unsavedOwners = self::ATTACHABLE;
-  private $unsavedPaths = self::ATTACHABLE;
-  private $actorPHID;
-  private $oldPrimaryOwnerPHID;
-  private $oldAuditingEnabled;
+  private $paths = self::ATTACHABLE;
+  private $owners = self::ATTACHABLE;
+  private $customFields = self::ATTACHABLE;
+
+  const STATUS_ACTIVE = 'active';
+  const STATUS_ARCHIVED = 'archived';
+
+  public static function initializeNewPackage(PhabricatorUser $actor) {
+    return id(new PhabricatorOwnersPackage())
+      ->setAuditingEnabled(0)
+      ->attachPaths(array())
+      ->setStatus(self::STATUS_ACTIVE)
+      ->attachOwners(array());
+  }
 
   public function getCapabilities() {
     return array(
@@ -33,17 +48,26 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
     return null;
   }
 
+  public static function getStatusNameMap() {
+    return array(
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
+    );
+  }
+
   protected function getConfiguration() {
     return array(
       // This information is better available from the history table.
       self::CONFIG_TIMESTAMPS => false,
-      self::CONFIG_AUX_PHID   => true,
+      self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'text128',
         'originalName' => 'text255',
         'description' => 'text',
         'primaryOwnerPHID' => 'phid?',
         'auditingEnabled' => 'bool',
+        'mailKey' => 'bytes20',
+        'status' => 'text32',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_phid' => null,
@@ -60,52 +84,20 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
   }
 
   public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID('OPKG');
+    return PhabricatorPHID::generateNewPHID(
+      PhabricatorOwnersPackagePHIDType::TYPECONST);
   }
 
-  public function attachUnsavedOwners(array $owners) {
-    $this->unsavedOwners = $owners;
-    return $this;
+  public function save() {
+    if (!$this->getMailKey()) {
+      $this->setMailKey(Filesystem::readRandomCharacters(20));
+    }
+
+    return parent::save();
   }
 
-  public function getUnsavedOwners() {
-    return $this->assertAttached($this->unsavedOwners);
-  }
-
-  public function attachUnsavedPaths(array $paths) {
-    $this->unsavedPaths = $paths;
-    return $this;
-  }
-
-  public function getUnsavedPaths() {
-    return $this->assertAttached($this->unsavedPaths);
-  }
-
-  public function attachActorPHID($actor_phid) {
-    $this->actorPHID = $actor_phid;
-    return $this;
-  }
-
-  public function getActorPHID() {
-    return $this->actorPHID;
-  }
-
-  public function attachOldPrimaryOwnerPHID($old_primary) {
-    $this->oldPrimaryOwnerPHID = $old_primary;
-    return $this;
-  }
-
-  public function getOldPrimaryOwnerPHID() {
-    return $this->oldPrimaryOwnerPHID;
-  }
-
-  public function attachOldAuditingEnabled($auditing_enabled) {
-    $this->oldAuditingEnabled = $auditing_enabled;
-    return $this;
-  }
-
-  public function getOldAuditingEnabled() {
-    return $this->oldAuditingEnabled;
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
   }
 
   public function setName($name) {
@@ -143,15 +135,15 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
     }
 
     return self::loadPackagesForPaths($repository, $paths);
- }
+  }
 
- public static function loadOwningPackages($repository, $path) {
+  public static function loadOwningPackages($repository, $path) {
     if (empty($path)) {
       return array();
     }
 
     return self::loadPackagesForPaths($repository, array($path), 1);
- }
+  }
 
   private static function loadPackagesForPaths(
     PhabricatorRepository $repository,
@@ -256,16 +248,83 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
     return $ids;
   }
 
-  private static function splitPath($path) {
-    $result = array('/');
+  public static function splitPath($path) {
     $trailing_slash = preg_match('@/$@', $path) ? '/' : '';
     $path = trim($path, '/');
     $parts = explode('/', $path);
+
+    $result = array();
     while (count($parts)) {
       $result[] = '/'.implode('/', $parts).$trailing_slash;
       $trailing_slash = '/';
       array_pop($parts);
     }
-    return $result;
+    $result[] = '/';
+
+    return array_reverse($result);
   }
+
+  public function attachPaths(array $paths) {
+    assert_instances_of($paths, 'PhabricatorOwnersPath');
+    $this->paths = $paths;
+    return $this;
+  }
+
+  public function getPaths() {
+    return $this->assertAttached($this->paths);
+  }
+
+  public function attachOwners(array $owners) {
+    assert_instances_of($owners, 'PhabricatorOwnersOwner');
+    $this->owners = $owners;
+    return $this;
+  }
+
+  public function getOwners() {
+    return $this->assertAttached($this->owners);
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhabricatorOwnersPackageTransactionEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhabricatorOwnersPackageTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+    return $timeline;
+  }
+
+
+/* -(  PhabricatorCustomFieldInterface  )------------------------------------ */
+
+
+  public function getCustomFieldSpecificationForRole($role) {
+    return PhabricatorEnv::getEnvConfig('owners.fields');
+  }
+
+  public function getCustomFieldBaseClass() {
+    return 'PhabricatorOwnersCustomField';
+  }
+
+  public function getCustomFields() {
+    return $this->assertAttached($this->customFields);
+  }
+
+  public function attachCustomFields(PhabricatorCustomFieldAttachment $fields) {
+    $this->customFields = $fields;
+    return $this;
+  }
+
 }

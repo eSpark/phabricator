@@ -15,10 +15,15 @@ final class PhabricatorPolicyConfigOptions
     return 'fa-lock';
   }
 
+  public function getGroup() {
+    return 'apps';
+  }
+
   public function getOptions() {
     $policy_locked_type = 'custom:PolicyLockOptionType';
     $policy_locked_example = array(
-      'people.create.users' => 'admin',);
+      'people.create.users' => 'admin',
+    );
     $json = new PhutilJSON();
     $policy_locked_example = $json->encodeFormatted($policy_locked_example);
 
@@ -58,8 +63,9 @@ final class PhabricatorPolicyConfigOptions
           'users can take certain actions, such as creating new users. '."\n\n".
           'This setting allows for "locking" these policies such that no '.
           'further edits can be made on a per-policy basis.'))
-          ->addExample($policy_locked_example,
-                       pht('Lock Create User Policy To Admins')),
+          ->addExample(
+            $policy_locked_example,
+            pht('Lock Create User Policy To Admins')),
     );
   }
 

@@ -10,6 +10,7 @@ final class HarbormasterBuildLog extends HarbormasterDAO
   protected $live;
 
   private $buildTarget = self::ATTACHABLE;
+  private $start;
 
   const CHUNK_BYTE_LIMIT = 102400;
 
@@ -17,6 +18,12 @@ final class HarbormasterBuildLog extends HarbormasterDAO
    * The log is encoded as plain text.
    */
   const ENCODING_TEXT = 'text';
+
+  public function __destruct() {
+    if ($this->start) {
+      $this->finalize($this->start);
+    }
+  }
 
   public static function initializeNewBuildLog(
     HarbormasterBuildTarget $build_target) {
@@ -68,18 +75,22 @@ final class HarbormasterBuildLog extends HarbormasterDAO
 
   public function start() {
     if ($this->getLive()) {
-      throw new Exception('Live logging has already started for this log.');
+      throw new Exception(
+        pht('Live logging has already started for this log.'));
     }
 
     $this->setLive(1);
     $this->save();
+
+    $this->start = PhabricatorTime::getNow();
 
     return time();
   }
 
   public function append($content) {
     if (!$this->getLive()) {
-      throw new Exception('Start logging before appending data to the log.');
+      throw new Exception(
+        pht('Start logging before appending data to the log.'));
     }
     if (strlen($content) === 0) {
       return;
@@ -143,7 +154,8 @@ final class HarbormasterBuildLog extends HarbormasterDAO
 
   public function finalize($start = 0) {
     if (!$this->getLive()) {
-      throw new Exception('Start logging before finalizing it.');
+      // TODO: Clean up this API.
+      return;
     }
 
     // TODO: Encode the log contents in a gzipped format.
@@ -201,7 +213,7 @@ final class HarbormasterBuildLog extends HarbormasterDAO
 
   public function describeAutomaticCapability($capability) {
     return pht(
-      'Users must be able to see a build target to view it\'s build log.');
+      "Users must be able to see a build target to view it's build log.");
   }
 
 

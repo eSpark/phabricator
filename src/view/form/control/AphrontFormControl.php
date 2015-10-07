@@ -14,6 +14,7 @@ abstract class AphrontFormControl extends AphrontView {
   private $formPage;
   private $required;
   private $hidden;
+  private $classes;
 
   public function setHidden($hidden) {
     $this->hidden = $hidden;
@@ -133,7 +134,7 @@ abstract class AphrontFormControl extends AphrontView {
 
   public function setFormPage(PHUIFormPageView $page) {
     if ($this->formPage) {
-      throw new Exception('This control is already a member of a page!');
+      throw new Exception(pht('This control is already a member of a page!'));
     }
     $this->formPage = $page;
     return $this;
@@ -141,7 +142,7 @@ abstract class AphrontFormControl extends AphrontView {
 
   public function getFormPage() {
     if ($this->formPage === null) {
-      throw new Exception('This control does not have a page!');
+      throw new Exception(pht('This control does not have a page!'));
     }
     return $this->formPage;
   }
@@ -160,6 +161,11 @@ abstract class AphrontFormControl extends AphrontView {
 
   protected function shouldRender() {
     return true;
+  }
+
+  public function addClass($class) {
+    $this->classes[] = $class;
+    return $this;
   }
 
   final public function render() {
@@ -206,7 +212,8 @@ abstract class AphrontFormControl extends AphrontView {
         ),
         array(
           $this->getLabel(),
-          $error,));
+          $error,
+        ));
     } else {
       $label = null;
       $custom_class .= ' aphront-form-control-nolabel';
@@ -225,6 +232,11 @@ abstract class AphrontFormControl extends AphrontView {
     $classes[] = 'aphront-form-control';
     $classes[] = 'grouped';
     $classes[] = $custom_class;
+    if ($this->classes) {
+      foreach ($this->classes as $class) {
+        $classes[] = $class;
+      }
+    }
 
     $style = $this->controlStyle;
     if ($this->hidden) {

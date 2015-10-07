@@ -50,14 +50,15 @@ final class PhabricatorDaemonConsoleController
       $rows[] = array(
         $class,
         number_format($info['n']),
-        number_format((int)($info['duration'] / $info['n'])).' us',
+        pht('%s us', new PhutilNumber((int)($info['duration'] / $info['n']))),
       );
     }
 
     if ($failed) {
       // Add the time it takes to restart the daemons. This includes a guess
       // about other overhead of 2X.
-      $usage_total += PhutilDaemonOverseer::RESTART_WAIT * count($failed) * 2;
+      $restart_delay = PhutilDaemonHandle::getWaitBeforeRestart();
+      $usage_total += $restart_delay * count($failed) * 2;
       foreach ($failed as $failed_task) {
         $usage_start = min($usage_start, $failed_task->getFailureTime());
       }
@@ -119,7 +120,7 @@ final class PhabricatorDaemonConsoleController
     $completed_panel = new PHUIObjectBoxView();
     $completed_panel->setHeaderText(
       pht('Recently Completed Tasks (Last 15m)'));
-    $completed_panel->appendChild($completed_table);
+    $completed_panel->setTable($completed_table);
 
     $daemon_table = new PhabricatorDaemonLogListView();
     $daemon_table->setUser($viewer);
@@ -127,7 +128,7 @@ final class PhabricatorDaemonConsoleController
 
     $daemon_panel = new PHUIObjectBoxView();
     $daemon_panel->setHeaderText(pht('Active Daemons'));
-    $daemon_panel->appendChild($daemon_table);
+    $daemon_panel->setObjectList($daemon_table);
 
 
     $tasks = id(new PhabricatorWorkerLeaseQuery())
@@ -142,7 +143,7 @@ final class PhabricatorDaemonConsoleController
 
     $leased_panel = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Leased Tasks'))
-      ->appendChild($tasks_table);
+      ->setTable($tasks_table);
 
     $task_table = new PhabricatorWorkerActiveTask();
     $queued = queryfx_all(
@@ -174,7 +175,7 @@ final class PhabricatorDaemonConsoleController
 
     $queued_panel = new PHUIObjectBoxView();
     $queued_panel->setHeaderText(pht('Queued Tasks'));
-    $queued_panel->appendChild($queued_table);
+    $queued_panel->setTable($queued_table);
 
     $upcoming = id(new PhabricatorWorkerLeaseQuery())
       ->setLimit(10)
@@ -183,7 +184,7 @@ final class PhabricatorDaemonConsoleController
 
     $upcoming_panel = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Next In Queue'))
-      ->appendChild(
+      ->setTable(
         id(new PhabricatorDaemonTasksTableView())
           ->setTasks($upcoming)
           ->setNoDataString(pht('Task queue is empty.')));
@@ -199,7 +200,7 @@ final class PhabricatorDaemonConsoleController
 
     $triggers_panel = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Upcoming Triggers'))
-      ->appendChild($triggers_table);
+      ->setTable($triggers_table);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Console'));
@@ -221,7 +222,6 @@ final class PhabricatorDaemonConsoleController
       $nav,
       array(
         'title' => pht('Console'),
-        'device' => false,
       ));
   }
 
@@ -252,11 +252,11 @@ final class PhabricatorDaemonConsoleController
       ->setNoDataString(pht('There are no upcoming event triggers.'))
       ->setHeaders(
         array(
-          'ID',
-          'Clock',
-          'Action',
-          'Last',
-          'Next',
+          pht('ID'),
+          pht('Clock'),
+          pht('Action'),
+          pht('Last'),
+          pht('Next'),
         ))
       ->setColumnClasses(
         array(

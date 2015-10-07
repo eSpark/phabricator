@@ -2,9 +2,11 @@
 
 final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
 
+  public function getDefaultGroup() {
+    return self::GROUP_OTHER;
+  }
 
   protected function executeChecks() {
-
     if (phutil_is_windows()) {
       $bin_name = 'where';
     } else {
@@ -25,8 +27,9 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
 
     if (!Filesystem::binaryExists('diff')) {
       $message = pht(
-        "Without 'diff', Phabricator will not be able to generate or render ".
-        "diffs in multiple applications.");
+        "Without '%s', Phabricator will not be able to generate or render ".
+        "diffs in multiple applications.",
+        'diff');
       $this->raiseWarning('diff', $message);
     } else {
       $tmp_a = new TempFile();
@@ -40,12 +43,13 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
       list($err) = exec_manual('diff %s %s', $tmp_a, $tmp_b);
       if ($err) {
         $this->newIssue('bin.diff.same')
-          ->setName(pht("Unexpected 'diff' Behavior"))
+          ->setName(pht("Unexpected '%s' Behavior", 'diff'))
           ->setMessage(
             pht(
-              "The 'diff' binary on this system has unexpected behavior: ".
+              "The '%s' binary on this system has unexpected behavior: ".
               "it was expected to exit without an error code when passed ".
               "identical files, but exited with code %d.",
+              'diff',
               $err));
       }
 
@@ -55,9 +59,10 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
           ->setName(pht("Unexpected 'diff' Behavior"))
           ->setMessage(
             pht(
-              "The 'diff' binary on this system has unexpected behavior: ".
+              "The '%s' binary on this system has unexpected behavior: ".
               "it was expected to exit with a nonzero error code when passed ".
-              "differing files, but did not."));
+              "differing files, but did not.",
+              'diff'));
       }
     }
 
@@ -102,34 +107,28 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
           $version = trim(substr($stdout, strlen('git version ')));
           break;
         case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-          $minimum_version = null;
+          $minimum_version = '1.5';
           $bad_versions = array(
-            '1.7.1' => pht('This version of Subversion has a bug where '.
-                           '"svn diff -c N" does not work for files added '.
-                           'in rN (Subverison issue #2873), fixed in 1.7.2.'),);
+            '1.7.1' => pht(
+              'This version of Subversion has a bug where `%s` does not work '.
+              'for files added in rN (Subversion issue #2873), fixed in 1.7.2.',
+              'svn diff -c N'),
+          );
           list($err, $stdout, $stderr) = exec_manual('svn --version --quiet');
           $version = trim($stdout);
           break;
         case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
           $minimum_version = '1.9';
           $bad_versions = array(
-            '2.1' => pht('This version of Mercurial returns a bad exit code '.
-                         'after a successful pull.'),
-            '2.2' => pht('This version of Mercurial has a significant memory '.
-                         'leak, fixed in 2.2.1. Pushing fails with this '.
-                         'version as well; see T3046#54922.'),);
-          list($err, $stdout, $stderr) = exec_manual('hg --version --quiet');
-
-          // NOTE: At least on OSX, recent versions of Mercurial report this
-          // string in this format:
-          //
-          //   Mercurial Distributed SCM (version 3.1.1+20140916)
-
-          $matches = null;
-          $pattern = '/^Mercurial Distributed SCM \(version ([\d.]+)/m';
-          if (preg_match($pattern, $stdout, $matches)) {
-            $version = $matches[1];
-          }
+            '2.1' => pht(
+              'This version of Mercurial returns a bad exit code '.
+              'after a successful pull.'),
+            '2.2' => pht(
+              'This version of Mercurial has a significant memory leak, fixed '.
+              'in 2.2.1. Pushing fails with this version as well; see %s.',
+              'T3046#54922'),
+          );
+          $version = PhabricatorRepositoryVersion::getMercurialVersion();
           break;
       }
 
@@ -232,7 +231,6 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
         break;
       case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        break;
       case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
         $summary = pht(
           "The '%s' binary is version %s and Phabricator requires version ".
@@ -253,7 +251,6 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
   }
 
   private function raiseBadVersionWarning($binary, $bad_version) {
-
     switch ($binary) {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
         break;

@@ -14,8 +14,8 @@ final class PhrictionSearchEngine
   public function buildSavedQueryFromRequest(AphrontRequest $request) {
     $saved = new PhabricatorSavedQuery();
 
-    $saved->setParameter('status', $request->getArr('status'));
-    $saved->setParameter('order', $request->getArr('order'));
+    $saved->setParameter('status', $request->getStr('status'));
+    $saved->setParameter('order', $request->getStr('order'));
 
     return $saved;
   }
@@ -178,7 +178,11 @@ final class PhrictionSearchEngine
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No documents found.'));
+
+    return $result;
   }
 
 }

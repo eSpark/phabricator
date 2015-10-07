@@ -86,27 +86,38 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
   }
 
   protected function checkLease() {
-    if ($this->leaseOwner) {
-      $current_server_time = $this->serverTime + (time() - $this->localTime);
-      if ($current_server_time >= $this->leaseExpires) {
-        $id = $this->getID();
-        $class = $this->getTaskClass();
-        throw new Exception(
-          "Trying to update Task {$id} ({$class}) after lease expiration!");
-      }
+    $owner = $this->leaseOwner;
+
+    if (!$owner) {
+      return;
+    }
+
+    if ($owner == PhabricatorWorker::YIELD_OWNER) {
+      return;
+    }
+
+    $current_server_time = $this->serverTime + (time() - $this->localTime);
+    if ($current_server_time >= $this->leaseExpires) {
+      throw new Exception(
+        pht(
+          'Trying to update Task %d (%s) after lease expiration!',
+          $this->getID(),
+          $this->getTaskClass()));
     }
   }
 
   public function delete() {
     throw new Exception(
-      'Active tasks can not be deleted directly. '.
-      'Use archiveTask() to move tasks to the archive.');
+      pht(
+        'Active tasks can not be deleted directly. '.
+        'Use %s to move tasks to the archive.',
+        'archiveTask()'));
   }
 
   public function archiveTask($result, $duration) {
     if ($this->getID() === null) {
       throw new Exception(
-        "Attempting to archive a task which hasn't been save()d!");
+        pht("Attempting to archive a task which hasn't been saved!"));
     }
 
     $this->checkLease();
@@ -138,14 +149,16 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
     $worker = null;
     try {
       $worker = $this->getWorkerInstance();
+      $worker->setCurrentWorkerTask($this);
 
       $maximum_failures = $worker->getMaximumRetryCount();
       if ($maximum_failures !== null) {
         if ($this->getFailureCount() > $maximum_failures) {
-          $id = $this->getID();
           throw new PhabricatorWorkerPermanentFailureException(
-            "Task {$id} has exceeded the maximum number of failures ".
-            "({$maximum_failures}).");
+            pht(
+              'Task % has exceeded the maximum number of failures (%d).',
+              $this->getID(),
+              $maximum_failures));
         }
       }
 
@@ -170,6 +183,8 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
       $result->setExecutionException($ex);
     } catch (PhabricatorWorkerYieldException $ex) {
       $this->setExecutionException($ex);
+
+      $this->setLeaseOwner(PhabricatorWorker::YIELD_OWNER);
 
       $retry = $ex->getDuration();
       $retry = max($retry, 5);
@@ -202,13 +217,14 @@ final class PhabricatorWorkerActiveTask extends PhabricatorWorkerTask {
     // so execute it out here and just let the exception escape.
     if ($did_succeed) {
       foreach ($worker->getQueuedTasks() as $task) {
-        list($class, $data) = $task;
-        PhabricatorWorker::scheduleTask(
-          $class,
-          $data,
-          array(
-            'priority' => $this->getPriority(),
-          ));
+        list($class, $data, $options) = $task;
+
+        // Default the new task priority to our own priority.
+        $options = $options + array(
+          'priority' => (int)$this->getPriority(),
+        );
+
+        PhabricatorWorker::scheduleTask($class, $data, $options);
       }
     }
 

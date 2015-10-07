@@ -4,7 +4,10 @@ final class PassphraseCredential extends PassphraseDAO
   implements
     PhabricatorApplicationTransactionInterface,
     PhabricatorPolicyInterface,
-    PhabricatorDestructibleInterface {
+    PhabricatorFlaggableInterface,
+    PhabricatorSubscribableInterface,
+    PhabricatorDestructibleInterface,
+    PhabricatorSpacesInterface {
 
   protected $name;
   protected $credentialType;
@@ -17,17 +20,29 @@ final class PassphraseCredential extends PassphraseDAO
   protected $isDestroyed;
   protected $isLocked = 0;
   protected $allowConduit = 0;
+  protected $authorPHID;
+  protected $spacePHID;
 
   private $secret = self::ATTACHABLE;
 
   public static function initializeNewCredential(PhabricatorUser $actor) {
+    $app = id(new PhabricatorApplicationQuery())
+      ->setViewer($actor)
+      ->withClasses(array('PhabricatorPassphraseApplication'))
+      ->executeOne();
+
+    $view_policy = $app->getPolicy(PassphraseDefaultViewCapability::CAPABILITY);
+    $edit_policy = $app->getPolicy(PassphraseDefaultEditCapability::CAPABILITY);
+
     return id(new PassphraseCredential())
       ->setName('')
       ->setUsername('')
       ->setDescription('')
       ->setIsDestroyed(0)
-      ->setViewPolicy($actor->getPHID())
-      ->setEditPolicy($actor->getPHID());
+      ->setAuthorPHID($actor->getPHID())
+      ->setViewPolicy($view_policy)
+      ->setEditPolicy($edit_policy)
+      ->setSpacePHID($actor->getDefaultSpacePHID());
   }
 
   public function getMonogram() {
@@ -133,6 +148,23 @@ final class PassphraseCredential extends PassphraseDAO
     return null;
   }
 
+
+/* -(  PhabricatorSubscribableInterface  )----------------------------------- */
+
+
+  public function isAutomaticallySubscribed($phid) {
+    return false;
+  }
+
+  public function shouldShowSubscribersProperty() {
+    return true;
+  }
+
+  public function shouldAllowSubscription($phid) {
+    return true;
+  }
+
+
 /* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
   public function destroyObjectPermanently(
@@ -148,4 +180,13 @@ final class PassphraseCredential extends PassphraseDAO
       $this->delete();
     $this->saveTransaction();
   }
+
+
+/* -(  PhabricatorSpacesInterface  )----------------------------------------- */
+
+
+  public function getSpacePHID() {
+    return $this->spacePHID;
+  }
+
 }

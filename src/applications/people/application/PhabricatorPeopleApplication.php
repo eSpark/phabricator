@@ -46,6 +46,12 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
         '(query/(?P<key>[^/]+)/)?' => 'PhabricatorPeopleListController',
         'logs/(?:query/(?P<queryKey>[^/]+)/)?'
           => 'PhabricatorPeopleLogsController',
+        'invite/' => array(
+          '(?:query/(?P<queryKey>[^/]+)/)?'
+            => 'PhabricatorPeopleInviteListController',
+          'send/'
+            => 'PhabricatorPeopleInviteSendController',
+        ),
         'approve/(?P<id>[1-9]\d*)/' => 'PhabricatorPeopleApproveController',
         '(?P<via>disapprove)/(?P<id>[1-9]\d*)/'
           => 'PhabricatorPeopleDisableController',
@@ -67,8 +73,6 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
         => 'PhabricatorPeopleProfileController',
       '/p/(?P<username>[\w._-]+)/calendar/'
         => 'PhabricatorPeopleCalendarController',
-      '/p/(?P<username>[\w._-]+)/feed/'
-        => 'PhabricatorPeopleFeedController',
     );
   }
 
@@ -184,6 +188,12 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
     }
 
     return $items;
+  }
+
+  public function getApplicationSearchDocumentTypes() {
+    return array(
+      PhabricatorPeopleUserPHIDType::TYPECONST,
+    );
   }
 
 }

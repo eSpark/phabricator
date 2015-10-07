@@ -1,24 +1,18 @@
 <?php
 
-abstract class PhabricatorPHIDType {
+abstract class PhabricatorPHIDType extends Phobject {
 
   final public function getTypeConstant() {
-    $class = new ReflectionClass($this);
-
-    $const = $class->getConstant('TYPECONST');
-    if ($const === false) {
-      throw new Exception(
-        pht(
-          'PHIDType class "%s" must define an TYPECONST property.',
-          get_class($this)));
-    }
+    $const = $this->getPhobjectClassConstant('TYPECONST');
 
     if (!is_string($const) || !preg_match('/^[A-Z]{4}$/', $const)) {
       throw new Exception(
         pht(
-          'PHIDType class "%s" has an invalid TYPECONST property. PHID '.
+          '%s class "%s" has an invalid %s property. PHID '.
           'constants must be a four character uppercase string.',
-          get_class($this)));
+          __CLASS__,
+          get_class($this),
+          'TYPECONST'));
     }
 
     return $const;
@@ -31,6 +25,13 @@ abstract class PhabricatorPHIDType {
   }
 
   public function getTypeIcon() {
+    // Default to the application icon if the type doesn't specify one.
+    $application_class = $this->getPHIDTypeApplicationClass();
+    if ($application_class) {
+      $application = newv($application_class, array());
+      return $application->getFontIcon();
+    }
+
     return null;
   }
 
@@ -147,34 +148,11 @@ abstract class PhabricatorPHIDType {
    *
    * @return dict<string, PhabricatorPHIDType> Map of type constants to types.
    */
-  public static function getAllTypes() {
-    static $types;
-    if ($types === null) {
-      $objects = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->loadObjects();
-
-      $map = array();
-      $original = array();
-      foreach ($objects as $object) {
-        $type = $object->getTypeConstant();
-        if (isset($map[$type])) {
-          $that_class = $original[$type];
-          $this_class = get_class($object);
-          throw new Exception(
-            "Two PhabricatorPHIDType classes ({$that_class}, {$this_class}) ".
-            "both handle PHID type '{$type}'. A type may be handled by only ".
-            "one class.");
-        }
-
-        $original[$type] = get_class($object);
-        $map[$type] = $object;
-      }
-
-      $types = $map;
-    }
-
-    return $types;
+  final public static function getAllTypes() {
+    return id(new PhutilClassMapQuery())
+      ->setAncestorClass(__CLASS__)
+      ->setUniqueMethod('getTypeConstant')
+      ->execute();
   }
 
 

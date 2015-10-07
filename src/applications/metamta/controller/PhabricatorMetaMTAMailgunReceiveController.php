@@ -13,9 +13,11 @@ final class PhabricatorMetaMTAMailgunReceiveController
     $timestamp = $request->getStr('timestamp');
     $token = $request->getStr('token');
     $sig = $request->getStr('signature');
-    return hash_hmac('sha256', $timestamp.$token, $api_key) == $sig;
+    $hash = hash_hmac('sha256', $timestamp.$token, $api_key);
 
+    return phutil_hashes_are_identical($sig, $hash);
   }
+
   public function processRequest() {
 
     // No CSRF for Mailgun.
@@ -23,7 +25,7 @@ final class PhabricatorMetaMTAMailgunReceiveController
 
     if (!$this->verifyMessage()) {
       throw new Exception(
-        'Mail signature is not valid. Check your Mailgun API key.');
+        pht('Mail signature is not valid. Check your Mailgun API key.'));
     }
 
     $request = $this->getRequest();
@@ -56,7 +58,7 @@ final class PhabricatorMetaMTAMailgunReceiveController
         $file = PhabricatorFile::newFromPHPUpload(
           $file_raw,
           array(
-            'authorPHID' => $user->getPHID(),
+            'viewPolicy' => PhabricatorPolicies::POLICY_NOONE,
           ));
         $file_phids[] = $file->getPHID();
       } catch (Exception $ex) {

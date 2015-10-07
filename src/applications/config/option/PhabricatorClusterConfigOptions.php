@@ -15,6 +15,10 @@ final class PhabricatorClusterConfigOptions
     return 'fa-sitemap';
   }
 
+  public function getGroup() {
+    return 'core';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption('cluster.addresses', 'list<string>', array())
@@ -65,9 +69,10 @@ final class PhabricatorClusterConfigOptions
             'hosting providers running multi-tenant clusters.'.
             "\n\n".
             'If you provide an instance identifier here (normally by '.
-            'injecting it with a `PhabricatorConfigSiteSource`), Phabricator '.
-            'will pass it to subprocesses and commit hooks in the '.
-            '`PHABRICATOR_INSTANCE` environmental variable.')),
+            'injecting it with a `%s`), Phabricator will pass it to '.
+            'subprocesses and commit hooks in the `%s` environmental variable.',
+            'PhabricatorConfigSiteSource',
+            'PHABRICATOR_INSTANCE')),
     );
   }
 

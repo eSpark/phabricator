@@ -13,7 +13,7 @@ abstract class DiffusionQueryConduitAPIMethod
 
   public function getMethodStatusDescription() {
     return pht(
-      'See T2784 - migrating diffusion working copy calls to conduit methods. '.
+      'See T2784 - migrating Diffusion working copy calls to conduit methods. '.
       'Until that task is completed (and possibly after) these methods are '.
       'unstable.');
   }
@@ -34,7 +34,7 @@ abstract class DiffusionQueryConduitAPIMethod
     return $this->getDiffusionRequest()->getRepository();
   }
 
-  final public function defineErrorTypes() {
+  final protected function defineErrorTypes() {
     return $this->defineCustomErrorTypes() +
       array(
         'ERR-UNKNOWN-REPOSITORY' =>
@@ -53,7 +53,7 @@ abstract class DiffusionQueryConduitAPIMethod
     return array();
   }
 
-  final public function defineParamTypes() {
+  final protected function defineParamTypes() {
     return $this->defineCustomParamTypes() +
       array(
         'callsign' => 'required string',

@@ -9,7 +9,8 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
     PhabricatorPolicyInterface,
     PhabricatorProjectInterface,
     PhabricatorDestructibleInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorSpacesInterface {
 
   protected $title;
   protected $authorPHID;
@@ -19,6 +20,11 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
   protected $viewPolicy;
   protected $editPolicy;
   protected $mailKey;
+  protected $status;
+  protected $spacePHID;
+
+  const STATUS_ACTIVE = 'active';
+  const STATUS_ARCHIVED = 'archived';
 
   private $content = self::ATTACHABLE;
   private $rawContent = self::ATTACHABLE;
@@ -34,19 +40,33 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
 
     return id(new PhabricatorPaste())
       ->setTitle('')
+      ->setStatus(self::STATUS_ACTIVE)
       ->setAuthorPHID($actor->getPHID())
       ->setViewPolicy($view_policy)
-      ->setEditPolicy($edit_policy);
+      ->setEditPolicy($edit_policy)
+      ->setSpacePHID($actor->getDefaultSpacePHID());
+  }
+
+  public static function getStatusNameMap() {
+    return array(
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
+    );
   }
 
   public function getURI() {
-    return '/P'.$this->getID();
+    return '/'.$this->getMonogram();
+  }
+
+  public function getMonogram() {
+    return 'P'.$this->getID();
   }
 
   protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
+        'status' => 'text32',
         'title' => 'text255',
         'language' => 'text64',
         'mailKey' => 'bytes20',
@@ -76,6 +96,10 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
       PhabricatorPastePastePHIDType::TYPECONST);
+  }
+
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
   }
 
   public function save() {
@@ -172,7 +196,7 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
 
     if ($this->filePHID) {
       $file = id(new PhabricatorFileQuery())
-        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->setViewer($engine->getViewer())
         ->withPHIDs(array($this->filePHID))
         ->executeOne();
       if ($file) {
@@ -204,6 +228,14 @@ final class PhabricatorPaste extends PhabricatorPasteDAO
     AphrontRequest $request) {
 
     return $timeline;
+  }
+
+
+/* -(  PhabricatorSpacesInterface  )----------------------------------------- */
+
+
+  public function getSpacePHID() {
+    return $this->spacePHID;
   }
 
 }

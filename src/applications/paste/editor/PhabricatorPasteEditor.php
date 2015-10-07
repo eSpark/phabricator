@@ -3,8 +3,6 @@
 final class PhabricatorPasteEditor
   extends PhabricatorApplicationTransactionEditor {
 
-  private $pasteFile;
-
   public function getEditorApplicationClass() {
     return 'PhabricatorPasteApplication';
   }
@@ -35,6 +33,7 @@ final class PhabricatorPasteEditor
     $types[] = PhabricatorPasteTransaction::TYPE_CONTENT;
     $types[] = PhabricatorPasteTransaction::TYPE_TITLE;
     $types[] = PhabricatorPasteTransaction::TYPE_LANGUAGE;
+    $types[] = PhabricatorPasteTransaction::TYPE_STATUS;
     $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
     $types[] = PhabricatorTransactions::TYPE_EDIT_POLICY;
     $types[] = PhabricatorTransactions::TYPE_COMMENT;
@@ -53,6 +52,8 @@ final class PhabricatorPasteEditor
         return $object->getTitle();
       case PhabricatorPasteTransaction::TYPE_LANGUAGE:
         return $object->getLanguage();
+      case PhabricatorPasteTransaction::TYPE_STATUS:
+        return $object->getStatus();
     }
   }
 
@@ -64,6 +65,7 @@ final class PhabricatorPasteEditor
       case PhabricatorPasteTransaction::TYPE_CONTENT:
       case PhabricatorPasteTransaction::TYPE_TITLE:
       case PhabricatorPasteTransaction::TYPE_LANGUAGE:
+      case PhabricatorPasteTransaction::TYPE_STATUS:
         return $xaction->getNewValue();
     }
   }
@@ -82,15 +84,8 @@ final class PhabricatorPasteEditor
       case PhabricatorPasteTransaction::TYPE_LANGUAGE:
         $object->setLanguage($xaction->getNewValue());
         return;
-      case PhabricatorTransactions::TYPE_VIEW_POLICY:
-        $object->setViewPolicy($xaction->getNewValue());
-        return;
-      case PhabricatorTransactions::TYPE_EDIT_POLICY:
-        $object->setEditPolicy($xaction->getNewValue());
-        return;
-      case PhabricatorTransactions::TYPE_COMMENT:
-      case PhabricatorTransactions::TYPE_SUBSCRIBERS:
-      case PhabricatorTransactions::TYPE_EDGE:
+      case PhabricatorPasteTransaction::TYPE_STATUS:
+        $object->setStatus($xaction->getNewValue());
         return;
     }
 
@@ -105,11 +100,7 @@ final class PhabricatorPasteEditor
       case PhabricatorPasteTransaction::TYPE_CONTENT:
       case PhabricatorPasteTransaction::TYPE_TITLE:
       case PhabricatorPasteTransaction::TYPE_LANGUAGE:
-      case PhabricatorTransactions::TYPE_VIEW_POLICY:
-      case PhabricatorTransactions::TYPE_EDIT_POLICY:
-      case PhabricatorTransactions::TYPE_COMMENT:
-      case PhabricatorTransactions::TYPE_SUBSCRIBERS:
-      case PhabricatorTransactions::TYPE_EDGE:
+      case PhabricatorPasteTransaction::TYPE_STATUS:
         return;
     }
 
@@ -149,7 +140,18 @@ final class PhabricatorPasteEditor
   protected function getMailTo(PhabricatorLiskDAO $object) {
     return array(
       $object->getAuthorPHID(),
-      $this->requireActor()->getPHID(),
+      $this->getActingAsPHID(),
+    );
+  }
+
+  public function getMailTagsMap() {
+    return array(
+      PhabricatorPasteTransaction::MAILTAG_CONTENT =>
+        pht('Paste title, language or text changes.'),
+      PhabricatorPasteTransaction::MAILTAG_COMMENT =>
+        pht('Someone comments on a paste.'),
+      PhabricatorPasteTransaction::MAILTAG_OTHER =>
+        pht('Other paste activity not listed above occurs.'),
     );
   }
 

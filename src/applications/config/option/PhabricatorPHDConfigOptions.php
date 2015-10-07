@@ -15,23 +15,25 @@ final class PhabricatorPHDConfigOptions
     return 'fa-pied-piper-alt';
   }
 
+  public function getGroup() {
+    return 'core';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption('phd.pid-directory', 'string', '/var/tmp/phd/pid')
         ->setDescription(
-          pht(
-            'Directory that phd should use to track running daemons.')),
+          pht('Directory that phd should use to track running daemons.')),
       $this->newOption('phd.log-directory', 'string', '/var/tmp/phd/log')
         ->setDescription(
-          pht(
-            'Directory that the daemons should use to store log files.')),
-      $this->newOption('phd.start-taskmasters', 'int', 4)
-        ->setSummary(pht('Number of TaskMaster daemons to start by default.'))
+          pht('Directory that the daemons should use to store log files.')),
+      $this->newOption('phd.taskmasters', 'int', 4)
+        ->setSummary(pht('Maximum taskmaster daemon pool size.'))
         ->setDescription(
           pht(
-            "Number of 'TaskMaster' daemons that 'phd start' should start. ".
-            "You can raise this if you have a task backlog, or explicitly ".
-            "launch more with 'phd launch <N> taskmaster'.")),
+            'Maximum number of taskmaster daemons to run at once. Raising '.
+            'this can increase the maximum throughput of the task queue. The '.
+            'pool will automatically scale down when unutilized.')),
       $this->newOption('phd.verbose', 'bool', false)
         ->setBoolOptions(
           array(
@@ -43,8 +45,10 @@ final class PhabricatorPHDConfigOptions
           pht(
             "Launch daemons in 'verbose' mode by default. This creates a lot ".
             "of output, but can help debug issues. Daemons launched in debug ".
-            "mode with 'phd debug' are always launched in verbose mode. See ".
-            "also 'phd.trace'.")),
+            "mode with '%s' are always launched in verbose mode. ".
+            "See also '%s'.",
+            'phd debug',
+            'phd.trace')),
       $this->newOption('phd.user', 'string', null)
         ->setLocked(true)
         ->setSummary(pht('System user to run daemons as.'))
@@ -65,8 +69,10 @@ final class PhabricatorPHDConfigOptions
           pht(
             "Launch daemons in 'trace' mode by default. This creates an ".
             "ENORMOUS amount of output, but can help debug issues. Daemons ".
-            "launched in debug mode with 'phd debug' are always launched in ".
-            "trace mdoe. See also 'phd.verbose'.")),
+            "launched in debug mode with '%s' are always launched in ".
+            "trace mode. See also '%s'.",
+            'phd debug',
+            'phd.verbose')),
       $this->newOption('phd.variant-config', 'list<string>', array())
         ->setDescription(
           pht(
@@ -74,6 +80,17 @@ final class PhabricatorPHDConfigOptions
             'and the daemons. Primarily, this is a way to suppress the '.
             '"Daemons and Web Have Different Config" setup issue on a per '.
             'config key basis.')),
+      $this->newOption('phd.garbage-collection', 'wild', array())
+        ->setLocked(true)
+        ->setLockedMessage(
+          pht(
+            'This option can not be edited from the web UI. Use %s to adjust '.
+            'garbage collector policies.',
+            phutil_tag('tt', array(), 'bin/garbage set-policy')))
+        ->setSummary(pht('Retention policies for garbage collection.'))
+        ->setDescription(
+          pht(
+            'Customizes retention policies for garbage collectors.')),
     );
   }
 

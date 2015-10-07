@@ -8,7 +8,9 @@
  * @task  fact  Fact Integration
  * @task  meta  Application Management
  */
-abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
+abstract class PhabricatorApplication
+  extends Phobject
+  implements PhabricatorPolicyInterface {
 
   const MAX_STATUS_ITEMS      = 100;
 
@@ -17,7 +19,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
   const GROUP_ADMIN           = 'admin';
   const GROUP_DEVELOPER       = 'developer';
 
-  public static function getApplicationGroups() {
+  final public static function getApplicationGroups() {
     return array(
       self::GROUP_CORE          => pht('Core Applications'),
       self::GROUP_UTILITIES     => pht('Utilities'),
@@ -29,13 +31,13 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
 
 /* -(  Application Information  )-------------------------------------------- */
 
-  public abstract function getName();
+  abstract public function getName();
 
   public function getShortDescription() {
-    return $this->getName().' Application';
+    return pht('%s Application', $this->getName());
   }
 
-  public function isInstalled() {
+  final public function isInstalled() {
     if (!$this->canUninstall()) {
       return true;
     }
@@ -133,7 +135,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return true;
   }
 
-  public function getPHID() {
+  final public function getPHID() {
     return 'PHID-APPS-'.get_class($this);
   }
 
@@ -145,7 +147,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return null;
   }
 
-  public function getApplicationURI($path = '') {
+  final public function getApplicationURI($path = '') {
     return $this->getBaseURI().ltrim($path, '/');
   }
 
@@ -169,8 +171,48 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return null;
   }
 
-  public function getHelpURI() {
-    return null;
+  final public function getHelpMenuItems(PhabricatorUser $viewer) {
+    $items = array();
+
+    $articles = $this->getHelpDocumentationArticles($viewer);
+    if ($articles) {
+      $items[] = id(new PHUIListItemView())
+        ->setType(PHUIListItemView::TYPE_LABEL)
+        ->setName(pht('%s Documentation', $this->getName()));
+      foreach ($articles as $article) {
+        $item = id(new PHUIListItemView())
+          ->setName($article['name'])
+          ->setIcon('fa-book')
+          ->setHref($article['href']);
+
+        $items[] = $item;
+      }
+    }
+
+    $command_specs = $this->getMailCommandObjects();
+    if ($command_specs) {
+      $items[] = id(new PHUIListItemView())
+        ->setType(PHUIListItemView::TYPE_LABEL)
+        ->setName(pht('Email Help'));
+      foreach ($command_specs as $key => $spec) {
+        $object = $spec['object'];
+
+        $class = get_class($this);
+        $href = '/applications/mailcommands/'.$class.'/'.$key.'/';
+
+        $item = id(new PHUIListItemView())
+          ->setName($spec['name'])
+          ->setIcon('fa-envelope-o')
+          ->setHref($href);
+        $items[] = $item;
+      }
+    }
+
+    return $items;
+  }
+
+  public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
+    return array();
   }
 
   public function getOverview() {
@@ -185,11 +227,23 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return array();
   }
 
+  public function getQuicksandURIPatternBlacklist() {
+    return array();
+  }
+
+  public function getMailCommandObjects() {
+    return array();
+  }
+
 
 /* -(  URI Routing  )-------------------------------------------------------- */
 
 
   public function getRoutes() {
+    return array();
+  }
+
+  public function getResourceRoutes() {
     return array();
   }
 
@@ -201,12 +255,12 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return false;
   }
 
-  protected function getInboundEmailSupportLink() {
+  final protected function getInboundEmailSupportLink() {
     return PhabricatorEnv::getDocLink('Configuring Inbound Email');
   }
 
   public function getAppEmailBlurb() {
-    throw new Exception('Not Implemented.');
+    throw new PhutilMethodNotImplementedException();
   }
 
 
@@ -238,7 +292,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
    * @return string
    * @task ui
    */
-  public static function formatStatusCount(
+  final public static function formatStatusCount(
     $count,
     $limit_string = '%s',
     $base_string = '%d') {
@@ -311,9 +365,9 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
 /* -(  Application Management  )--------------------------------------------- */
 
 
-  public static function getByClass($class_name) {
+  final public static function getByClass($class_name) {
     $selected = null;
-    $applications = PhabricatorApplication::getAllApplications();
+    $applications = self::getAllApplications();
 
     foreach ($applications as $application) {
       if (get_class($application) == $class_name) {
@@ -323,23 +377,23 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     }
 
     if (!$selected) {
-      throw new Exception("No application '{$class_name}'!");
+      throw new Exception(pht("No application '%s'!", $class_name));
     }
 
     return $selected;
   }
 
-  public static function getAllApplications() {
+  final public static function getAllApplications() {
     static $applications;
 
     if ($applications === null) {
-      $apps = id(new PhutilSymbolLoader())
+      $apps = id(new PhutilClassMapQuery())
         ->setAncestorClass(__CLASS__)
-        ->loadObjects();
+        ->setSortMethod('getApplicationOrder')
+        ->execute();
 
       // Reorder the applications into "application order". Notably, this
       // ensures their event handlers register in application order.
-      $apps = msort($apps, 'getApplicationOrder');
       $apps = mgroup($apps, 'getApplicationGroup');
 
       $group_order = array_keys(self::getApplicationGroups());
@@ -353,7 +407,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return $applications;
   }
 
-  public static function getAllInstalledApplications() {
+  final public static function getAllInstalledApplications() {
     $all_applications = self::getAllApplications();
     $apps = array();
     foreach ($all_applications as $app) {
@@ -378,7 +432,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
    * @return bool   True if the class is installed.
    * @task meta
    */
-  public static function isClassInstalled($class) {
+  final public static function isClassInstalled($class) {
     return self::getByClass($class)->isInstalled();
   }
 
@@ -395,18 +449,33 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
    * @return bool True if the class is installed for the viewer.
    * @task meta
    */
-  public static function isClassInstalledForViewer(
+  final public static function isClassInstalledForViewer(
     $class,
     PhabricatorUser $viewer) {
 
-    if (!self::isClassInstalled($class)) {
-      return false;
+    if ($viewer->isOmnipotent()) {
+      return true;
     }
 
-    return PhabricatorPolicyFilter::hasCapability(
-      $viewer,
-      self::getByClass($class),
-      PhabricatorPolicyCapability::CAN_VIEW);
+    $cache = PhabricatorCaches::getRequestCache();
+    $viewer_phid = $viewer->getPHID();
+    $key = 'app.'.$class.'.installed.'.$viewer_phid;
+
+    $result = $cache->getKey($key);
+    if ($result === null) {
+      if (!self::isClassInstalled($class)) {
+        $result = false;
+      } else {
+        $result = PhabricatorPolicyFilter::hasCapability(
+          $viewer,
+          self::getByClass($class),
+          PhabricatorPolicyCapability::CAN_VIEW);
+      }
+
+      $cache->setKey($key, $result);
+    }
+
+    return $result;
   }
 
 
@@ -454,7 +523,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return array();
   }
 
-  private function getCustomPolicySetting($capability) {
+  final private function getCustomPolicySetting($capability) {
     if (!$this->isCapabilityEditable($capability)) {
       return null;
     }
@@ -480,15 +549,15 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
   }
 
 
-  private function getCustomCapabilitySpecification($capability) {
+  final private function getCustomCapabilitySpecification($capability) {
     $custom = $this->getCustomCapabilities();
     if (!isset($custom[$capability])) {
-      throw new Exception("Unknown capability '{$capability}'!");
+      throw new Exception(pht("Unknown capability '%s'!", $capability));
     }
     return $custom[$capability];
   }
 
-  public function getCapabilityLabel($capability) {
+  final public function getCapabilityLabel($capability) {
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         return pht('Can Use Application');
@@ -504,7 +573,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     return null;
   }
 
-  public function isCapabilityEditable($capability) {
+  final public function isCapabilityEditable($capability) {
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         return $this->canUninstall();
@@ -516,7 +585,7 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
     }
   }
 
-  public function getCapabilityCaption($capability) {
+  final public function getCapabilityCaption($capability) {
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         if (!$this->canUninstall()) {
@@ -532,6 +601,38 @@ abstract class PhabricatorApplication implements PhabricatorPolicyInterface {
         $spec = $this->getCustomCapabilitySpecification($capability);
         return idx($spec, 'caption');
     }
+  }
+
+  final public function getCapabilityTemplatePHIDType($capability) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return null;
+    }
+
+    $spec = $this->getCustomCapabilitySpecification($capability);
+    return idx($spec, 'template');
+  }
+
+  final public function getDefaultObjectTypePolicyMap() {
+    $map = array();
+
+    foreach ($this->getCustomCapabilities() as $capability => $spec) {
+      if (empty($spec['template'])) {
+        continue;
+      }
+      if (empty($spec['capability'])) {
+        continue;
+      }
+      $default = $this->getPolicy($capability);
+      $map[$spec['template']][$spec['capability']] = $default;
+    }
+
+    return $map;
+  }
+
+  public function getApplicationSearchDocumentTypes() {
+    return array();
   }
 
 }

@@ -8,11 +8,10 @@ final class DifferentialCreateDiffConduitAPIMethod
   }
 
   public function getMethodDescription() {
-    return 'Create a new Differential diff.';
+    return pht('Create a new Differential diff.');
   }
 
-  public function defineParamTypes() {
-
+  protected function defineParamTypes() {
     $vcs_const = $this->formatStringConstants(
       array(
         'svn',
@@ -27,7 +26,6 @@ final class DifferentialCreateDiffConduitAPIMethod
         'okay',
         'warn',
         'fail',
-        'postponed',
       ));
 
     return array(
@@ -40,7 +38,6 @@ final class DifferentialCreateDiffConduitAPIMethod
       'sourceControlPath'         => 'required string',
       'sourceControlBaseRevision' => 'required string',
       'creationMethod'            => 'optional string',
-      'arcanistProject'           => 'optional string',
       'lintStatus'                => 'required '.$status_const,
       'unitStatus'                => 'required '.$status_const,
       'repositoryPHID'            => 'optional phid',
@@ -51,13 +48,8 @@ final class DifferentialCreateDiffConduitAPIMethod
     );
   }
 
-  public function defineReturnType() {
+  protected function defineReturnType() {
     return 'nonempty dict';
-  }
-
-  public function defineErrorTypes() {
-    return array(
-    );
   }
 
   protected function execute(ConduitAPIRequest $request) {
@@ -89,21 +81,6 @@ final class DifferentialCreateDiffConduitAPIMethod
       }
     }
 
-    $project_name = $request->getValue('arcanistProject');
-    $project_phid = null;
-    if ($project_name) {
-      $arcanist_project = id(new PhabricatorRepositoryArcanistProject())
-        ->loadOneWhere(
-          'name = %s',
-          $project_name);
-      if (!$arcanist_project) {
-        $arcanist_project = new PhabricatorRepositoryArcanistProject();
-        $arcanist_project->setName($project_name);
-        $arcanist_project->save();
-      }
-      $project_phid = $arcanist_project->getPHID();
-    }
-
     switch ($request->getValue('lintStatus')) {
       case 'skip':
         $lint_status = DifferentialLintStatus::LINT_SKIP;
@@ -116,9 +93,6 @@ final class DifferentialCreateDiffConduitAPIMethod
         break;
       case 'fail':
         $lint_status = DifferentialLintStatus::LINT_FAIL;
-        break;
-      case 'postponed':
-        $lint_status = DifferentialLintStatus::LINT_POSTPONED;
         break;
       case 'none':
       default:
@@ -139,9 +113,6 @@ final class DifferentialCreateDiffConduitAPIMethod
       case 'fail':
         $unit_status = DifferentialUnitStatus::UNIT_FAIL;
         break;
-      case 'postponed':
-        $unit_status = DifferentialUnitStatus::UNIT_POSTPONED;
-        break;
       case 'none':
       default:
         $unit_status = DifferentialUnitStatus::UNIT_NONE;
@@ -161,13 +132,15 @@ final class DifferentialCreateDiffConduitAPIMethod
       'sourceControlPath' => $request->getValue('sourceControlPath'),
       'sourceControlBaseRevision' =>
         $request->getValue('sourceControlBaseRevision'),
-      'arcanistProjectPHID' => $project_phid,
       'lintStatus' => $lint_status,
-      'unitStatus' => $unit_status,);
+      'unitStatus' => $unit_status,
+    );
 
-    $xactions = array(id(new DifferentialTransaction())
-      ->setTransactionType(DifferentialDiffTransaction::TYPE_DIFF_CREATE)
-      ->setNewValue($diff_data_dict),);
+    $xactions = array(
+      id(new DifferentialTransaction())
+        ->setTransactionType(DifferentialDiffTransaction::TYPE_DIFF_CREATE)
+        ->setNewValue($diff_data_dict),
+    );
 
     id(new DifferentialDiffEditor())
       ->setActor($viewer)
@@ -180,7 +153,8 @@ final class DifferentialCreateDiffConduitAPIMethod
 
     return array(
       'diffid' => $diff->getID(),
-      'uri'    => $uri,
+      'phid' => $diff->getPHID(),
+      'uri' => $uri,
     );
   }
 

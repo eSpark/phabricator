@@ -7,6 +7,11 @@ final class PhortuneCartSearchEngine
   private $account;
   private $subscription;
 
+  public function canUseInPanelContext() {
+    // These only make sense in an account or merchant context.
+    return false;
+  }
+
   public function setAccount(PhortuneAccount $account) {
     $this->account = $account;
     return $this;
@@ -50,15 +55,7 @@ final class PhortuneCartSearchEngine
 
   public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
     $query = id(new PhortuneCartQuery())
-      ->needPurchases(true)
-      ->withStatuses(
-        array(
-          PhortuneCart::STATUS_PURCHASING,
-          PhortuneCart::STATUS_CHARGED,
-          PhortuneCart::STATUS_HOLD,
-          PhortuneCart::STATUS_REVIEW,
-          PhortuneCart::STATUS_PURCHASED,
-        ));
+      ->needPurchases(true);
 
     $viewer = $this->requireViewer();
 
@@ -102,6 +99,19 @@ final class PhortuneCartSearchEngine
       $query->withSubscriptionPHIDs(array($subscription->getPHID()));
     }
 
+    if ($saved->getParameter('invoices')) {
+      $query->withInvoices(true);
+    } else {
+      $query->withStatuses(
+        array(
+          PhortuneCart::STATUS_PURCHASING,
+          PhortuneCart::STATUS_CHARGED,
+          PhortuneCart::STATUS_HOLD,
+          PhortuneCart::STATUS_REVIEW,
+          PhortuneCart::STATUS_PURCHASED,
+        ));
+    }
+
     return $query;
   }
 
@@ -113,9 +123,9 @@ final class PhortuneCartSearchEngine
     $merchant = $this->getMerchant();
     $account = $this->getAccount();
     if ($merchant) {
-      return '/phortune/merchant/'.$merchant->getID().'/order/'.$path;
+      return '/phortune/merchant/orders/'.$merchant->getID().'/'.$path;
     } else if ($account) {
-      return '/phortune/'.$account->getID().'/order/';
+      return '/phortune/'.$account->getID().'/order/'.$path;
     } else {
       return '/phortune/order/'.$path;
     }
@@ -123,7 +133,8 @@ final class PhortuneCartSearchEngine
 
   protected function getBuiltinQueryNames() {
     $names = array(
-      'all' => pht('All Orders'),
+      'all' => pht('Order History'),
+      'invoices' => pht('Unpaid Invoices'),
     );
 
     return $names;
@@ -137,6 +148,8 @@ final class PhortuneCartSearchEngine
     switch ($query_key) {
       case 'all':
         return $query;
+      case 'invoices':
+        return $query->setParameter('invoices', true);
     }
 
     return parent::buildSavedQueryFromBuiltin($query_key);
@@ -165,6 +178,13 @@ final class PhortuneCartSearchEngine
     $rows = array();
     foreach ($carts as $cart) {
       $merchant = $cart->getMerchant();
+
+      if ($this->getMerchant()) {
+        $href = $this->getApplicationURI(
+          'merchant/'.$merchant->getID().'/cart/'.$cart->getID().'/');
+      } else {
+        $href = $cart->getDetailURI();
+      }
 
       $rows[] = array(
         $cart->getID(),
@@ -202,13 +222,15 @@ final class PhortuneCartSearchEngine
 
     $merchant = $this->getMerchant();
     if ($merchant) {
-      $header = pht('Orders for %s', $merchant->getName());
+      $notice = pht('Orders for %s', $merchant->getName());
     } else {
-      $header = pht('Your Orders');
+      $notice = pht('Your Orders');
     }
+    $table->setNotice($notice);
 
-    return id(new PHUIObjectBoxView())
-      ->setHeaderText($header)
-      ->appendChild($table);
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setTable($table);
+
+    return $result;
   }
 }

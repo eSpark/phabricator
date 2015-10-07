@@ -11,7 +11,7 @@ abstract class DiffusionController extends PhabricatorController {
 
   protected function getDiffusionRequest() {
     if (!$this->diffusionRequest) {
-      throw new Exception('No Diffusion request object!');
+      throw new Exception(pht('No Diffusion request object!'));
     }
     return $this->diffusionRequest;
   }
@@ -243,8 +243,8 @@ abstract class DiffusionController extends PhabricatorController {
   }
 
   protected function renderStatusMessage($title, $body) {
-    return id(new PHUIErrorView())
-      ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+    return id(new PHUIInfoView())
+      ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
       ->setTitle($title)
       ->appendChild($body);
   }

@@ -125,12 +125,7 @@ final class AphrontSideNavFilterView extends AphrontView {
       $key, $name, $uri, PHUIListItemView::TYPE_BUTTON);
   }
 
-  private function addThing(
-    $key,
-    $name,
-    $uri = null,
-    $type) {
-
+  private function addThing($key, $name, $uri, $type) {
     $item = id(new PHUIListItemView())
       ->setName($name)
       ->setType($type);
@@ -192,10 +187,10 @@ final class AphrontSideNavFilterView extends AphrontView {
   public function render() {
     if ($this->menu->getItems()) {
       if (!$this->baseURI) {
-        throw new Exception(pht('Call setBaseURI() before render()!'));
+        throw new PhutilInvalidStateException('setBaseURI');
       }
       if ($this->selectedFilter === false) {
-        throw new Exception(pht('Call selectFilter() before render()!'));
+        throw new PhutilInvalidStateException('selectFilter');
       }
     }
 
@@ -253,24 +248,14 @@ final class AphrontSideNavFilterView extends AphrontView {
         $nav_classes[] = 'has-local-nav';
       }
 
-      $menu_background = phutil_tag(
-        'div',
-        array(
-          'class' => 'phabricator-nav-column-background',
-          'id'    => $background_id,
-        ),
-        '');
-
-      $local_menu = array(
-        $menu_background,
+      $local_menu =
         phutil_tag(
           'div',
           array(
             'class' => 'phabricator-nav-local phabricator-side-menu',
             'id'    => $local_id,
           ),
-          $this->menu->setID($this->getMenuID())),
-      );
+          $this->menu->setID($this->getMenuID()));
     }
 
     $crumbs = null;
@@ -318,7 +303,7 @@ final class AphrontSideNavFilterView extends AphrontView {
         phutil_tag(
           'div',
           array(
-            'class' => 'phabricator-nav-content mlb',
+            'class' => 'phabricator-nav-content plb',
             'id' => $content_id,
           ),
           array(

@@ -37,12 +37,14 @@
  * @task markup Markup Pipeline
  * @task engine Engine Construction
  */
-final class PhabricatorMarkupEngine {
+final class PhabricatorMarkupEngine extends Phobject {
 
   private $objects = array();
   private $viewer;
   private $contextObject;
-  private $version = 14;
+  private $version = 15;
+  private $engineCaches = array();
+  private $auxiliaryConfig = array();
 
 
 /* -(  Markup Pipeline  )---------------------------------------------------- */
@@ -121,6 +123,10 @@ final class PhabricatorMarkupEngine {
       $engines[$key] = $info['object']->newMarkupEngine($info['field']);
       $engines[$key]->setConfig('viewer', $this->viewer);
       $engines[$key]->setConfig('contextObject', $this->contextObject);
+
+      foreach ($this->auxiliaryConfig as $aux_key => $aux_value) {
+        $engines[$key]->setConfig($aux_key, $aux_value);
+      }
     }
 
     // Load or build the preprocessor caches.
@@ -190,12 +196,14 @@ final class PhabricatorMarkupEngine {
   private function requireKeyProcessed($key) {
     if (empty($this->objects[$key])) {
       throw new Exception(
-        "Call addObject() before using results (key = '{$key}').");
+        pht(
+          "Call %s before using results (key = '%s').",
+          'addObject()',
+          $key));
     }
 
     if (!isset($this->objects[$key]['output'])) {
-      throw new Exception(
-        'Call process() before using results.');
+      throw new PhutilInvalidStateException('process');
     }
   }
 
@@ -307,6 +315,12 @@ final class PhabricatorMarkupEngine {
     return $this;
   }
 
+  public function setAuxiliaryConfig($key, $value) {
+    // TODO: This is gross and should be removed. Avoid use.
+    $this->auxiliaryConfig[$key] = $value;
+    return $this;
+  }
+
 
 /* -(  Engine Construction  )------------------------------------------------ */
 
@@ -337,6 +351,7 @@ final class PhabricatorMarkupEngine {
   public static function newPhameMarkupEngine() {
     return self::newMarkupEngine(array(
       'macros' => false,
+      'uri.full' => true,
     ));
   }
 
@@ -349,8 +364,15 @@ final class PhabricatorMarkupEngine {
       array(
         'macros'      => false,
         'youtube'     => false,
-
       ));
+  }
+
+  /**
+   * @task engine
+   */
+  public static function newCalendarMarkupEngine() {
+    return self::newMarkupEngine(array(
+    ));
   }
 
 
@@ -409,7 +431,7 @@ final class PhabricatorMarkupEngine {
         $engine->setConfig('pygments.enabled', false);
         break;
       default:
-        throw new Exception("Unknown engine ruleset: {$ruleset}!");
+        throw new Exception(pht('Unknown engine ruleset: %s!', $ruleset));
     }
 
     $engines[$ruleset] = $engine;
@@ -429,6 +451,7 @@ final class PhabricatorMarkupEngine {
       'macros'        => true,
       'uri.allowed-protocols' => PhabricatorEnv::getEnvConfig(
         'uri.allowed-protocols'),
+      'uri.full' => false,
       'syntax-highlighter.engine' => PhabricatorEnv::getEnvConfig(
         'syntax-highlighter.engine'),
       'preserve-linebreaks' => true,
@@ -440,7 +463,6 @@ final class PhabricatorMarkupEngine {
    * @task engine
    */
   public static function newMarkupEngine(array $options) {
-
     $options += self::getMarkupEngineDefaultConfiguration();
 
     $engine = new PhutilRemarkupEngine();
@@ -455,6 +477,8 @@ final class PhabricatorMarkupEngine {
     $engine->setConfig(
       'syntax-highlighter.engine',
       $options['syntax-highlighter.engine']);
+
+    $engine->setConfig('uri.full', $options['uri.full']);
 
     $rules = array();
     $rules[] = new PhutilRemarkupEscapeRemarkupRule();
@@ -578,7 +602,7 @@ final class PhabricatorMarkupEngine {
     //  - Hopefully don't return too much text. We don't explicitly limit
     //    this right now.
 
-    $blocks = preg_split("/\n *\n\s*/", trim($corpus));
+    $blocks = preg_split("/\n *\n\s*/", $corpus);
 
     $best = null;
     foreach ($blocks as $block) {
@@ -609,15 +633,15 @@ final class PhabricatorMarkupEngine {
   }
 
   private static function loadCustomInlineRules() {
-    return id(new PhutilSymbolLoader())
+    return id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorRemarkupCustomInlineRule')
-      ->loadObjects();
+      ->execute();
   }
 
   private static function loadCustomBlockRules() {
-    return id(new PhutilSymbolLoader())
+    return id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorRemarkupCustomBlockRule')
-      ->loadObjects();
+      ->execute();
   }
 
 }

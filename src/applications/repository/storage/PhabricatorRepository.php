@@ -11,7 +11,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     PhabricatorFlaggableInterface,
     PhabricatorMarkupInterface,
     PhabricatorDestructibleInterface,
-    PhabricatorProjectInterface {
+    PhabricatorProjectInterface,
+    PhabricatorSpacesInterface {
 
   /**
    * Shortest hash we'll recognize in raw "a829f32" form.
@@ -54,6 +55,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   protected $details = array();
   protected $credentialPHID;
   protected $almanacServicePHID;
+  protected $spacePHID;
 
   private $commitCount = self::ATTACHABLE;
   private $mostRecentCommit = self::ATTACHABLE;
@@ -69,10 +71,17 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $edit_policy = $app->getPolicy(DiffusionDefaultEditCapability::CAPABILITY);
     $push_policy = $app->getPolicy(DiffusionDefaultPushCapability::CAPABILITY);
 
-    return id(new PhabricatorRepository())
+    $repository = id(new PhabricatorRepository())
       ->setViewPolicy($view_policy)
       ->setEditPolicy($edit_policy)
-      ->setPushPolicy($push_policy);
+      ->setPushPolicy($push_policy)
+      ->setSpacePHID($actor->getDefaultSpacePHID());
+
+    // Put the repository in "Importing" mode until we finish
+    // parsing it.
+    $repository->setDetail('importing', true);
+
+    return $repository;
   }
 
   protected function getConfiguration() {
@@ -129,6 +138,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       'isActive'    => $this->isTracked(),
       'isHosted'    => $this->isHosted(),
       'isImporting' => $this->isImporting(),
+      'encoding'    => $this->getDetail('encoding'),
+      'staging' => array(
+        'supported' => $this->supportsStaging(),
+        'prefix' => 'phabricator',
+        'uri' => $this->getStagingURI(),
+      ),
     );
   }
 
@@ -214,7 +229,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   public function getSubversionPathURI($path = null, $commit = null) {
     $vcs = $this->getVersionControlSystem();
     if ($vcs != PhabricatorRepositoryType::REPOSITORY_TYPE_SVN) {
-      throw new Exception('Not a subversion repository!');
+      throw new Exception(pht('Not a subversion repository!'));
     }
 
     if ($this->isHosted()) {
@@ -410,7 +425,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $env['HGPLAIN'] = 1;
         break;
       default:
-        throw new Exception('Unrecognized version control system.');
+        throw new Exception(pht('Unrecognized version control system.'));
     }
 
     return $env;
@@ -441,7 +456,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           // command-line flag instead of an environmental variable.
           break;
         default:
-          throw new Exception('Unrecognized version control system.');
+          throw new Exception(pht('Unrecognized version control system.'));
       }
     }
 
@@ -495,7 +510,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         }
         break;
       default:
-        throw new Exception('Unrecognized version control system.');
+        throw new Exception(pht('Unrecognized version control system.'));
     }
 
     array_unshift($args, $pattern);
@@ -518,7 +533,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $pattern = "hg {$pattern}";
         break;
       default:
-        throw new Exception('Unrecognized version control system.');
+        throw new Exception(pht('Unrecognized version control system.'));
     }
 
     array_unshift($args, $pattern);
@@ -538,9 +553,22 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     // trusted, Mercurial prints out a warning to stdout, twice, after Feb 2011.
     //
     // http://selenic.com/pipermail/mercurial-devel/2011-February/028541.html
+    //
+    // After Jan 2015, it may also fail to write to a revision branch cache.
+
+    $ignore = array(
+      'ignoring untrusted configuration option',
+      "couldn't write revision branch cache:",
+    );
+
+    foreach ($ignore as $key => $pattern) {
+      $ignore[$key] = preg_quote($pattern, '/');
+    }
+
+    $ignore = '('.implode('|', $ignore).')';
 
     $lines = preg_split('/(?<=\n)/', $stdout);
-    $regex = '/ignoring untrusted configuration option .*\n$/';
+    $regex = '/'.$ignore.'.*\n$/';
 
     foreach ($lines as $key => $line) {
       $lines[$key] = preg_replace($regex, '', $line);
@@ -573,7 +601,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           $uri);
         break;
       default:
-        throw new Exception('Unrecognized version control system.');
+        throw new Exception(pht('Unrecognized version control system.'));
     }
 
     return $normalized_uri->getNormalizedPath();
@@ -676,6 +704,25 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   }
 
 
+  /**
+   * Should this repository publish feed, notifications, audits, and email?
+   *
+   * We do not publish information about repositories during initial import,
+   * or if the repository has been set not to publish.
+   */
+  public function shouldPublish() {
+    if ($this->isImporting()) {
+      return false;
+    }
+
+    if ($this->getDetail('herald-disabled')) {
+      return false;
+    }
+
+    return true;
+  }
+
+
 /* -(  Autoclose  )---------------------------------------------------------- */
 
 
@@ -761,7 +808,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
         break;
       default:
-        throw new Exception('Unrecognized version control system.');
+        throw new Exception(pht('Unrecognized version control system.'));
     }
 
     $closeable_flag = PhabricatorRepositoryCommit::IMPORTED_CLOSEABLE;
@@ -917,7 +964,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return $uri;
     }
 
-    throw new Exception("Remote URI '{$raw_uri}' could not be parsed!");
+    throw new Exception(pht("Remote URI '%s' could not be parsed!", $raw_uri));
   }
 
 
@@ -1004,6 +1051,11 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $ssh_user = PhabricatorEnv::getEnvConfig('diffusion.ssh-user');
     if ($ssh_user) {
       $uri->setUser($ssh_user);
+    }
+
+    $ssh_host = PhabricatorEnv::getEnvConfig('diffusion.ssh-host');
+    if (strlen($ssh_host)) {
+      $uri->setDomain($ssh_host);
     }
 
     $uri->setPort(PhabricatorEnv::getEnvConfig('diffusion.ssh-port'));
@@ -1117,12 +1169,11 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $path->delete();
       }
 
-      $projects = id(new PhabricatorRepositoryArcanistProject())
-        ->loadAllWhere('repositoryID = %d', $this->getID());
-      foreach ($projects as $project) {
-        // note each project deletes its PhabricatorRepositorySymbols
-        $project->delete();
-      }
+      queryfx(
+        $this->establishConnection('w'),
+        'DELETE FROM %T WHERE repositoryPHID = %s',
+        id(new PhabricatorRepositorySymbol())->getTableName(),
+        $this->getPHID());
 
       $commits = id(new PhabricatorRepositoryCommit())
         ->loadAllWhere('repositoryID = %d', $this->getID());
@@ -1409,8 +1460,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   public static function assertValidRemoteURI($uri) {
     if (trim($uri) != $uri) {
       throw new Exception(
-        pht(
-          'The remote URI has leading or trailing whitespace.'));
+        pht('The remote URI has leading or trailing whitespace.'));
     }
 
     $protocol = self::getRemoteURIProtocol($uri);
@@ -1424,8 +1474,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           pht(
             "The remote URI is not formatted correctly. Remote URIs ".
             "with an explicit protocol should be in the form ".
-            "'proto://domain/path', not 'proto://domain:/path'. ".
-            "The ':/path' syntax is only valid in SCP-style URIs."));
+            "'%s', not '%s'. The '%s' syntax is only valid in SCP-style URIs.",
+            'proto://domain/path',
+            'proto://domain:/path',
+            ':/path'));
       }
     }
 
@@ -1445,8 +1497,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         throw new Exception(
           pht(
             "The URI protocol is unrecognized. It should begin ".
-            "'ssh://', 'http://', 'https://', 'git://', 'svn://', ".
-            "'svn+ssh://', or be in the form 'git@domain.com:path'."));
+            "'%s', '%s', '%s', '%s', '%s', '%s', or be in the form '%s'.",
+            'ssh://',
+            'http://',
+            'https://',
+            'git://',
+            'svn://',
+            'svn+ssh://',
+            'git@domain.com:path'));
     }
 
     return true;
@@ -1547,7 +1605,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if (!$service) {
       throw new Exception(
         pht(
-          'The Alamnac service for this repository is invalid or could not '.
+          'The Almanac service for this repository is invalid or could not '.
           'be loaded.'));
     }
 
@@ -1555,7 +1613,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if (!($service_type instanceof AlmanacClusterRepositoryServiceType)) {
       throw new Exception(
         pht(
-          'The Alamnac service for this repository does not have the correct '.
+          'The Almanac service for this repository does not have the correct '.
           'service type.'));
     }
 
@@ -1563,7 +1621,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if (!$bindings) {
       throw new Exception(
         pht(
-          'The Alamanc service for this repository is not bound to any '.
+          'The Almanac service for this repository is not bound to any '.
           'interfaces.'));
     }
 
@@ -1694,8 +1752,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           pht(
             'Unable to read device public key while attempting to make '.
             'authenticated method call within the Phabricator cluster. '.
-            'Use `bin/almanac register` to register keys for this device. '.
-            'Exception: %s',
+            'Use `%s` to register keys for this device. Exception: %s',
+            'bin/almanac register',
             $ex->getMessage()),
           array($ex));
       }
@@ -1709,8 +1767,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           pht(
             'Unable to read device private key while attempting to make '.
             'authenticated method call within the Phabricator cluster. '.
-            'Use `bin/almanac register` to register keys for this device. '.
-            'Exception: %s',
+            'Use `%s` to register keys for this device. Exception: %s',
+            'bin/almanac register',
             $ex->getMessage()),
           array($ex));
       }
@@ -1727,6 +1785,33 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
 
     return $client;
+  }
+
+
+/* -(  Symbols  )-------------------------------------------------------------*/
+
+  public function getSymbolSources() {
+    return $this->getDetail('symbol-sources', array());
+  }
+
+  public function getSymbolLanguages() {
+    return $this->getDetail('symbol-languages', array());
+  }
+
+
+/* -(  Staging  )-------------------------------------------------------------*/
+
+
+  public function supportsStaging() {
+    return $this->isGit();
+  }
+
+
+  public function getStagingURI() {
+    if (!$this->supportsStaging()) {
+      return null;
+    }
+    return $this->getDetail('staging-uri', null);
   }
 
 
@@ -1821,12 +1906,39 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
 /* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
+
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
 
     $this->openTransaction();
-    $this->delete();
+
+      $this->delete();
+
+      $books = id(new DivinerBookQuery())
+        ->setViewer($engine->getViewer())
+        ->withRepositoryPHIDs(array($this->getPHID()))
+        ->execute();
+      foreach ($books as $book) {
+        $engine->destroyObject($book);
+      }
+
+      $atoms = id(new DivinerAtomQuery())
+        ->setViewer($engine->getViewer())
+        ->withRepositoryPHIDs(array($this->getPHID()))
+        ->execute();
+      foreach ($atoms as $atom) {
+        $engine->destroyObject($atom);
+      }
+
     $this->saveTransaction();
+  }
+
+
+/* -(  PhabricatorSpacesInterface  )----------------------------------------- */
+
+
+  public function getSpacePHID() {
+    return $this->spacePHID;
   }
 
 }

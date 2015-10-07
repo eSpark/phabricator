@@ -2,20 +2,33 @@
 
 abstract class PhabricatorProjectController extends PhabricatorController {
 
+  private $project;
+
+  protected function setProject(PhabricatorProject $project) {
+    $this->project = $project;
+    return $this;
+  }
+
+  protected function getProject() {
+    return $this->project;
+  }
+
   public function buildApplicationMenu() {
     return $this->buildSideNavView(true)->getMenu();
   }
 
   public function buildSideNavView($for_app = false) {
-    $viewer = $this->getViewer();
+    $project = $this->getProject();
 
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
 
+    $viewer = $this->getViewer();
+
     $id = null;
     if ($for_app) {
-      $id = $this->getRequest()->getURIData('id');
-      if ($id) {
+      if ($project) {
+        $id = $project->getID();
         $nav->addFilter("profile/{$id}/", pht('Profile'));
         $nav->addFilter("board/{$id}/", pht('Workboard'));
         $nav->addFilter("members/{$id}/", pht('Members'));
@@ -37,6 +50,7 @@ abstract class PhabricatorProjectController extends PhabricatorController {
   }
 
   public function buildIconNavView(PhabricatorProject $project) {
+    $this->setProject($project);
     $viewer = $this->getViewer();
     $id = $project->getID();
     $picture = $project->getProfileImageURI();
@@ -62,9 +76,8 @@ abstract class PhabricatorProjectController extends PhabricatorController {
     if (PhabricatorApplication::isClassInstalledForViewer($class, $viewer)) {
       $phid = $project->getPHID();
       $query_uri = urisprintf(
-        '/maniphest/?statuses=%s&allProjects=%s#R',
-        implode(',', ManiphestTaskStatus::getOpenStatusConstants()),
-      $phid);
+        '/maniphest/?statuses=open()&projects=%s#R',
+        $phid);
       $nav->addIcon(null, pht('Open Tasks'), 'fa-anchor', null, $query_uri);
     }
 

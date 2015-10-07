@@ -8,17 +8,18 @@
  *   $result = $call->execute();
  *
  */
-final class ConduitCall {
+final class ConduitCall extends Phobject {
 
   private $method;
+  private $handler;
   private $request;
   private $user;
 
   public function __construct($method, array $params) {
-    $this->method     = $method;
-    $this->handler    = $this->buildMethodHandler($method);
+    $this->method = $method;
+    $this->handler = $this->buildMethodHandler($method);
 
-    $param_types = $this->handler->defineParamTypes();
+    $param_types = $this->handler->getParamTypes();
 
     foreach ($param_types as $key => $spec) {
       if (ConduitAPIMethod::getParameterMetadataKey($key) !== null) {
@@ -148,6 +149,10 @@ final class ConduitCall {
     }
 
     return $method;
+  }
+
+  public function getMethodImplementation() {
+    return $this->handler;
   }
 
 

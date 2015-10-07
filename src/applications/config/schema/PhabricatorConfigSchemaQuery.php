@@ -11,7 +11,7 @@ final class PhabricatorConfigSchemaQuery extends Phobject {
 
   protected function getAPI() {
     if (!$this->api) {
-      throw new Exception(pht('Call setAPI() before issuing a query!'));
+      throw new PhutilInvalidStateException('setAPI');
     }
     return $this->api;
   }
@@ -155,9 +155,9 @@ final class PhabricatorConfigSchemaQuery extends Phobject {
     $databases = $this->getDatabaseNames();
     $info = $this->getAPI()->getCharsetInfo();
 
-    $specs = id(new PhutilSymbolLoader())
+    $specs = id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorConfigSchemaSpec')
-      ->loadObjects();
+      ->execute();
 
     $server_schema = new PhabricatorConfigServerSchema();
     foreach ($specs as $spec) {

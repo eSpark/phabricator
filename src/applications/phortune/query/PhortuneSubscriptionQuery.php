@@ -72,6 +72,10 @@ final class PhortuneSubscriptionQuery
       $subscription->attachAccount($account);
     }
 
+    if (!$subscriptions) {
+      return $subscriptions;
+    }
+
     $merchants = id(new PhortuneMerchantQuery())
       ->setViewer($this->getViewer())
       ->withPHIDs(mpull($subscriptions, 'getMerchantPHID'))
@@ -85,6 +89,10 @@ final class PhortuneSubscriptionQuery
         continue;
       }
       $subscription->attachMerchant($merchant);
+    }
+
+    if (!$subscriptions) {
+      return $subscriptions;
     }
 
     $implementations = array();
@@ -109,6 +117,10 @@ final class PhortuneSubscriptionQuery
       $subscription->attachImplementation($implementation);
     }
 
+    if (!$subscriptions) {
+      return $subscriptions;
+    }
+
     if ($this->needTriggers) {
       $trigger_phids = mpull($subscriptions, 'getTriggerPHID');
       $triggers = id(new PhabricatorWorkerTriggerQuery())
@@ -130,7 +142,7 @@ final class PhortuneSubscriptionQuery
     return $subscriptions;
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn) {
     $where = array();
 
     $where[] = $this->buildPagingClause($conn);

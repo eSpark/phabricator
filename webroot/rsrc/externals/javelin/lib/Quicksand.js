@@ -25,20 +25,22 @@
 JX.install('Quicksand', {
 
   statics: {
-    _id: 0,
+    _id: null,
     _onpage: 0,
     _cursor: 0,
     _current: 0,
     _content: {},
+    _responses: {},
     _history: [],
     _started: false,
     _frameNode: null,
     _contentNode: null,
+    _uriPatternBlacklist: [],
 
     /**
      * Start Quicksand, accepting a fate of eternal torment.
      */
-    start: function() {
+    start: function(first_response) {
       var self = JX.Quicksand;
       if (self._started) {
         return;
@@ -48,10 +50,13 @@ JX.install('Quicksand', {
       JX.Stratcom.listen('history:change', null, self._onchange);
 
       self._started = true;
-      self._history.push({
-        id: 0,
-        path: self._getRelativeURI(window.location)
-      });
+      var path = self._getRelativeURI(window.location);
+      self._id = window.history.state || 0;
+      var id = self._id;
+      self._onpage = id;
+      self._history.push({path: path, id: id});
+
+      self._responses[id] = first_response;
     },
 
 
@@ -64,6 +69,14 @@ JX.install('Quicksand', {
       return self;
     },
 
+
+    getCurrentPageID: function() {
+      var self = JX.Quicksand;
+      if (self._id === null) {
+        self._id = window.history.state || 0;
+      }
+      return self._id;
+    },
 
     /**
      * Respond to the user clicking a link.
@@ -124,6 +137,11 @@ JX.install('Quicksand', {
         return;
       }
 
+      if (self._isURIOnBlacklist(uri)) {
+        // This URI is blacklisted as not navigable via Quicksand.
+        return;
+      }
+
       // The fate of this action is sealed. Suck it into the depths.
       e.kill();
 
@@ -135,18 +153,18 @@ JX.install('Quicksand', {
       var discard = (self._history.length - self._cursor) - 1;
       for (var ii = 0; ii < discard; ii++) {
         var obsolete = self._history.pop();
-        self._content[obsolete.id] = false;
+        self._responses[obsolete.id] = false;
       }
 
-      // Set up the new state and fire a request to fetch the page content.
+      // Set up the new state and fire a request to fetch the page data.
       var path = self._getRelativeURI(uri);
       var id = ++self._id;
 
+      self._history.push({path: path, id: id});
       JX.History.push(path, id);
 
-      self._history.push({path: path, id: id});
       self._cursor = (self._history.length - 1);
-      self._content[id] = null;
+      self._responses[id] = null;
       self._current = id;
 
       new JX.Workflow(href, {__quicksand__: true})
@@ -156,7 +174,7 @@ JX.install('Quicksand', {
 
 
     /**
-     * Receive a response from the server with page content.
+     * Receive a response from the server with page data e.g. content.
      *
      * Usually we'll dump it into the page, but if the user clicked very fast
      * it might already be out of date.
@@ -167,10 +185,10 @@ JX.install('Quicksand', {
       // Before possibly updating the document, check if this response is still
       // relevant.
 
-      // We don't save the new content if the user has already destroyed
+      // We don't save the new response if the user has already destroyed
       // the navigation. They can do this by pressing back, then clicking
-      // another link before the content can load.
-      if (self._content[id] === false) {
+      // another link before the response can load.
+      if (self._responses[id] === false) {
         return;
       }
 
@@ -179,11 +197,12 @@ JX.install('Quicksand', {
       // save it.
       var new_content = JX.$H(r.content).getFragment();
       self._content[id] = new_content;
+      self._responses[id] = r;
 
       // If it's the current page, draw it into the browser. It might not be
       // the current page if the user already clicked another link.
       if (self._current == id) {
-        self._draw();
+        self._draw(true);
       }
     },
 
@@ -194,7 +213,7 @@ JX.install('Quicksand', {
      * After a navigation event or the arrival of page content, we paint it
      * onto the page.
      */
-    _draw: function() {
+    _draw: function(from_server) {
       var self = JX.Quicksand;
 
       if (self._onpage == self._current) {
@@ -202,7 +221,7 @@ JX.install('Quicksand', {
         return;
       }
 
-      if (!self._content[self._current]) {
+      if (!self._responses[self._current]) {
         // If we don't have this page yet, we can't draw it. We'll draw it
         // when it arrives.
         return;
@@ -219,10 +238,20 @@ JX.install('Quicksand', {
 
       // Now, replace it with the new content.
       JX.DOM.setContent(self._frameNode, self._content[self._current]);
+      // Let other things redraw, etc as necessary
+      JX.Stratcom.invoke(
+        'quicksand-redraw',
+        null,
+        {
+          newResponse: self._responses[self._current],
+          newResponseID: self._current,
+          oldResponse: self._responses[self._onpage],
+          oldResponseID: self._onpage,
+          fromServer: from_server
+        });
       self._onpage = self._current;
 
       // Scroll to the top of the page and trigger any layout adjustments.
-
       // TODO: Maybe store the scroll position?
       JX.DOM.scrollToPosition(0, 0);
       JX.Stratcom.invoke('resize');
@@ -262,7 +291,7 @@ JX.install('Quicksand', {
         }
 
         // Redraw the page.
-        self._draw();
+        self._draw(false);
       }
     },
 
@@ -276,7 +305,53 @@ JX.install('Quicksand', {
         .setPort(null)
         .setDomain(null)
         .toString();
+    },
+
+
+    /**
+     * Set a list of regular expressions which blacklist URIs as not navigable
+     * via Quicksand.
+     *
+     * If a user clicks a link to one of these URIs, a normal page navigation
+     * event will occur instead of a Quicksand navigation.
+     *
+     * @param list<string> List of regular expressions.
+     * @return self
+     */
+    setURIPatternBlacklist: function(items) {
+      var self = JX.Quicksand;
+
+      var list = [];
+      for (var ii = 0; ii < items.length; ii++) {
+        list.push(new RegExp('^' + items[ii] + '$'));
+      }
+
+      self._uriPatternBlacklist = list;
+
+      return self;
+    },
+
+
+    /**
+     * Test if a @{class:JX.URI} is on the URI pattern blacklist.
+     *
+     * @param JX.URI URI to test.
+     * @return bool True if the URI is on the blacklist.
+     */
+    _isURIOnBlacklist: function(uri) {
+      var self = JX.Quicksand;
+      var list = self._uriPatternBlacklist;
+
+      var path = uri.getPath();
+      for (var ii = 0; ii < list.length; ii++) {
+        if (list[ii].test(path)) {
+          return true;
+        }
+      }
+
+      return false;
     }
+
   }
 
 });

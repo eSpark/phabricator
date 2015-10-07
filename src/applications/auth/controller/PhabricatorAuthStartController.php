@@ -71,8 +71,8 @@ final class PhabricatorAuthStartController
           'This Phabricator install is not configured with any enabled '.
           'authentication providers which can be used to log in. If you '.
           'have accidentally locked yourself out by disabling all providers, '.
-          'you can use `phabricator/bin/auth recover <username>` to '.
-          'recover access to an administrative account.'));
+          'you can use `%s` to recover access to an administrative account.',
+          'phabricator/bin/auth recover <username>'));
     }
 
     $next_uri = $request->getStr('next');
@@ -109,14 +109,21 @@ final class PhabricatorAuthStartController
       }
     }
 
+    $invite = $this->loadInvite();
+
     $not_buttons = array();
     $are_buttons = array();
     $providers = msort($providers, 'getLoginOrder');
     foreach ($providers as $provider) {
-      if ($provider->isLoginFormAButton()) {
-        $are_buttons[] = $provider->buildLoginForm($this);
+      if ($invite) {
+        $form = $provider->buildInviteForm($this);
       } else {
-        $not_buttons[] = $provider->buildLoginForm($this);
+        $form = $provider->buildLoginForm($this);
+      }
+      if ($provider->isLoginFormAButton()) {
+        $are_buttons[] = $form;
+      } else {
+        $not_buttons[] = $form;
       }
     }
 
@@ -156,8 +163,27 @@ final class PhabricatorAuthStartController
         $button_columns);
     }
 
-    $login_message = PhabricatorEnv::getEnvConfig('auth.login-message');
-    $login_message = phutil_safe_html($login_message);
+    $handlers = PhabricatorAuthLoginHandler::getAllHandlers();
+
+    $delegating_controller = $this->getDelegatingController();
+
+    $header = array();
+    foreach ($handlers as $handler) {
+      $handler = clone $handler;
+
+      $handler->setRequest($request);
+
+      if ($delegating_controller) {
+        $handler->setDelegatingController($delegating_controller);
+      }
+
+      $header[] = $handler->getAuthLoginHeaderContent();
+    }
+
+    $invite_message = null;
+    if ($invite) {
+      $invite_message = $this->renderInviteHeader($invite);
+    }
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Login'));
@@ -166,7 +192,8 @@ final class PhabricatorAuthStartController
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $login_message,
+        $header,
+        $invite_message,
         $out,
       ),
       array(

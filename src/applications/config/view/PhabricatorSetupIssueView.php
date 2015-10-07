@@ -192,7 +192,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       array(
         'class' => 'setup-issue-tail',
       ),
-      array($actions, $next));
+      array($actions));
 
     $issue = phutil_tag(
       'div',
@@ -219,6 +219,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       ),
       array(
         $issue,
+        $next,
         $debug_info,
       ));
   }
@@ -385,8 +386,8 @@ final class PhabricatorSetupIssueView extends AphrontView {
         'p',
         array(),
         pht(
-          'PHP also loaded these configuration file(s):',
-          count($more_loc)));
+          'PHP also loaded these %s configuration file(s):',
+          new PhutilNumber(count($more_loc))));
       $info[] = phutil_tag(
         'pre',
         array(),

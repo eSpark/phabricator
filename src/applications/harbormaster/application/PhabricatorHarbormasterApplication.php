@@ -36,13 +36,18 @@ final class PhabricatorHarbormasterApplication extends PhabricatorApplication {
     );
   }
 
-  public function isPrototype() {
-    return true;
-  }
-
   public function getRemarkupRules() {
     return array(
       new HarbormasterRemarkupRule(),
+    );
+  }
+
+  public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
+    return array(
+      array(
+        'name' => pht('Harbormaster User Guide'),
+        'href' => PhabricatorEnv::getDoclink('Harbormaster User Guide'),
+      ),
     );
   }
 
@@ -60,12 +65,13 @@ final class PhabricatorHarbormasterApplication extends PhabricatorApplication {
           'delete/(?:(?P<id>\d+)/)?' => 'HarbormasterStepDeleteController',
         ),
         'buildable/' => array(
-          '(?P<id>\d+)/(?P<action>stop|resume|restart)/'
+          '(?P<id>\d+)/(?P<action>pause|resume|restart|abort)/'
             => 'HarbormasterBuildableActionController',
         ),
         'build/' => array(
           '(?P<id>\d+)/' => 'HarbormasterBuildViewController',
-          '(?P<action>stop|resume|restart)/(?P<id>\d+)/(?:(?P<via>[^/]+)/)?'
+          '(?P<action>pause|resume|restart|abort)/'.
+            '(?P<id>\d+)/(?:(?P<via>[^/]+)/)?'
             => 'HarbormasterBuildActionController',
         ),
         'plan/' => array(
@@ -76,6 +82,12 @@ final class PhabricatorHarbormasterApplication extends PhabricatorApplication {
           'disable/(?P<id>\d+)/' => 'HarbormasterPlanDisableController',
           'run/(?P<id>\d+)/' => 'HarbormasterPlanRunController',
           '(?P<id>\d+)/' => 'HarbormasterPlanViewController',
+        ),
+        'unit/' => array(
+          '(?P<id>\d+)/' => 'HarbormasterUnitMessagesController',
+        ),
+        'lint/' => array(
+          '(?P<id>\d+)/' => 'HarbormasterLintMessagesController',
         ),
       ),
     );

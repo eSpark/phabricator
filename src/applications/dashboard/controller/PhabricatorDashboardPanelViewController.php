@@ -3,23 +3,17 @@
 final class PhabricatorDashboardPanelViewController
   extends PhabricatorDashboardController {
 
-  private $id;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $panel = id(new PhabricatorDashboardPanelQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->executeOne();
     if (!$panel) {
       return new Aphront404Response();
@@ -91,6 +85,7 @@ final class PhabricatorDashboardPanelViewController
 
     $actions = id(new PhabricatorActionListView())
       ->setObjectURI('/'.$panel->getMonogram())
+      ->setObject($panel)
       ->setUser($viewer);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
@@ -163,7 +158,6 @@ final class PhabricatorDashboardPanelViewController
     $dashboard_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
       $panel->getPHID(),
       PhabricatorDashboardPanelHasDashboardEdgeType::EDGECONST);
-    $this->loadHandles($dashboard_phids);
 
     $does_not_appear = pht(
       'This panel does not appear on any dashboards.');
@@ -171,7 +165,7 @@ final class PhabricatorDashboardPanelViewController
     $properties->addProperty(
       pht('Appears On'),
       $dashboard_phids
-        ? $this->renderHandlesForPHIDs($dashboard_phids)
+        ? $viewer->renderHandleList($dashboard_phids)
         : phutil_tag('em', array(), $does_not_appear));
 
     return $properties;

@@ -6,18 +6,23 @@ final class DrydockManagementLeaseWorkflow
   protected function didConstruct() {
     $this
       ->setName('lease')
-      ->setSynopsis('Lease a resource.')
+      ->setSynopsis(pht('Lease a resource.'))
       ->setArguments(
         array(
           array(
             'name'      => 'type',
             'param'     => 'resource_type',
-            'help'      => 'Resource type.',
+            'help'      => pht('Resource type.'),
+          ),
+          array(
+            'name' => 'until',
+            'param' => 'time',
+            'help' => pht('Set lease expiration time.'),
           ),
           array(
             'name'      => 'attributes',
             'param'     => 'name=value,...',
-            'help'      => 'Resource specficiation.',
+            'help'      => pht('Resource specficiation.'),
           ),
         ));
   }
@@ -28,7 +33,20 @@ final class DrydockManagementLeaseWorkflow
     $resource_type = $args->getArg('type');
     if (!$resource_type) {
       throw new PhutilArgumentUsageException(
-        'Specify a resource type with `--type`.');
+        pht(
+          'Specify a resource type with `%s`.',
+          '--type'));
+    }
+
+    $until = $args->getArg('until');
+    if (strlen($until)) {
+      $until = strtotime($until);
+      if ($until <= 0) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Unable to parse argument to "%s".',
+            '--until'));
+      }
     }
 
     $attributes = $args->getArg('attributes');
@@ -38,18 +56,29 @@ final class DrydockManagementLeaseWorkflow
       $attributes = $options->parse($attributes);
     }
 
-    PhabricatorWorker::setRunAllTasksInProcess(true);
-
     $lease = id(new DrydockLease())
       ->setResourceType($resource_type);
+
     if ($attributes) {
       $lease->setAttributes($attributes);
     }
-    $lease
-      ->queueForActivation()
-      ->waitUntilActive();
 
-    $console->writeOut("Acquired Lease %s\n", $lease->getID());
+    if ($until) {
+      $lease->setUntil($until);
+    }
+
+    $lease->queueForActivation();
+
+    echo tsprintf(
+      "%s\n",
+      pht('Waiting for daemons to activate lease...'));
+
+    $lease->waitUntilActive();
+
+    echo tsprintf(
+      "%s\n",
+      pht('Activated lease "%s".', $lease->getID()));
+
     return 0;
   }
 

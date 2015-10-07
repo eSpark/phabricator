@@ -3,20 +3,13 @@
 final class PhabricatorProjectEditPictureController
   extends PhabricatorProjectController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
     $id = $request->getURIData('id');
 
     $project = id(new PhabricatorProjectQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->needImages(true)
       ->requireCapabilities(
         array(
@@ -68,12 +61,9 @@ final class PhabricatorProjectEditPictureController
             'This server only supports these image formats: %s.',
             implode(', ', $supported_formats));
         } else {
-          $xformer = new PhabricatorImageTransformer();
-          $xformed = $xformer->executeProfileTransform(
-            $file,
-            $width = 50,
-            $min_height = 50,
-            $max_height = 50);
+          $xform = PhabricatorFileTransform::getTransformByKey(
+            PhabricatorFileThumbnailTransform::TRANSFORM_PROFILE);
+          $xformed = $xform->executeTransform($file);
         }
       }
 
@@ -296,9 +286,7 @@ final class PhabricatorProjectEditPictureController
     $nav->appendChild($upload_box);
 
     return $this->buildApplicationPage(
-      array(
-        $nav,
-      ),
+      $nav,
       array(
         'title' => $title,
       ));

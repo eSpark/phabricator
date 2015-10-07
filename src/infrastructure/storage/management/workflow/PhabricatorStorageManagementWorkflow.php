@@ -57,9 +57,11 @@ abstract class PhabricatorStorageManagementWorkflow
     if (!$force && !$api->isCharacterSetAvailable('utf8mb4')) {
       $message = pht(
         "You have an old version of MySQL (older than 5.5) which does not ".
-        "support the utf8mb4 character set. If you apply adjustments now ".
-        "and later update MySQL to 5.5 or newer, you'll need to apply ".
-        "adjustments again (and they will take a long time).\n\n".
+        "support the utf8mb4 character set. We strongly recomend upgrading to ".
+        "5.5 or newer.\n\n".
+        "If you apply adjustments now and later update MySQL to 5.5 or newer, ".
+        "you'll need to apply adjustments again (and they will take a long ".
+        "time).\n\n".
         "You can exit this workflow, update MySQL now, and then run this ".
         "workflow again. This is recommended, but may cause a lot of downtime ".
         "right now.\n\n".
@@ -663,7 +665,7 @@ abstract class PhabricatorStorageManagementWorkflow
     return 2;
   }
 
-  protected final function getBareHostAndPort($host) {
+  final protected function getBareHostAndPort($host) {
     // Split out port information, since the command-line client requires a
     // separate flag for the port.
     $uri = new PhutilURI('mysql://'.$host);

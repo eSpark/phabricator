@@ -22,10 +22,10 @@ abstract class PhabricatorStandardCustomField
     PhabricatorCustomField $template,
     array $config) {
 
-    $types = id(new PhutilSymbolLoader())
+    $types = id(new PhutilClassMapQuery())
       ->setAncestorClass(__CLASS__)
-      ->loadObjects();
-    $types = mpull($types, null, 'getFieldType');
+      ->setUniqueMethod('getFieldType')
+      ->execute();
 
     $fields = array();
     foreach ($config as $key => $value) {
@@ -282,8 +282,7 @@ abstract class PhabricatorStandardCustomField
   public function appendToApplicationSearchForm(
     PhabricatorApplicationSearchEngine $engine,
     AphrontFormView $form,
-    $value,
-    array $handles) {
+    $value) {
     return;
   }
 

@@ -11,7 +11,7 @@ final class PHUIObjectItemView extends AphrontTagView {
   private $barColor;
   private $object;
   private $effect;
-  private $footIcons = array();
+  private $statusIcon;
   private $handleIcons = array();
   private $bylines = array();
   private $grippable;
@@ -22,6 +22,11 @@ final class PHUIObjectItemView extends AphrontTagView {
   private $state;
   private $fontIcon;
   private $imageIcon;
+  private $titleText;
+  private $badge;
+  private $countdownNum;
+  private $countdownNoun;
+  private $launchButton;
 
   const AGE_FRESH = 'fresh';
   const AGE_STALE = 'stale';
@@ -96,6 +101,26 @@ final class PHUIObjectItemView extends AphrontTagView {
   public function setSubHead($subhead) {
     $this->subhead = $subhead;
     return $this;
+  }
+
+  public function setBadge(PHUIBadgeMiniView $badge) {
+    $this->badge = $badge;
+    return $this;
+  }
+
+  public function setCountdown($num, $noun) {
+    $this->countdownNum = $num;
+    $this->countdownNoun = $noun;
+    return $this;
+  }
+
+  public function setTitleText($title_text) {
+    $this->titleText = $title_text;
+    return $this;
+  }
+
+  public function getTitleText() {
+    return $this->titleText;
   }
 
   public function getHeader() {
@@ -179,7 +204,7 @@ final class PHUIObjectItemView extends AphrontTagView {
         $this->addIcon('fa-clock-o red', $date, $attr);
         break;
       default:
-        throw new Exception("Unknown age '{$age}'!");
+        throw new Exception(pht("Unknown age '%s'!", $age));
     }
 
     return $this;
@@ -187,7 +212,7 @@ final class PHUIObjectItemView extends AphrontTagView {
 
   public function addAction(PHUIListItemView $action) {
     if (count($this->actions) >= 3) {
-      throw new Exception('Limit 3 actions per item.');
+      throw new Exception(pht('Limit 3 actions per item.'));
     }
     $this->actions[] = $action;
     return $this;
@@ -202,8 +227,8 @@ final class PHUIObjectItemView extends AphrontTagView {
     return $this;
   }
 
-  public function addFootIcon($icon, $label = null) {
-    $this->footIcons[] = array(
+  public function setStatusIcon($icon, $label = null) {
+    $this->statusIcon = array(
       'icon' => $icon,
       'label' => $label,
     );
@@ -236,6 +261,12 @@ final class PHUIObjectItemView extends AphrontTagView {
     return $this;
   }
 
+  public function setLaunchButton(PHUIButtonView $button) {
+    $button->setSize(PHUIButtonView::SMALL);
+    $this->launchButton = $button;
+    return $this;
+  }
+
   protected function getTagName() {
     return 'li';
   }
@@ -258,10 +289,8 @@ final class PHUIObjectItemView extends AphrontTagView {
 
     if ($this->barColor) {
       $item_classes[] = 'phui-object-item-bar-color-'.$this->barColor;
-    }
-
-    if ($this->footIcons) {
-      $item_classes[] = 'phui-object-item-with-foot-icons';
+    } else {
+      $item_classes[] = 'phui-object-item-no-bar';
     }
 
     if ($this->actions) {
@@ -313,12 +342,21 @@ final class PHUIObjectItemView extends AphrontTagView {
   }
 
   protected function getTagContent() {
+    $viewer = $this->getUser();
+
     $content_classes = array();
     $content_classes[] = 'phui-object-item-content';
 
-    $header_name = null;
+    $header_name = array();
+
+    if ($viewer) {
+      $header_name[] = id(new PHUISpacesNamespaceContextView())
+        ->setUser($viewer)
+        ->setObject($this->object);
+    }
+
     if ($this->objectName) {
-      $header_name = array(
+      $header_name[] = array(
         phutil_tag(
           'span',
           array(
@@ -329,12 +367,19 @@ final class PHUIObjectItemView extends AphrontTagView {
       );
     }
 
+    $title_text = null;
+    if ($this->titleText) {
+      $title_text = $this->titleText;
+    } else if ($this->href) {
+      $title_text = $this->header;
+    }
+
     $header_link = phutil_tag(
       $this->href ? 'a' : 'div',
       array(
         'href' => $this->href,
         'class' => 'phui-object-item-link',
-        'title' => ($this->href) ? $this->header : null,
+        'title' => $title_text,
       ),
       $this->header);
 
@@ -409,8 +454,9 @@ final class PHUIObjectItemView extends AphrontTagView {
 
     if ($this->handleIcons) {
       $handle_bar = array();
-      foreach ($this->handleIcons as $icon) {
-        $handle_bar[] = $this->renderHandleIcon($icon['icon'], $icon['label']);
+      foreach ($this->handleIcons as $handleicon) {
+        $handle_bar[] =
+          $this->renderHandleIcon($handleicon['icon'], $handleicon['label']);
       }
       $icons[] = phutil_tag(
         'div',
@@ -488,18 +534,10 @@ final class PHUIObjectItemView extends AphrontTagView {
         $attrs);
     }
 
-    $foot = null;
-    if ($this->footIcons) {
-      $foot_bar = array();
-      foreach ($this->footIcons as $icon) {
-        $foot_bar[] = $this->renderFootIcon($icon['icon'], $icon['label']);
-      }
-      $foot = phutil_tag(
-        'div',
-        array(
-          'class' => 'phui-object-item-foot-icons',
-        ),
-        $foot_bar);
+    $status = null;
+    if ($this->statusIcon) {
+      $icon = $this->statusIcon;
+      $status = $this->renderStatusIcon($icon['icon'], $icon['label']);
     }
 
     $grippable = null;
@@ -521,7 +559,6 @@ final class PHUIObjectItemView extends AphrontTagView {
         $subhead,
         $attrs,
         $this->renderChildren(),
-        $foot,
       ));
 
     $image = null;
@@ -562,6 +599,43 @@ final class PHUIObjectItemView extends AphrontTagView {
     }
 
     /* Build a fake table */
+    $column0 = null;
+    if ($status) {
+      $column0 = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-object-item-col0',
+        ),
+        $status);
+    }
+
+    if ($this->badge) {
+      $column0 = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-object-item-col0 phui-object-item-badge',
+        ),
+        $this->badge);
+    }
+
+    if ($this->countdownNum) {
+      $countdown = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-object-item-countdown-number',
+        ),
+        array(
+          phutil_tag_div('', $this->countdownNum),
+          phutil_tag_div('', $this->countdownNoun),
+        ));
+      $column0 = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-object-item-col0 phui-object-item-countdown',
+        ),
+        $countdown);
+    }
+
     $column1 = phutil_tag(
       'div',
       array(
@@ -581,7 +655,19 @@ final class PHUIObjectItemView extends AphrontTagView {
         ),
         array(
           $icons,
-          $bylines,));
+          $bylines,
+        ));
+    }
+
+    if ($this->launchButton) {
+      $column2 = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-object-item-col2 phui-object-item-launch-button',
+        ),
+        array(
+          $this->launchButton,
+        ));
     }
 
     $table = phutil_tag(
@@ -589,7 +675,13 @@ final class PHUIObjectItemView extends AphrontTagView {
       array(
         'class' => 'phui-object-item-table',
       ),
-      phutil_tag_div('phui-object-item-table-row', array($column1, $column2)));
+      phutil_tag_div(
+        'phui-object-item-table-row',
+        array(
+          $column0,
+          $column1,
+          $column2,
+        )));
 
     $box = phutil_tag(
       'div',
@@ -629,23 +721,22 @@ final class PHUIObjectItemView extends AphrontTagView {
       ));
   }
 
-  private function renderFootIcon($icon, $label) {
+  private function renderStatusIcon($icon, $label) {
+    Javelin::initBehavior('phabricator-tooltips');
 
     $icon = id(new PHUIIconView())
       ->setIconFont($icon);
 
-    $label = phutil_tag(
-      'span',
-      array(
-      ),
-      $label);
+    $options = array(
+      'class' => 'phui-object-item-status-icon',
+    );
 
-    return phutil_tag(
-      'span',
-      array(
-        'class' => 'phui-object-item-foot-icon',
-      ),
-      array($icon, $label));
+    if (strlen($label)) {
+      $options['sigil'] = 'has-tooltip';
+      $options['meta']  = array('tip' => $label, 'size' => 300);
+    }
+
+    return javelin_tag('div', $options, $icon);
   }
 
 
@@ -662,12 +753,7 @@ final class PHUIObjectItemView extends AphrontTagView {
       $options['meta']  = array('tip' => $label);
     }
 
-    return javelin_tag(
-      'span',
-      $options,
-      '');
+    return javelin_tag('span', $options, '');
   }
-
-
 
 }

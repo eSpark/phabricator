@@ -2,21 +2,15 @@
 
 final class LegalpadDocumentManageController extends LegalpadController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     // NOTE: We require CAN_EDIT to view this page.
 
     $document = id(new LegalpadDocumentQuery())
-      ->setViewer($user)
-      ->withIDs(array($this->id))
+      ->setViewer($viewer)
+      ->withIDs(array($id))
       ->needDocumentBodies(true)
       ->needContributors(true)
       ->requireCapabilities(
@@ -33,18 +27,9 @@ final class LegalpadDocumentManageController extends LegalpadController {
       $document->getPHID());
 
     $document_body = $document->getDocumentBody();
-    $phids = array();
-    $phids[] = $document_body->getCreatorPHID();
-    foreach ($subscribers as $subscriber) {
-      $phids[] = $subscriber;
-    }
-    foreach ($document->getContributors() as $contributor) {
-      $phids[] = $contributor;
-    }
-    $this->loadHandles($phids);
 
     $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($user);
+      ->setViewer($viewer);
     $engine->addObject(
       $document_body,
       LegalpadDocumentBody::MARKUP_FIELD_TEXT);
@@ -57,7 +42,7 @@ final class LegalpadDocumentManageController extends LegalpadController {
 
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
-      ->setUser($user)
+      ->setUser($viewer)
       ->setPolicyObject($document);
 
     $actions = $this->buildActionView($document);
@@ -99,7 +84,8 @@ final class LegalpadDocumentManageController extends LegalpadController {
 
     $view = new PHUIPropertyListView();
     $view->addClass('legalpad');
-    $view->addSectionHeader(pht('Document'));
+    $view->addSectionHeader(
+      pht('Document'), 'fa-file-text-o');
     $view->addTextContent(
       $engine->getOutput($body, LegalpadDocumentBody::MARKUP_FIELD_TEXT));
 
@@ -108,15 +94,15 @@ final class LegalpadDocumentManageController extends LegalpadController {
   }
 
   private function buildActionView(LegalpadDocument $document) {
-    $user = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $actions = id(new PhabricatorActionListView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setObjectURI($this->getRequest()->getRequestURI())
       ->setObject($document);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $user,
+      $viewer,
       $document,
       PhabricatorPolicyCapability::CAN_EDIT);
 
@@ -150,10 +136,10 @@ final class LegalpadDocumentManageController extends LegalpadController {
     PhabricatorMarkupEngine $engine,
     PhabricatorActionListView $actions) {
 
-    $user = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $properties = id(new PHUIPropertyListView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setObject($document)
       ->setActionList($actions);
 
@@ -163,25 +149,23 @@ final class LegalpadDocumentManageController extends LegalpadController {
 
     $properties->addProperty(
       pht('Last Updated'),
-      phabricator_datetime($document->getDateModified(), $user));
+      phabricator_datetime($document->getDateModified(), $viewer));
 
     $properties->addProperty(
       pht('Updated By'),
-      $this->getHandle(
-        $document->getDocumentBody()->getCreatorPHID())->renderLink());
+      $viewer->renderHandle($document->getDocumentBody()->getCreatorPHID()));
 
     $properties->addProperty(
       pht('Versions'),
       $document->getVersions());
 
-    $contributor_view = array();
-    foreach ($document->getContributors() as $contributor) {
-      $contributor_view[] = $this->getHandle($contributor)->renderLink();
+    if ($document->getContributors()) {
+      $properties->addProperty(
+        pht('Contributors'),
+        $viewer
+          ->renderHandleList($document->getContributors())
+          ->setAsInline(true));
     }
-    $contributor_view = phutil_implode_html(', ', $contributor_view);
-    $properties->addProperty(
-      pht('Contributors'),
-      $contributor_view);
 
     $properties->invokeWillRenderEvent();
 
@@ -191,9 +175,9 @@ final class LegalpadDocumentManageController extends LegalpadController {
   private function buildAddCommentView(
     LegalpadDocument $document,
     $comment_form_id) {
-    $user = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
-    $draft = PhabricatorDraft::newFromUserAndKey($user, $document->getPHID());
+    $draft = PhabricatorDraft::newFromUserAndKey($viewer, $document->getPHID());
 
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
@@ -202,7 +186,7 @@ final class LegalpadDocumentManageController extends LegalpadController {
       : pht('Debate Legislation');
 
     $form = id(new PhabricatorApplicationTransactionCommentView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setObjectPHID($document->getPHID())
       ->setFormID($comment_form_id)
       ->setHeaderText($title)

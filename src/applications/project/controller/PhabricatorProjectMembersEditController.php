@@ -3,20 +3,13 @@
 final class PhabricatorProjectMembersEditController
   extends PhabricatorProjectController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
     $id = $request->getURIData('id');
 
     $project = id(new PhabricatorProjectQuery())
-      ->setViewer($user)
-      ->withIDs(array($this->id))
+      ->setViewer($viewer)
+      ->withIDs(array($id))
       ->needMembers(true)
       ->needImages(true)
       ->requireCapabilities(
@@ -53,7 +46,7 @@ final class PhabricatorProjectMembersEditController
         ->setNewValue($member_spec);
 
       $editor = id(new PhabricatorProjectTransactionEditor($project))
-        ->setActor($user)
+        ->setActor($viewer)
         ->setContentSourceFromRequest($request)
         ->setContinueOnNoEffect(true)
         ->setContinueOnMissingFields(true)
@@ -75,7 +68,7 @@ final class PhabricatorProjectMembersEditController
     }
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $user,
+      $viewer,
       $project,
       PhabricatorPolicyCapability::CAN_EDIT);
 
@@ -87,8 +80,8 @@ final class PhabricatorProjectMembersEditController
 
       $form = new AphrontFormView();
       $form
-        ->setUser($user)
-        ->appendChild(
+        ->setUser($viewer)
+        ->appendControl(
           id(new AphrontFormTokenizerControl())
             ->setName('phids')
             ->setLabel(pht('Add Members'))
@@ -110,9 +103,7 @@ final class PhabricatorProjectMembersEditController
     $nav->appendChild($member_list);
 
     return $this->buildApplicationPage(
-      array(
-        $nav,
-      ),
+      $nav,
       array(
         'title' => $title,
       ));
@@ -131,8 +122,7 @@ final class PhabricatorProjectMembersEditController
       PhabricatorPolicyCapability::CAN_EDIT);
 
     $list = id(new PHUIObjectItemListView())
-      ->setNoDataString(pht('This project does not have any members.'))
-      ->setStackable(true);
+      ->setNoDataString(pht('This project does not have any members.'));
 
     foreach ($handles as $handle) {
       $remove_uri = $this->getApplicationURI(
@@ -157,7 +147,7 @@ final class PhabricatorProjectMembersEditController
 
     $box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Members'))
-      ->appendChild($list);
+      ->setObjectList($list);
 
     return $box;
   }

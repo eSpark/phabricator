@@ -94,6 +94,9 @@ final class PHUITimelineView extends AphrontView {
     $hide = array();
     $show = array();
 
+    // Bucket timeline events into events we'll hide by default (because they
+    // predate your most recent interaction with the object) and events we'll
+    // show by default.
     foreach ($this->events as $event) {
       if ($event->getHideByDefault()) {
         $hide[] = $event;
@@ -102,8 +105,18 @@ final class PHUITimelineView extends AphrontView {
       }
     }
 
+    // If you've never interacted with the object, all the events will be shown
+    // by default. We may still need to paginate if there are a large number
+    // of events.
+    $more = (bool)$hide;
+    if ($this->getPager()) {
+      if ($this->getPager()->getHasMoreResults()) {
+        $more = true;
+      }
+    }
+
     $events = array();
-    if ($hide && $this->getPager()) {
+    if ($more && $this->getPager()) {
       $uri = $this->getPager()->getNextPageURI();
       $uri->setQueryParam('quoteTargetID', $this->getQuoteTargetID());
       $uri->setQueryParam('quoteRef', $this->getQuoteRef());
@@ -119,19 +132,20 @@ final class PHUITimelineView extends AphrontView {
           javelin_tag(
             'a',
             array(
-              'href' => (string) $uri,
+              'href' => (string)$uri,
               'mustcapture' => true,
               'sigil' => 'show-older-link',
             ),
             pht('Show older changes.')),
         ));
-    }
 
-    if ($hide && $show) {
-      $events[] = $spacer;
+      if ($show) {
+        $events[] = $spacer;
+      }
     }
 
     if ($show) {
+      $this->prepareBadgeData($show);
       $events[] = phutil_implode_html($spacer, $show);
     }
 
@@ -168,6 +182,85 @@ final class PHUITimelineView extends AphrontView {
                    'the-worlds-end',
       ),
       '');
+  }
+
+  private function prepareBadgeData(array $events) {
+    assert_instances_of($events, 'PHUITimelineEventView');
+
+    $viewer = $this->getUser();
+    $can_use_badges = PhabricatorApplication::isClassInstalledForViewer(
+      'PhabricatorBadgesApplication',
+      $viewer);
+    if (!$can_use_badges) {
+      return;
+    }
+
+    $user_phid_type = PhabricatorPeopleUserPHIDType::TYPECONST;
+    $badge_edge_type = PhabricatorRecipientHasBadgeEdgeType::EDGECONST;
+
+    $user_phids = array();
+    foreach ($events as $key => $event) {
+      if (!$event->hasChildren()) {
+        // This is a minor event, so we don't have space to show badges.
+        unset($events[$key]);
+        continue;
+      }
+
+      $author_phid = $event->getAuthorPHID();
+      if (!$author_phid) {
+        unset($events[$key]);
+        continue;
+      }
+
+      if (phid_get_type($author_phid) != $user_phid_type) {
+        // This is likely an application actor, like "Herald" or "Harbormaster".
+        // They can't have badges.
+        unset($events[$key]);
+        continue;
+      }
+
+      $user_phids[$author_phid] = $author_phid;
+    }
+
+    if (!$user_phids) {
+      return;
+    }
+
+    $edges = id(new PhabricatorEdgeQuery())
+      ->withSourcePHIDs($user_phids)
+      ->withEdgeTypes(array($badge_edge_type));
+    $edges->execute();
+
+    $badge_phids = $edges->getDestinationPHIDs();
+    if (!$badge_phids) {
+      return;
+    }
+
+    $all_badges = id(new PhabricatorBadgesQuery())
+      ->setViewer($viewer)
+      ->withPHIDs($badge_phids)
+      ->execute();
+    $all_badges = mpull($all_badges, null, 'getPHID');
+
+    foreach ($events as $event) {
+      $author_phid = $event->getAuthorPHID();
+      $event_phids = $edges->getDestinationPHIDs(array($author_phid));
+      $badges = array_select_keys($all_badges, $event_phids);
+
+      // TODO: Pick the "best" badges in some smart way. For now, just pick
+      // the first two.
+      $badges = array_slice($badges, 0, 2);
+      foreach ($badges as $badge) {
+        $badge_view = id(new PHUIBadgeMiniView())
+          ->setIcon($badge->getIcon())
+          ->setQuality($badge->getQuality())
+          ->setHeader($badge->getName())
+          ->setTipDirection('E')
+          ->setHref('/badges/view/'.$badge->getID());
+
+        $event->addBadge($badge_view);
+      }
+    }
   }
 
 }

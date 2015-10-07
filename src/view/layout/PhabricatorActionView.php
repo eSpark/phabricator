@@ -6,6 +6,7 @@ final class PhabricatorActionView extends AphrontView {
   private $icon;
   private $href;
   private $disabled;
+  private $label;
   private $workflow;
   private $renderAsForm;
   private $download;
@@ -13,6 +14,7 @@ final class PhabricatorActionView extends AphrontView {
   private $sigils = array();
   private $metadata;
   private $selected;
+  private $openInNewWindow;
 
   public function setSelected($selected) {
     $this->selected = $selected;
@@ -36,6 +38,7 @@ final class PhabricatorActionView extends AphrontView {
     $this->objectURI = $object_uri;
     return $this;
   }
+
   public function getObjectURI() {
     return $this->objectURI;
   }
@@ -85,6 +88,11 @@ final class PhabricatorActionView extends AphrontView {
     return $this;
   }
 
+  public function setLabel($label) {
+    $this->label = $label;
+    return $this;
+  }
+
   public function setDisabled($disabled) {
     $this->disabled = $disabled;
     return $this;
@@ -98,6 +106,15 @@ final class PhabricatorActionView extends AphrontView {
   public function setRenderAsForm($form) {
     $this->renderAsForm = $form;
     return $this;
+  }
+
+  public function setOpenInNewWindow($open_in_new_window) {
+    $this->openInNewWindow = $open_in_new_window;
+    return $this;
+  }
+
+  public function getOpenInNewWindow() {
+    return $this->openInNewWindow;
   }
 
   public function render() {
@@ -132,7 +149,9 @@ final class PhabricatorActionView extends AphrontView {
       if ($this->renderAsForm) {
         if (!$this->user) {
           throw new Exception(
-            'Call setUser() when rendering an action as a form.');
+            pht(
+              'Call %s when rendering an action as a form.',
+              'setUser()'));
         }
 
         $item = javelin_tag(
@@ -148,15 +167,22 @@ final class PhabricatorActionView extends AphrontView {
             'action'    => $this->getHref(),
             'method'    => 'POST',
             'sigil'     => $sigils,
-            'meta' => $this->metadata,
+            'meta'      => $this->metadata,
           ),
           $item);
       } else {
+        if ($this->getOpenInNewWindow()) {
+          $target = '_blank';
+        } else {
+          $target = null;
+        }
+
         $item = javelin_tag(
           'a',
           array(
             'href'  => $this->getHref(),
             'class' => 'phabricator-action-view-item',
+            'target' => $target,
             'sigil' => $sigils,
             'meta' => $this->metadata,
           ),
@@ -173,8 +199,13 @@ final class PhabricatorActionView extends AphrontView {
 
     $classes = array();
     $classes[] = 'phabricator-action-view';
+
     if ($this->disabled) {
       $classes[] = 'phabricator-action-view-disabled';
+    }
+
+    if ($this->label) {
+      $classes[] = 'phabricator-action-view-label';
     }
 
     if ($this->selected) {

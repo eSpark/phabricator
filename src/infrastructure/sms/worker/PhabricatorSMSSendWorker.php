@@ -1,7 +1,6 @@
 <?php
 
-final class PhabricatorSMSSendWorker
-  extends PhabricatorSMSWorker {
+final class PhabricatorSMSSendWorker extends PhabricatorSMSWorker {
 
   public function getMaximumRetryCount() {
     return PhabricatorSMS::MAXIMUM_SEND_TRIES;
@@ -54,6 +53,16 @@ final class PhabricatorSMSSendWorker
     $adapter->setBody($sms->getBody());
     // give the provider name the same treatment as phone number
     $sms->setProviderShortName($adapter->getProviderShortName());
+
+    if (PhabricatorEnv::getEnvConfig('phabricator.silent')) {
+      $sms->setSendStatus(PhabricatorSMS::STATUS_FAILED_PERMANENTLY);
+      $sms->save();
+      throw new PhabricatorWorkerPermanentFailureException(
+        pht(
+          'Phabricator is running in silent mode. See `%s` '.
+          'in the configuration to change this setting.',
+          'phabricator.silent'));
+    }
 
     try {
       $result = $adapter->send();

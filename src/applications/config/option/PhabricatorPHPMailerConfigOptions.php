@@ -15,6 +15,10 @@ final class PhabricatorPHPMailerConfigOptions
     return 'fa-send-o';
   }
 
+  public function getGroup() {
+    return 'core';
+  }
+
   public function getOptions() {
     return array(
       $this->newOption('phpmailer.mailer', 'string', 'smtp')
@@ -39,14 +43,17 @@ final class PhabricatorPHPMailerConfigOptions
         ->setSummary(pht('Configure TLS or SSL for SMTP.'))
         ->setDescription(
           pht(
-            "Using PHPMailer with SMTP, you can set this to one of 'tls' or ".
-            "'ssl' to use TLS or SSL, respectively. Leave it blank for ".
-            "vanilla SMTP. If you're sending via Gmail, set it to 'ssl'.")),
+            "Using PHPMailer with SMTP, you can set this to one of '%s' or ".
+            "'%s' to use TLS or SSL, respectively. Leave it blank for ".
+            "vanilla SMTP. If you're sending via Gmail, set it to '%s'.",
+            'tls',
+            'ssl',
+            'ssl')),
       $this->newOption('phpmailer.smtp-user', 'string', null)
         ->setLocked(true)
         ->setDescription(pht('Username for SMTP.')),
       $this->newOption('phpmailer.smtp-password', 'string', null)
-        ->setMasked(true)
+        ->setHidden(true)
         ->setDescription(pht('Password for SMTP.')),
       $this->newOption('phpmailer.smtp-encoding', 'string', '8bit')
         ->setSummary(pht('Configure how mail is encoded.'))

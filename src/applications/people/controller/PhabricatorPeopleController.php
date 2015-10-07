@@ -16,8 +16,7 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
       if ($name) {
         $nav->setBaseURI(new PhutilURI('/p/'));
         $nav->addFilter("{$name}/", $name);
-        $nav->addFilter("feed/{$name}/", pht('Feed'));
-        $nav->addFilter("calendar/{$name}/", pht('Calendar'));
+        $nav->addFilter("{$name}/calendar/", pht('Calendar'));
       }
     }
 
@@ -34,6 +33,7 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
         }
 
         $nav->addFilter('logs', pht('Activity Logs'));
+        $nav->addFilter('invite', pht('Email Invitations'));
       }
     }
 
@@ -42,10 +42,6 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
 
   public function buildApplicationMenu() {
     return $this->buildSideNavView(true)->getMenu();
-  }
-
-  protected function buildApplicationCrumbs() {
-    return parent::buildApplicationCrumbs();
   }
 
   public function buildIconNavView(PhabricatorUser $user) {
@@ -57,7 +53,6 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
     $nav->setIconNav(true);
     $nav->setBaseURI(new PhutilURI('/p/'));
     $nav->addIcon("{$name}/", $name, null, $picture);
-    $nav->addIcon("{$name}/feed/", pht('Feed'), 'fa-newspaper-o');
 
     $class = 'PhabricatorCalendarApplication';
     if (PhabricatorApplication::isClassInstalledForViewer($class, $viewer)) {
@@ -69,8 +64,7 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
     if (PhabricatorApplication::isClassInstalledForViewer($class, $viewer)) {
       $phid = $user->getPHID();
       $view_uri = sprintf(
-        '/maniphest/?statuses=%s&assigned=%s#R',
-        implode(',', ManiphestTaskStatus::getOpenStatusConstants()),
+        '/maniphest/?statuses=open()&assigned=%s#R',
         $phid);
       $nav->addIcon(
         'maniphest', pht('Open Tasks'), 'fa-anchor', null, $view_uri);

@@ -6,6 +6,20 @@ final class AphrontUnhandledExceptionResponse
   private $exception;
 
   public function setException(Exception $exception) {
+    // Log the exception unless it's specifically a silent malformed request
+    // exception.
+
+    $should_log = true;
+    if ($exception instanceof AphrontMalformedRequestException) {
+      if ($exception->getIsUnlogged()) {
+        $should_log = false;
+      }
+    }
+
+    if ($should_log) {
+      phlog($exception);
+    }
+
     $this->exception = $exception;
     return $this;
   }
@@ -22,7 +36,13 @@ final class AphrontUnhandledExceptionResponse
   }
 
   protected function getResponseTitle() {
-    return pht('Unhandled Exception');
+    $ex = $this->exception;
+
+    if ($ex instanceof AphrontMalformedRequestException) {
+      return $ex->getTitle();
+    } else {
+      return pht('Unhandled Exception');
+    }
   }
 
   protected function getResponseBodyClass() {
@@ -32,7 +52,7 @@ final class AphrontUnhandledExceptionResponse
   protected function getResponseBody() {
     $ex = $this->exception;
 
-    if ($ex instanceof AphrontUsageException) {
+    if ($ex instanceof AphrontMalformedRequestException) {
       $title = $ex->getTitle();
     } else {
       $title = get_class($ex);

@@ -26,7 +26,8 @@ final class PhabricatorStorageManagementQuickstartWorkflow
     if (!$output) {
       throw new PhutilArgumentUsageException(
         pht(
-          'Specify a file to write with `--output`.'));
+          'Specify a file to write with `%s`.',
+          '--output'));
     }
 
     $namespace = 'phabricator_quickstart_'.Filesystem::readRandomCharacters(8);
@@ -95,7 +96,9 @@ final class PhabricatorStorageManagementQuickstartWorkflow
       // If we didn't make any changes, yell about it. We'll produce an invalid
       // dump otherwise.
       throw new PhutilArgumentUsageException(
-        pht('Failed to apply hack to adjust FULLTEXT search column!'));
+        pht(
+          'Failed to apply hack to adjust %s search column!',
+          'FULLTEXT'));
     }
 
     $dump = str_replace(
@@ -112,6 +115,16 @@ final class PhabricatorStorageManagementQuickstartWorkflow
       'utf8mb4',
       '{$CHARSET}',
       $dump);
+
+    $old = $dump;
+    $dump = preg_replace(
+      '/CHARACTER SET {\$CHARSET} COLLATE {\$COLLATE_SORT}/mi',
+      'CHARACTER SET {$CHARSET_SORT} COLLATE {$COLLATE_SORT}',
+      $dump);
+    if ($dump == $old) {
+      throw new PhutilArgumentUsageException(
+        pht('Failed to adjust SORT columns!'));
+    }
 
     // Strip out a bunch of unnecessary commands which make the dump harder
     // to handle and slower to import.

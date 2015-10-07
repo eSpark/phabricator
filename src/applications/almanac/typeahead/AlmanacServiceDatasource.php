@@ -3,6 +3,10 @@
 final class AlmanacServiceDatasource
   extends PhabricatorTypeaheadDatasource {
 
+  public function getBrowseTitle() {
+    return pht('Browse Services');
+  }
+
   public function getPlaceholderText() {
     return pht('Type a service name...');
   }
@@ -16,10 +20,20 @@ final class AlmanacServiceDatasource
     $raw_query = $this->getRawQuery();
 
     $services = id(new AlmanacServiceQuery())
-      ->setViewer($viewer)
       ->withNamePrefix($raw_query)
-      ->setLimit($this->getLimit())
-      ->execute();
+      ->setOrder('name');
+
+    // TODO: When service classes are restricted, it might be nice to customize
+    // the title and placeholder text to show which service types can be
+    // selected, or show all services but mark the invalid ones disabled and
+    // prevent their selection.
+
+    $service_classes = $this->getParameter('serviceClasses');
+    if ($service_classes) {
+      $services->withServiceClasses($service_classes);
+    }
+
+    $services = $this->executeQuery($services);
 
     if ($services) {
       $handles = id(new PhabricatorHandleQuery())

@@ -57,11 +57,9 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->setObject($account)
       ->setUser($viewer);
 
-    $this->loadHandles($account->getMemberPHIDs());
-
     $properties->addProperty(
       pht('Members'),
-      $this->renderHandlesForPHIDs($account->getMemberPHIDs()));
+      $viewer->renderHandleList($account->getMemberPHIDs()));
 
     $status_items = $this->getStatusItemsForAccount($account, $invoices);
     $status_view = new PHUIStatusListView();
@@ -128,6 +126,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     $list = id(new PHUIObjectItemListView())
       ->setUser($viewer)
+      ->setFlush(true)
       ->setNoDataString(
         pht('No payment methods associated with this account.'));
 
@@ -135,10 +134,6 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->setViewer($viewer)
       ->withAccountPHIDs(array($account->getPHID()))
       ->execute();
-
-    if ($methods) {
-      $this->loadHandles(mpull($methods, 'getAuthorPHID'));
-    }
 
     foreach ($methods as $method) {
       $id = $method->getID();
@@ -148,7 +143,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
       switch ($method->getStatus()) {
         case PhortunePaymentMethod::STATUS_ACTIVE:
-          $item->setBarColor('green');
+          $item->setStatusIcon('fa-check green');
 
           $disable_uri = $this->getApplicationURI('card/'.$id.'/disable/');
           $item->addAction(
@@ -159,6 +154,7 @@ final class PhortuneAccountViewController extends PhortuneController {
               ->setWorkflow(true));
           break;
         case PhortunePaymentMethod::STATUS_DISABLED:
+          $item->setStatusIcon('fa-ban lightbluetext');
           $item->setDisabled(true);
           break;
       }
@@ -180,7 +176,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($list);
+      ->setObjectList($list);
   }
 
   private function buildInvoicesSection(
@@ -212,7 +208,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
   }
 
   private function buildPurchaseHistorySection(PhortuneAccount $account) {
@@ -263,7 +259,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
   }
 
   private function buildChargeHistorySection(PhortuneAccount $account) {
@@ -307,7 +303,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
   }
 
   private function buildSubscriptionsSection(PhortuneAccount $account) {
@@ -343,7 +339,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
   }
 
   protected function buildApplicationCrumbs() {

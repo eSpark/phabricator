@@ -27,6 +27,9 @@ JX.install('Scrollbar', {
   construct: function(frame) {
     this._frame = frame;
 
+    JX.DOM.listen(frame, 'load', null, JX.bind(this, this._onload));
+    this._onload();
+
     // Before doing anything, check if the scrollbar control has a measurable
     // width. If it doesn't, we're already in an environment with an aesthetic
     // scrollbar (like Safari on OSX with no mouse connected, or an iPhone)
@@ -77,19 +80,16 @@ JX.install('Scrollbar', {
     JX.DOM.listen(this._bar, 'mousedown', null, JX.bind(this, this._onjump));
 
     JX.enableDispatch(document.body, 'mouseenter');
+    JX.DOM.listen(viewport, 'mouseenter', null, JX.bind(this, this._onenter));
+
+    JX.DOM.listen(frame, 'scroll', null, JX.bind(this, this._onscroll));
 
     // Enabling dispatch for this event on `window` allows us to scroll even
     // if the mouse cursor is dragged outside the window in at least some
     // browsers (for example, Safari on OSX).
     JX.enableDispatch(window, 'mousemove');
-
-    JX.DOM.listen(viewport, 'mouseenter', null, JX.bind(this, this._onenter));
-    JX.DOM.listen(frame, 'scroll', null, JX.bind(this, this._onscroll));
-
-    JX.DOM.listen(viewport, 'mouseenter', null, JX.bind(this, this._onenter));
-    JX.DOM.listen(viewport, 'mouseenter', null, JX.bind(this, this._onenter));
-
     JX.Stratcom.listen('mousemove', null, JX.bind(this, this._onmove));
+
     JX.Stratcom.listen('mouseup', null, JX.bind(this, this._ondrop));
     JX.Stratcom.listen('resize', null, JX.bind(this, this._onresize));
 
@@ -99,6 +99,7 @@ JX.install('Scrollbar', {
 
   statics: {
     _controlWidth: null,
+
 
     /**
      * Compute the width of the browser's scrollbar control, in pixels.
@@ -118,7 +119,34 @@ JX.install('Scrollbar', {
       }
 
       return self._controlWidth;
+    },
+
+
+    /**
+     * Get the margin width required to avoid double scrollbars.
+     *
+     * For most browsers which render a real scrollbar control, this is 0.
+     * Adjacent elements may touch the edge of the content directly without
+     * overlapping.
+     *
+     * On OSX with a trackpad, scrollbars are only drawn when content is
+     * scrolled. Content panes with internal scrollbars may overlap adjacent
+     * scrollbars if they are not laid out with a margin.
+     *
+     * @return int Control margin width in pixels.
+     */
+    getScrollbarControlMargin: function() {
+      var self = JX.Scrollbar;
+
+      // If this browser and OS don't render a real scrollbar control, we
+      // need to leave a margin. Generally, this is OSX with no mouse attached.
+      if (self._getScrollbarControlWidth() === 0) {
+        return 12;
+      }
+
+      return 0;
     }
+
 
   },
 
@@ -133,6 +161,7 @@ JX.install('Scrollbar', {
     _timeout: null,
     _dragOrigin: null,
     _scrollOrigin: null,
+    _lastHeight: null,
 
 
     /**
@@ -293,6 +322,35 @@ JX.install('Scrollbar', {
     },
 
 
+
+    /**
+     * Something inside the frame fired a load event.
+     *
+     * The typical case is that an image loaded. This may have changed the
+     * height of the scroll area, and we may want to make adjustments.
+     */
+    _onload: function() {
+      var viewport = this.getViewportNode();
+      var height = viewport.scrollHeight;
+      var visible = JX.Vector.getDim(viewport).y;
+      if (this._lastHeight !== null && this._lastHeight != height) {
+
+        // If the viewport was scrollable and was scrolled down to near the
+        // bottom, scroll it down to account for the new height. The effect
+        // of this rule is to keep panels like the chat column scrolled to
+        // the bottom as images load into the thread.
+        if (viewport.scrollTop > 0) {
+          if ((viewport.scrollTop + visible + 64) >= this._lastHeight) {
+            viewport.scrollTop += (height - this._lastHeight);
+          }
+        }
+
+      }
+
+      this._lastHeight = height;
+    },
+
+
     /**
      * Shove the scrollbar on the viewport under the edge of the frame so the
      * user can't see it.
@@ -320,10 +378,15 @@ JX.install('Scrollbar', {
       var spos = JX.Vector.getAggregateScrollForNode(this._viewport);
       var vdim = JX.Vector.getDim(this._viewport);
 
-      var ratio = vdim.y / cdim.y;
+      var ratio = (vdim.y / cdim.y);
+
+      // We're scaling things down very slightly to leave a 2px margin at
+      // either end of the scroll gutter, so the bar doesn't quite bump up
+      // against the chrome.
+      ratio = ratio * (vdim.y / (vdim.y + 4));
 
       var offset = Math.round(ratio * spos.y) + 2;
-      var size = Math.floor(ratio * (vdim.y - 2)) - 2;
+      var size = Math.floor(ratio * vdim.y);
 
       if (size < cdim.y) {
         this._handle.style.top = offset + 'px';
@@ -372,6 +435,23 @@ JX.install('Scrollbar', {
         clearTimeout(this._timeout);
         this._timeout = null;
       }
+    },
+
+    getContentNode: function() {
+      return this._content || this._frame;
+    },
+
+    getViewportNode: function() {
+      return this._viewport || this._frame;
+    },
+
+    scrollTo: function(scroll) {
+      if (this._viewport !== null) {
+        this._viewport.scrollTop = scroll;
+      } else {
+        this._frame.scrollTop = scroll;
+      }
+      return this;
     }
   }
 

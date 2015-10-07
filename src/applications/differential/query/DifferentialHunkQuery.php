@@ -90,12 +90,14 @@ final class DifferentialHunkQuery
     return $hunks;
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if (!$this->changesets) {
       throw new Exception(
-        pht('You must load hunks via changesets, with withChangesets()!'));
+        pht(
+          'You must load hunks via changesets, with %s!',
+          'withChangesets()'));
     }
 
     $where[] = qsprintf(
@@ -112,8 +114,9 @@ final class DifferentialHunkQuery
     return 'PhabricatorDifferentialApplication';
   }
 
-  protected function getReversePaging() {
-    return true;
+  protected function getDefaultOrderVector() {
+    // TODO: Do we need this?
+    return array('-id');
   }
 
 }

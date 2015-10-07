@@ -108,7 +108,7 @@ final class HeraldRuleQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         $rule_ids);
       $conditions = mgroup($conditions, 'getRuleID');
 
-      $actions = id(new HeraldAction())->loadAllWhere(
+      $actions = id(new HeraldActionRecord())->loadAllWhere(
         'ruleID IN (%Ld)',
         $rule_ids);
       $actions = mgroup($actions, 'getRuleID');
@@ -174,7 +174,7 @@ final class HeraldRuleQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $rules;
   }
 
-  private function buildWhereClause($conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->ids) {
