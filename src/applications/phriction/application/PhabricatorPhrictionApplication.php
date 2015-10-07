@@ -6,12 +6,8 @@ final class PhabricatorPhrictionApplication extends PhabricatorApplication {
     return pht('Phriction');
   }
 
-  public function getName() {
-    return pht('Wiki');
-  }
-
   public function getShortDescription() {
-    return 'Read and edit documents';
+    return pht('Wiki');
   }
 
   public function getBaseURI() {

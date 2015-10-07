@@ -310,7 +310,6 @@ final class PhabricatorMainMenuView extends AphrontView {
           ),
           ''),
       ));
->>>>>>> upstream/master
   }
 
   private function renderNotificationMenu() {

@@ -46,11 +46,9 @@
   display: inline-block;
   width: 148px;
   height: 44px;
-  width: 300px;
   float: left;
   margin-right: 4px;
   padding-left: 6px;
-  background: 6px 9px url(/rsrc/image/espark/espark_phabricator_logo.png) no-repeat;
 }
 
 .phabricator-main-menu-logo {
